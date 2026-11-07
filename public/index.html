@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101114"><title>YTAgent</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header><div class="brand"><span class="mark">▶</span><div><h1>YTAgent</h1><p>Your YouTube upload assistant</p></div></div><span class="badge">BETA</span></header>
+    <section class="card connect">
+      <div><h2>YouTube connection</h2><p id="status">Checking connection…</p></div>
+      <a class="button" id="connect" href="/auth/google">Connect YouTube</a>
+      <button class="button secondary hidden" id="disconnect">Disconnect</button>
+    </section>
+    <section class="card">
+      <h2>Upload a video</h2><p class="muted">Choose a video, add its details, and YTAgent will upload it to your channel.</p>
+      <form id="uploadForm">
+        <label class="filebox" for="video"><span class="fileicon">＋</span><strong id="fileLabel">Choose video from your device</strong><small>Video files only · max 256 MB in this starter version</small></label>
+        <input id="video" name="video" type="file" accept="video/*" required>
+        <label>Video title<input name="title" maxlength="100" placeholder="Give your video a title" required></label>
+        <label>Description<textarea name="description" rows="4" maxlength="5000" placeholder="What is this video about?"></textarea></label>
+        <label>Tags <small>(comma-separated)</small><input name="tags" placeholder="Afrobeats, Qing Remzy, music"></label>
+        <label>Visibility<select name="privacy"><option value="private">Private (recommended)</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></label>
+        <button class="button primary" id="submit" type="submit">Upload to YouTube</button>
+      </form>
+      <div id="result" class="result hidden" role="status"></div>
+    </section>
+    <section class="card"><h2>Quick command</h2><p class="muted">Type a command to get the upload workflow ready.</p><div class="command"><input id="command" placeholder="e.g. post my new music video"><button class="button secondary" id="runCommand">Run</button></div><p id="commandReply" class="muted"></p></section>
+    <footer>YTAgent is a separate tool. It does not replace ChatGPT.</footer>
+  </main>
+  <script src="/app.js"></script>
+</body></html>

@@ -8,6 +8,8 @@ const fs = require("fs");
 const { google } = require("googleapis");
 
 const app = express();
+// Railway terminates HTTPS at its proxy. Trust the proxy so secure session cookies are set.
+app.set("trust proxy", 1);
 const PORT = Number(process.env.PORT || 3000);
 const uploadDir = path.join(__dirname, "uploads");
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -53,13 +55,22 @@ app.get("/auth/google", (req, res) => {
     const client = oauthClient();
     const state = require("crypto").randomBytes(24).toString("hex");
     req.session.oauthState = state;
-    res.redirect(client.generateAuthUrl({
+    const authUrl = client.generateAuthUrl({
       access_type: "offline",
       prompt: "consent",
       include_granted_scopes: true,
       scope: ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"],
       state
-    }));
+    });
+    // Persist the state before leaving for Google, otherwise the callback can arrive
+    // before the session store has committed it.
+    req.session.save((saveError) => {
+      if (saveError) {
+        console.error("OAuth session save failed:", saveError.message);
+        return res.status(500).send("Could not start YouTube connection. Please try again.");
+      }
+      res.redirect(authUrl);
+    });
   } catch (err) { res.status(500).send(err.message); }
 });
 

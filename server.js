@@ -114,10 +114,11 @@ For subtitles, transcribe only words that are actually audible. Use approximate 
       contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType || mimeType, file_uri: geminiFile.uri } }, { text: prompt }] }],
       generationConfig: { responseMimeType: "application/json", temperature: 0.35 }
     });
-    const retryDelays = [5000, 10000, 20000];
+    const maxRetries = 30;
+    const retryDelayMs = 1000;
     let generated;
     let generationError = "";
-    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         generated = await fetch(generationUrl, {
           method: "POST",
@@ -126,19 +127,21 @@ For subtitles, transcribe only words that are actually audible. Use approximate 
         });
         if (generated.ok) break;
         generationError = await generated.text();
-        const temporaryFailure = [429, 500, 502, 503, 504].includes(generated.status)
+        console.error("the reason for error is =", "HTTP " + generated.status + ": " + String(generationError).slice(0, 1000));
+        const temporaryFailure = [408, 429, 500, 502, 503, 504].includes(generated.status)
           || /high demand|overloaded|temporar(?:y|ily) unavailable|resource exhausted/i.test(generationError);
-        if (!temporaryFailure || attempt === retryDelays.length) break;
+        if (!temporaryFailure || attempt === maxRetries) break;
       } catch (error) {
         generationError = error.message || "Network error while contacting Gemini.";
-        if (attempt === retryDelays.length) break;
+        console.error("the reason for error is =", generationError);
+        if (attempt === maxRetries) break;
       }
-      console.warn("Gemini generation attempt " + (attempt + 1) + " failed. Retrying in " + (retryDelays[attempt] / 1000) + " seconds.");
-      await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+      console.warn("Gemini generation attempt " + (attempt + 1) + " failed. Retrying in 1 second. Retry " + (attempt + 1) + " of " + maxRetries + ".");
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
     }
     if (!generated || !generated.ok) {
-      console.error("Gemini generation error:", String(generationError).slice(0, 500));
-      throw new Error("Gemini is temporarily unable to analyse this video after several attempts. Please try again shortly.");
+      console.error("Gemini generation failed after " + maxRetries + " retries. Final reason:", String(generationError).slice(0, 1000));
+      throw new Error("Gemini could not analyse this video after 30 retries. Final reason: " + String(generationError).slice(0, 300));
     }
     const payload = await generated.json();
     const raw = payload.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();

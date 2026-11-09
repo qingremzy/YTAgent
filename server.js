@@ -105,7 +105,10 @@ async function analyzeWithGemini(file) {
   "subtitles_srt": "SRT subtitles with timestamps if intelligible speech exists, otherwise empty string"
 }
 For subtitles, transcribe only words that are actually audible. Use approximate timestamps in HH:MM:SS,mmm format and sequential SRT numbering. If speech cannot be understood, return an empty subtitles_srt. Do not put hashtags in tags. Keep the title truthful, specific and interesting. `;
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const configuredModel = process.env.GEMINI_MODEL;
+    const model = !configuredModel || configuredModel === "gemini-2.5-flash"
+      ? "gemini-3.8-flash"
+      : configuredModel;
     const generated = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
       method: "POST",
       headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },

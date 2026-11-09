@@ -122,7 +122,7 @@ For subtitles, transcribe only words that are actually audible. Use approximate 
     const payload = await generated.json();
     const raw = payload.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
     if (!raw) throw new Error("Gemini returned no analysis. Try another video.");
-    const parsed = JSON.parse(raw.replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/, ""));
+    const parsed = JSON.parse(raw);
     return {
       title: String(parsed.title || "").slice(0, 100),
       description: String(parsed.description || "").slice(0, 5000),

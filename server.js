@@ -109,18 +109,36 @@ For subtitles, transcribe only words that are actually audible. Use approximate 
     const model = !configuredModel || configuredModel === "gemini-2.5-flash"
       ? "gemini-3.8-flash"
       : configuredModel;
-    const generated = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
-      method: "POST",
-      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType || mimeType, file_uri: geminiFile.uri } }, { text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.35 }
-      })
+    const generationUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent";
+    const generationBody = JSON.stringify({
+      contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType || mimeType, file_uri: geminiFile.uri } }, { text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.35 }
     });
-    if (!generated.ok) {
-      const detail = await generated.text();
-      console.error("Gemini generation error:", detail.slice(0, 500));
-      throw new Error("Gemini could not generate video details. Check Gemini API access and billing or free-tier limits.");
+    const retryDelays = [5000, 10000, 20000];
+    let generated;
+    let generationError = "";
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+      try {
+        generated = await fetch(generationUrl, {
+          method: "POST",
+          headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+          body: generationBody
+        });
+        if (generated.ok) break;
+        generationError = await generated.text();
+        const temporaryFailure = [429, 500, 502, 503, 504].includes(generated.status)
+          || /high demand|overloaded|temporar(?:y|ily) unavailable|resource exhausted/i.test(generationError);
+        if (!temporaryFailure || attempt === retryDelays.length) break;
+      } catch (error) {
+        generationError = error.message || "Network error while contacting Gemini.";
+        if (attempt === retryDelays.length) break;
+      }
+      console.warn("Gemini generation attempt " + (attempt + 1) + " failed. Retrying in " + (retryDelays[attempt] / 1000) + " seconds.");
+      await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+    }
+    if (!generated || !generated.ok) {
+      console.error("Gemini generation error:", String(generationError).slice(0, 500));
+      throw new Error("Gemini is temporarily unable to analyse this video after several attempts. Please try again shortly.");
     }
     const payload = await generated.json();
     const raw = payload.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();

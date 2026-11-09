@@ -1,62 +1,62 @@
 # YTAgent
 
-A simple, mobile-friendly YouTube upload assistant. It connects to your own YouTube channel through Google's OAuth 2.0 flow and uploads a video using the YouTube Data API. It is a separate tool and does not replace ChatGPT.
+A mobile-friendly YouTube publishing assistant with optional video-aware AI metadata generation.
 
-## What works in this starter
+## Current capabilities
 
-- Connect and authorize a YouTube channel.
-- Check whether the channel is connected.
-- Upload a video with title, description, tags, and privacy setting.
-- Use a simple command box such as "post my new video" to open the upload workflow.
-- Mobile-friendly web interface.
+- Connect a YouTube channel through Google OAuth 2.0.
+- Upload a video to the connected channel.
+- Choose Public, Unlisted or Private visibility (Public is selected by default).
+- With a Gemini API key configured, analyse the selected video and generate a relevant title, description, tags, hashtags and a separate social-media caption.
+- Generate an SRT subtitle draft when intelligible speech is detected. Review the SRT before using it.
+- Review and edit all generated metadata before publishing.
+
+AI-generated metadata and transcripts can contain mistakes. Always review them. No AI tool can guarantee views or virality.
 
 ## Requirements
 
 - Node.js 20 or newer.
-- A Google Cloud project with the **YouTube Data API v3** enabled.
-- OAuth 2.0 credentials for a **Web application**.
+- A Google Cloud project with YouTube Data API v3 enabled and OAuth 2.0 Web application credentials.
+- A Gemini API key for video analysis and metadata generation.
 
-## Google OAuth setup
+## Environment variables
 
-1. Open Google Cloud Console and select or create your project.
-2. Enable **YouTube Data API v3**.
-3. Configure the OAuth consent screen. Add your Google account as a test user if the app is still in testing.
-4. Create an OAuth client ID with application type **Web application**.
-5. Add this exact authorized redirect URI for local testing: `http://localhost:3000/auth/google/callback`.
-6. Copy the client ID and client secret into your local `.env` file. Never commit secrets or share them in public messages.
+Copy `.env.example` to `.env` locally, or set the variables in your hosting provider:
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URI`
+- `SESSION_SECRET` (use a long random value)
+- `GEMINI_API_KEY` (required for AI analysis)
+- `GEMINI_MODEL` (optional; defaults to `gemini-2.5-flash`)
+
+Never commit API keys, OAuth secrets, session secrets or user tokens.
 
 ## Run locally
 
 ```bash
 npm install
 cp .env.example .env
-```
-
-Edit `.env` and set your Google credentials plus a long random SESSION_SECRET. Then run:
-
-```bash
 npm start
 ```
 
-Open `http://localhost:3000` in your browser and tap **Connect YouTube**.
-
-On Windows, you can copy `.env.example` to `.env` manually if `cp` is unavailable.
+Open `http://localhost:3000` and connect your YouTube channel.
 
 ## Deploying
 
-Deploy the project to a Node.js host that supports persistent sessions and long-running uploads. Set the environment variables from `.env.example` in the host dashboard. Set `APP_URL` to your HTTPS deployment URL and set `GOOGLE_REDIRECT_URI` to:
+Deploy to a Node.js host that supports persistent sessions and long-running uploads. Set all required environment variables in the host dashboard. Set `GOOGLE_REDIRECT_URI` to the production callback URL:
 
 ```
 https://YOUR-DOMAIN/auth/google/callback
 ```
 
-Add that same HTTPS URL to the OAuth client's authorized redirect URIs in Google Cloud Console. Use HTTPS in production. For production use, replace Express's in-memory session store with a persistent session store such as Redis or a database-backed store.
+Register the exact same redirect URI in Google Cloud Console. Use a persistent session store (such as Redis or a database-backed store) for production multi-instance use.
 
-## Important notes
+## Important limitations
 
-- This repository contains no Google credentials or access tokens.
-- The starter defaults uploads to **Private**. Choose Unlisted or Public only when you intend to.
-- YouTube API projects may be subject to quota limits and Google verification or audit requirements. A successful code deployment does not by itself guarantee public uploads.
-- This starter limits each uploaded file to 256 MB. Large uploads may need a larger server timeout and resumable upload handling.
-- Do not expose your OAuth client secret, session secret, or user tokens in screenshots, source code, or public repositories.
-- The quick command is a small helper that opens the upload flow. It is not yet a full natural-language AI agent or a scheduled uploader.
+- Gemini video analysis requires a valid `GEMINI_API_KEY`; the application does not include or pay for an AI provider key.
+- Provider rate limits, file limits, supported video formats and charges depend on the Gemini account and model.
+- SRT subtitles are generated as a downloadable draft. This version does not upload subtitle tracks to YouTube automatically.
+- Uploaded videos are limited to 256 MB in this starter version.
+- YouTube API quota and verification requirements still apply.
+- The application does not generate video footage from text yet. It analyses user-supplied video and creates publishing metadata.

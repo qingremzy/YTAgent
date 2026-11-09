@@ -7,26 +7,35 @@
 </head>
 <body>
   <main class="shell">
-    <header><div class="brand"><span class="mark">▶</span><div><h1>YTAgent</h1><p>Your YouTube upload assistant</p></div></div><span class="badge">BETA</span></header>
+    <header><div class="brand"><span class="mark">▶</span><div><h1>YTAgent</h1><p>Your AI-powered YouTube publishing assistant</p></div></div><span class="badge">BETA</span></header>
     <section class="card connect">
       <div><h2>YouTube connection</h2><p id="status">Checking connection…</p></div>
       <a class="button" id="connect" href="/auth/google">Connect YouTube</a>
       <button class="button secondary hidden" id="disconnect">Disconnect</button>
     </section>
     <section class="card">
-      <h2>Upload a video</h2><p class="muted">Choose a video, add its details, and YTAgent will upload it to your channel.</p>
+      <h2>Create your video post</h2>
+      <p class="muted">Choose a video, let AI analyse what is actually shown and heard, review the generated details, then publish.</p>
       <form id="uploadForm">
-        <label class="filebox" for="video"><span class="fileicon">＋</span><strong id="fileLabel">Choose video from your device</strong><small>Video files only · max 256 MB in this starter version</small></label>
+        <label class="filebox" for="video"><span class="fileicon">＋</span><strong id="fileLabel">Choose video from your device</strong><small>Video files only · max 256 MB</small></label>
         <input id="video" name="video" type="file" accept="video/*" required>
-        <label>Video title<input name="title" maxlength="100" placeholder="Give your video a title" required></label>
-        <label>Description<textarea name="description" rows="4" maxlength="5000" placeholder="What is this video about?"></textarea></label>
-        <label>Tags <small>(comma-separated)</small><input name="tags" placeholder="Afrobeats, Qing Remzy, music"></label>
-        <label>Visibility<select name="privacy"><option value="private">Private (recommended)</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></label>
-        <button class="button primary" id="submit" type="submit">Upload to YouTube</button>
+        <button class="button secondary full" id="analyze" type="button">✦ Analyse video & generate everything</button>
+        <p id="analysisStatus" class="muted" aria-live="polite"></p>
+        <label>Video title<input name="title" maxlength="100" placeholder="AI-generated title appears here" required></label>
+        <label>YouTube description<textarea name="description" rows="4" maxlength="5000" placeholder="AI-generated, video-specific description"></textarea></label>
+        <label>Tags <small>Comma-separated, based on the video</small><input name="tags" placeholder="Relevant tags"></label>
+        <label>Hashtags <small>Relevant hashtags to append to the YouTube description</small><input name="hashtags" placeholder="#Wildlife #Nature"></label>
+        <label>Social media caption<textarea id="socialCaption" rows="3" placeholder="AI-generated caption for sharing the video"></textarea></label>
+        <div class="subtitle-tools">
+          <div><strong>Subtitles (SRT)</strong><small id="subtitleStatus">Generated from intelligible speech when available.</small></div>
+          <button class="button secondary hidden" id="downloadSrt" type="button">Download .srt</button>
+        </div>
+        <label>Visibility<select name="privacy"><option value="public" selected>Public</option><option value="unlisted">Unlisted</option><option value="private">Private</option></select></label>
+        <button class="button primary" id="submit" type="submit">Publish to YouTube</button>
       </form>
       <div id="result" class="result hidden" role="status"></div>
     </section>
-    <section class="card"><h2>Quick command</h2><p class="muted">Type a command to get the upload workflow ready.</p><div class="command"><input id="command" placeholder="e.g. post my new music video"><button class="button secondary" id="runCommand">Run</button></div><p id="commandReply" class="muted"></p></section>
+    <section class="card"><h2>Quick command</h2><p class="muted">Type a command to open the video workflow.</p><div class="command"><input id="command" placeholder="e.g. analyse and publish this video"><button class="button secondary" id="runCommand">Run</button></div><p id="commandReply" class="muted"></p></section>
     <footer>YTAgent is an independent tool built by Qing Remzy.</footer>
   </main>
   <script src="/app.js"></script>

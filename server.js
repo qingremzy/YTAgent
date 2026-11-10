@@ -5,6 +5,9 @@ const helmet = require("helmet");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
+const { spawn } = require("child_process");
+const ffmpegPath = require("ffmpeg-static");
 const { google } = require("googleapis");
 const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
@@ -62,44 +65,86 @@ function extractJson(text) {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-async function reviewWithOpenAI(evidence, draft) {
+async function extractVideoFrames(videoPath) {
+  if (!ffmpegPath) throw new Error("FFmpeg is unavailable on this server.");
+  const frameDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-frames-"));
+  try {
+    await new Promise((resolve, reject) => {
+      const outputPattern = path.join(frameDir, "frame-%02d.jpg");
+      const args = [
+        "-hide_banner", "-loglevel", "error", "-i", videoPath,
+        "-vf", "fps=1/10,scale=768:768:force_original_aspect_ratio=decrease",
+        "-frames:v", "8", "-q:v", "5", outputPattern
+      ];
+      const child = spawn(ffmpegPath, args, { stdio: ["ignore", "ignore", "pipe"] });
+      let errorText = "";
+      child.stderr.on("data", chunk => { errorText += chunk.toString(); });
+      child.on("error", reject);
+      child.on("close", code => code === 0 ? resolve() : reject(new Error(errorText.slice(0, 500) || "FFmpeg frame extraction failed.")));
+    });
+    const names = (await fs.promises.readdir(frameDir)).filter(name => /^frame-\d+\.jpg$/.test(name)).sort();
+    if (!names.length) throw new Error("No readable frames could be extracted from this video.");
+    return await Promise.all(names.map(async (name, index) => ({
+      timestamp_seconds: index * 10,
+      base64: (await fs.promises.readFile(path.join(frameDir, name))).toString("base64")
+    })));
+  } finally {
+    await fs.promises.rm(frameDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function reviewWithOpenAI(frames, draft) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
   const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const prompt = "Independently inspect these sampled frames extracted from the actual video. They are still images, so do not claim to hear audio or infer motion between frames. Describe only visible, supported evidence, including on-screen text and scene subjects. Then create accurate YouTube metadata. Never invent facts, people, dialogue, locations, statistics, or events. Return JSON only with evidence_summary, title, description, tags, hashtags, keywords. Title max 100 characters, tags max 15, hashtags 3 to 5, keywords 5 to 12. Existing Gemini draft for reference only: " + JSON.stringify(draft);
+  const content = [{ type: "input_text", text: prompt }];
+  for (const frame of frames) {
+    content.push({ type: "input_text", text: "Approximate video timestamp: " + frame.timestamp_seconds + " seconds." });
+    content.push({ type: "input_image", image_url: "data:image/jpeg;base64," + frame.base64, detail: "low" });
+  }
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
       model,
-      instructions: "You are an expert YouTube SEO editor. You did not see the video. Use only the supplied video-analysis evidence. Do not add events, facts, names, claims, or dialogue not supported by that evidence. Improve the draft for accuracy, search relevance, and viewer appeal. Return JSON only with title, description, tags, hashtags, keywords. Title max 100 characters. Tags max 15. Hashtags 3 to 5. Keywords 5 to 12.",
-      input: JSON.stringify({ video_evidence: evidence, draft_metadata: draft }),
+      instructions: "You are an independent visual video analyst and YouTube SEO editor. Inspect the supplied frame images yourself. Do not merely repeat the Gemini draft.",
+      input: [{ role: "user", content }],
       text: { format: { type: "json_object" } },
-      max_output_tokens: 1200
+      max_output_tokens: 1400
     })
   });
-  if (!response.ok) throw new Error("OpenAI review failed: HTTP " + response.status);
+  if (!response.ok) throw new Error("OpenAI visual analysis failed: HTTP " + response.status);
   const data = await response.json();
   const output = data.output?.flatMap(item => item.content || []).find(item => item.type === "output_text")?.text;
   return output ? extractJson(output) : null;
 }
 
-async function reviewWithClaude(evidence, draft) {
+async function reviewWithClaude(frames, draft) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
   const model = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
+  const content = [{
+    type: "text",
+    text: "Independently inspect these sampled still frames extracted from the actual video. Do not claim to hear audio or infer motion between frames. Describe only visible evidence, including on-screen text and scene subjects. Then create accurate YouTube metadata. Never invent facts, people, dialogue, locations, statistics, or events. Return JSON only with evidence_summary, title, description, tags, hashtags, keywords. Title max 100 characters, tags max 15, hashtags 3 to 5, keywords 5 to 12. Existing Gemini draft for reference only: " + JSON.stringify(draft)
+  }];
+  for (const frame of frames) {
+    content.push({ type: "text", text: "Approximate video timestamp: " + frame.timestamp_seconds + " seconds." });
+    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame.base64 } });
+  }
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     body: JSON.stringify({
       model,
-      max_tokens: 1400,
-      system: "You are an independent YouTube metadata editor. You did not see the video. Use only the supplied video evidence. Never invent facts, people, dialogue, scenes, or claims. Improve title, description, tags, hashtags and search keywords for accuracy and discoverability. Return JSON only with title, description, tags, hashtags, keywords.",
-      messages: [{ role: "user", content: JSON.stringify({ video_evidence: evidence, draft_metadata: draft }) }]
+      max_tokens: 1600,
+      system: "You are an independent visual video analyst and YouTube metadata editor. Inspect the supplied frame images yourself. Do not merely repeat the Gemini draft.",
+      messages: [{ role: "user", content }]
     })
   });
-  if (!response.ok) throw new Error("Claude review failed: HTTP " + response.status);
+  if (!response.ok) throw new Error("Claude visual analysis failed: HTTP " + response.status);
   const data = await response.json();
-  const output = data.content?.filter(item => item.type === "text").map(item => item.text).join("\\n");
+  const output = data.content?.filter(item => item.type === "text").map(item => item.text).join("\n");
   return output ? extractJson(output) : null;
 }
 
@@ -210,11 +255,24 @@ Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords
       language: String(parsed.language || "unknown"),
       category_id: String(parsed.category_id || "")
     };
-    const providers = ["Google Gemini"];
+    const providers = ["Google Gemini (full video)"];
     const reviewers = [];
     const reviewTasks = [];
-    if (process.env.OPENAI_API_KEY) reviewTasks.push(reviewWithOpenAI(result.evidence_summary, result).then(value => ({ name: "OpenAI", value })));
-    if (process.env.ANTHROPIC_API_KEY) reviewTasks.push(reviewWithClaude(result.evidence_summary, result).then(value => ({ name: "Claude", value })));
+    if (process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY) {
+      let frames = [];
+      try {
+        frames = await extractVideoFrames(file.path);
+      } catch (frameError) {
+        console.warn("Optional visual frame extraction failed:", frameError.message);
+      }
+      if (frames.length && process.env.OPENAI_API_KEY) {
+        reviewTasks.push(reviewWithOpenAI(frames, result).then(value => ({ name: "OpenAI (video frames)", value })));
+      }
+      if (frames.length && process.env.ANTHROPIC_API_KEY) {
+        reviewTasks.push(reviewWithClaude(frames, result).then(value => ({ name: "Claude (video frames)", value })));
+      }
+      result.visual_frames_analysed = frames.length;
+    }
     const reviews = await Promise.allSettled(reviewTasks);
     for (const review of reviews) {
       if (review.status !== "fulfilled" || !review.value.value) {
@@ -230,6 +288,10 @@ Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords
         const values = candidates.map(item => item[key]).filter(value => Array.isArray(value) ? value.length : typeof value === "string" && value.trim());
         return values.length ? values[0] : result[key];
       };
+      result.ai_visual_evidence = reviewers.map(item => ({
+        provider: item.name,
+        summary: String(item.value.evidence_summary || "")
+      })).filter(item => item.summary);
       result = {
         ...result,
         title: String(choose("title") || result.title).slice(0, 100),

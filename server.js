@@ -54,6 +54,35 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function extractJson(text) {
+  const cleaned = String(text || "").trim().replace(/^```(?:json)?s*/i, "").replace(/s*```$/, "");
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("AI returned an invalid analysis format.");
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+async function reviewWithOpenAI(evidence, draft) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      instructions: "You are an expert YouTube SEO editor. You did not see the video. Use only the supplied video-analysis evidence. Do not add events, facts, names, claims, or dialogue not supported by that evidence. Improve the draft for accuracy, search relevance, and viewer appeal. Return JSON only with title, description, tags, hashtags, keywords. Title max 100 characters. Tags max 15. Hashtags 3 to 5. Keywords 5 to 12.",
+      input: JSON.stringify({ video_evidence: evidence, draft_metadata: draft }),
+      text: { format: { type: "json_object" } },
+      max_output_tokens: 1200
+    })
+  });
+  if (!response.ok) throw new Error("OpenAI review failed: HTTP " + response.status);
+  const data = await response.json();
+  const output = data.output?.flatMap(item => item.content || []).find(item => item.type === "output_text")?.text;
+  return output ? extractJson(output) : null;
+}
+
 async function analyzeWithGemini(file) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("AI video analysis is not configured yet. Add GEMINI_API_KEY in Railway Variables.");
@@ -100,33 +129,25 @@ async function analyzeWithGemini(file) {
     }
     if (geminiFile.state !== "ACTIVE") throw new Error("Video analysis timed out. Try a shorter video.");
 
-    const prompt = `Analyse the supplied video itself. Do not guess or invent events, identities, dialogue, facts, or context. Base every field only on visible and audible evidence. If something is uncertain, use cautious wording. Return valid JSON only with this exact shape:
+    const prompt = `Act as a meticulous video analyst and YouTube growth strategist. Inspect the supplied video itself, including its visuals, scene changes, on-screen text, subject, pacing, and audible content. First establish what the video actually contains. Never invent people, events, facts, dialogue, locations, statistics, or promises. Then create highly relevant YouTube metadata that accurately matches the video and helps the right audience discover it. Return valid JSON only with this exact shape:
 {
-  "title": "YouTube title, maximum 100 characters",
-  "description": "Accurate, engaging YouTube description, no invented facts",
-  "tags": ["up to 15 accurate YouTube tags, each short"],
+  "evidence_summary": "Concise factual summary of what is visibly and audibly present",
+  "title": "Compelling, specific YouTube title, maximum 100 characters",
+  "description": "Search-friendly, engaging description that accurately describes the video",
+  "tags": ["up to 15 specific YouTube tags"],
   "hashtags": ["3 to 5 relevant hashtags including #"],
-  "platform_posts": {
-    "tiktok": "A TikTok-native caption with a strong opening hook and relevant hashtags",
-    "instagram": "An Instagram Reel caption with a compelling first line and relevant hashtags",
-    "facebook": "A natural Facebook post that encourages genuine discussion without clickbait",
-    "youtube_community": "A YouTube Community post that invites viewers to engage with this video"
-  },
-  "language": "main spoken language, or 'none' if no clear speech",
-  "subtitles_srt": "SRT subtitles with timestamps if intelligible speech exists, otherwise empty string"
+  "keywords": ["5 to 12 natural search phrases viewers may use to find this exact video"],
+  "language": "main spoken language, or none if no clear speech",
+  "category_id": "best-fit YouTube category ID as a string, or empty if uncertain"
 }
-For subtitles, transcribe only words that are actually audible. Use approximate timestamps in HH:MM:SS,mmm format and sequential SRT numbering. If speech cannot be understood, return an empty subtitles_srt. Do not put hashtags in tags. Keep the title truthful, specific and interesting. `;
-    const configuredModel = process.env.GEMINI_MODEL;
-    const model = !configuredModel || configuredModel === "gemini-2.5-flash"
-      ? "gemini-3.8-flash"
-      : configuredModel;
+Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords must be natural search queries, not random broad words. Keep the title truthful, specific, clickable, and under 100 characters. `;
+    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     const generationUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent";
     const generationBody = JSON.stringify({
       contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType || mimeType, file_uri: geminiFile.uri } }, { text: prompt }] }],
       generationConfig: { responseMimeType: "application/json", temperature: 0.35 }
     });
-    const maxRetries = 30;
-    const retryDelayMs = 1000;
+    const maxRetries = 5;
     let generated;
     let generationError = "";
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -147,31 +168,49 @@ For subtitles, transcribe only words that are actually audible. Use approximate 
         console.error("the reason for error is =", generationError);
         if (attempt === maxRetries) break;
       }
-      console.warn("Gemini generation attempt " + (attempt + 1) + " failed. Retrying in 1 second. Retry " + (attempt + 1) + " of " + maxRetries + ".");
-      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+      const delayMs = Math.min(8000, 1000 * (2 ** attempt));
+      console.warn("Gemini generation attempt " + (attempt + 1) + " failed. Retrying in " + delayMs + "ms.");
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
     if (!generated || !generated.ok) {
       console.error("Gemini generation failed after " + maxRetries + " retries. Final reason:", String(generationError).slice(0, 1000));
-      throw new Error("Gemini could not analyse this video after 30 retries. Final reason: " + String(generationError).slice(0, 300));
+      throw new Error("Gemini could not analyse this video. Final reason: " + String(generationError).slice(0, 300));
     }
     const payload = await generated.json();
     const raw = payload.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
     if (!raw) throw new Error("Gemini returned no analysis. Try another video.");
-    const parsed = JSON.parse(raw);
-    return {
+    const parsed = extractJson(raw);
+    let result = {
+      evidence_summary: String(parsed.evidence_summary || ""),
       title: String(parsed.title || "").slice(0, 100),
       description: String(parsed.description || "").slice(0, 5000),
       tags: Array.isArray(parsed.tags) ? parsed.tags.map(String).slice(0, 15) : [],
-      hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.map(String).slice(0, 8) : [],
-      platform_posts: {
-        tiktok: String(parsed.platform_posts?.tiktok || ""),
-        instagram: String(parsed.platform_posts?.instagram || ""),
-        facebook: String(parsed.platform_posts?.facebook || ""),
-        youtube_community: String(parsed.platform_posts?.youtube_community || "")
-      },
+      hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.map(String).slice(0, 5) : [],
+      keywords: Array.isArray(parsed.keywords) ? parsed.keywords.map(String).slice(0, 12) : [],
       language: String(parsed.language || "unknown"),
-      subtitles_srt: String(parsed.subtitles_srt || "")
+      category_id: String(parsed.category_id || "")
     };
+    const providers = ["Google Gemini"];
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const reviewed = await reviewWithOpenAI(result.evidence_summary, result);
+        if (reviewed) {
+          result = {
+            ...result,
+            title: String(reviewed.title || result.title).slice(0, 100),
+            description: String(reviewed.description || result.description).slice(0, 5000),
+            tags: Array.isArray(reviewed.tags) && reviewed.tags.length ? reviewed.tags.map(String).slice(0, 15) : result.tags,
+            hashtags: Array.isArray(reviewed.hashtags) && reviewed.hashtags.length ? reviewed.hashtags.map(String).slice(0, 5) : result.hashtags,
+            keywords: Array.isArray(reviewed.keywords) && reviewed.keywords.length ? reviewed.keywords.map(String).slice(0, 12) : result.keywords
+          };
+          providers.push("OpenAI");
+        }
+      } catch (reviewError) {
+        console.warn("OpenAI second-opinion skipped:", reviewError.message);
+      }
+    }
+    result.ai_providers = providers;
+    return result;
   } finally {
     fetch("https://generativelanguage.googleapis.com/v1beta/" + geminiFile.name, {
       method: "DELETE", headers: { "x-goog-api-key": apiKey }
@@ -374,8 +413,21 @@ app.post("/api/upload", requireAuth, videoUpload.single("video"), async (req, re
     auth.setCredentials(req.session.tokens);
     auth.on("tokens", tokens => { req.session.tokens = { ...req.session.tokens, ...tokens }; });
     const yt = google.youtube({ version: "v3", auth });
-    const tags = String(req.body.tags || "").split(",").map(t => t.trim()).filter(Boolean).slice(0, 30);
-    const description = [String(req.body.description || "").trim(), String(req.body.hashtags || "").trim()].filter(Boolean).join("\n\n").slice(0, 5000);
+    const rawTags = String(req.body.tags || "").split(",").map(t => t.trim()).filter(Boolean);
+    const keywords = String(req.body.keywords || "").split(",").map(t => t.trim()).filter(Boolean);
+    const hashtags = String(req.body.hashtags || "").trim();
+    const description = [String(req.body.description || "").trim(), keywords.length ? "Search topics: " + keywords.join(", ") : "", hashtags].filter(Boolean).join("\n\n").slice(0, 5000);
+    const tags = [];
+    let tagLength = 0;
+    for (const tag of [...rawTags, ...keywords]) {
+      const normalized = tag.slice(0, 100);
+      const addedLength = normalized.length + (tags.length ? 1 : 0);
+      if (tags.length >= 30 || tagLength + addedLength > 500) continue;
+      if (!tags.some(existing => existing.toLowerCase() === normalized.toLowerCase())) {
+        tags.push(normalized);
+        tagLength += addedLength;
+      }
+    }
     const privacy = ["private", "unlisted", "public"].includes(req.body.privacy) ? req.body.privacy : "public";
     const response = await yt.videos.insert({
       part: ["snippet", "status"],

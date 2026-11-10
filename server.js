@@ -120,6 +120,38 @@ async function reviewWithOpenAI(frames, draft) {
   return output ? extractJson(output) : null;
 }
 
+async function reviewWithGroq(frames, draft) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return null;
+  const model = process.env.GROQ_VISION_MODEL || "qwen/qwen3.8-27b";
+  const selected = frames.length <= 3
+    ? frames
+    : [frames[0], frames[Math.floor((frames.length - 1) / 2)], frames[frames.length - 1]];
+  const content = [{
+    type: "text",
+    text: "Independently inspect these sampled still frames extracted from the actual video. Do not claim to hear audio or infer motion between frames. Describe only visible evidence, including on-screen text and scene subjects. Then create accurate YouTube metadata. Never invent facts, people, dialogue, locations, statistics, or events. Return JSON only with evidence_summary, title, description, tags, hashtags, keywords. Title max 100 characters, tags max 15, hashtags 3 to 5, keywords 5 to 12. Existing Gemini draft for reference only: " + JSON.stringify(draft)
+  }];
+  for (const frame of selected) {
+    content.push({ type: "text", text: "Approximate video timestamp: " + frame.timestamp_seconds + " seconds." });
+    content.push({ type: "image_url", image_url: { url: "data:image/jpeg;base64," + frame.base64 } });
+  }
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content }],
+      response_format: { type: "json_object" },
+      temperature: 0.3,
+      max_tokens: 1400
+    })
+  });
+  if (!response.ok) throw new Error("Groq visual analysis failed: HTTP " + response.status);
+  const data = await response.json();
+  const output = data.choices?.[0]?.message?.content;
+  return output ? extractJson(output) : null;
+}
+
 async function reviewWithClaude(frames, draft) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
@@ -258,7 +290,7 @@ Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords
     const providers = ["Google Gemini (full video)"];
     const reviewers = [];
     const reviewTasks = [];
-    if (process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY) {
+    if (process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY) {
       let frames = [];
       try {
         frames = await extractVideoFrames(file.path);
@@ -270,6 +302,9 @@ Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords
       }
       if (frames.length && process.env.ANTHROPIC_API_KEY) {
         reviewTasks.push(reviewWithClaude(frames, result).then(value => ({ name: "Claude (video frames)", value })));
+      }
+      if (frames.length && process.env.GROQ_API_KEY) {
+        reviewTasks.push(reviewWithGroq(frames, result).then(value => ({ name: "Groq Qwen (video frames)", value })));
       }
       result.visual_frames_analysed = frames.length;
     }

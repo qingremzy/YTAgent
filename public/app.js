@@ -8,6 +8,19 @@ const analyzeButton = document.getElementById("analyze");
 const analysisStatus = document.getElementById("analysisStatus");
 const videoInput = document.getElementById("video");
 const downloadSrt = document.getElementById("downloadSrt");
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function waitForAnalysis(jobId) {
+  for (;;) {
+    const response = await fetch("/api/analyze/" + encodeURIComponent(jobId));
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not check analysis progress.");
+    if (data.state === "completed") return data.analysis;
+    if (data.state === "failed") throw new Error(data.error || "Video analysis failed.");
+    analysisStatus.textContent = "Your video is in the parallel task queue (" + (data.state || "waiting") + ").";
+    await wait(1500);
+  }
+}
 let subtitlesSrt = "";
 
 async function refreshStatus() {
@@ -33,14 +46,14 @@ analyzeButton.addEventListener("click", async () => {
   if (!videoInput.files.length) { analysisStatus.textContent = "Choose a video first."; return; }
   analyzeButton.disabled = true;
   analyzeButton.textContent = "Analysing video…";
-  analysisStatus.textContent = "AI is examining the video and audio. You can generate details before connecting YouTube.";
+  analysisStatus.textContent = "Submitting your video for AI analysis. You can generate details before connecting YouTube.";
   const data = new FormData();
   data.append("video", videoInput.files[0]);
   try {
     const response = await fetch("/api/analyze", { method: "POST", body: data });
-    const payload = await response.json();
+    let payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Video analysis failed.");
-    const a = payload.analysis;
+    const a = payload.queued ? await waitForAnalysis(payload.jobId) : payload.analysis;
     form.elements.title.value = a.title || "";
     form.elements.description.value = a.description || "";
     form.elements.tags.value = (a.tags || []).join(", ");

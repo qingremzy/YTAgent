@@ -146,7 +146,7 @@ async function reviewWithGroq(frames, draft) {
       max_tokens: 1400
     })
   });
-  if (!response.ok) throw new Error("Groq visual analysis failed: HTTP " + response.status);
+  if (!response.ok) { const details = await response.text(); throw new Error("Groq visual analysis failed: HTTP " + response.status + " " + details.slice(0, 240)); }
   const data = await response.json();
   const output = data.choices?.[0]?.message?.content;
   return output ? extractJson(output) : null;
@@ -244,7 +244,7 @@ Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords
       contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType || mimeType, file_uri: geminiFile.uri } }, { text: prompt }] }],
       generationConfig: { responseMimeType: "application/json" }
     });
-    const maxRetries = 5;
+    const maxRetries = 2;
     let generated;
     let generationError = "";
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -342,6 +342,47 @@ Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords
     fetch("https://generativelanguage.googleapis.com/v1beta/" + geminiFile.name, {
       method: "DELETE", headers: { "x-goog-api-key": apiKey }
     }).catch(() => {});
+  }
+}
+
+
+async function analyzeWithGroqFallback(file, geminiError) {
+  if (!process.env.GROQ_API_KEY) throw geminiError;
+  let frames;
+  try {
+    frames = await extractVideoFrames(file.path);
+    if (!frames.length) throw new Error("No usable video frames were extracted.");
+  } catch (frameError) {
+    throw new Error("Gemini analysis failed, and Groq fallback could not read the video: " + frameError.message);
+  }
+  const emptyDraft = { evidence_summary: "", title: "", description: "", tags: [], hashtags: [], keywords: [] };
+  try {
+    const parsed = await reviewWithGroq(frames, emptyDraft);
+    if (!parsed) throw new Error("Groq returned no analysis.");
+    return {
+      evidence_summary: String(parsed.evidence_summary || ""),
+      title: String(parsed.title || "").slice(0, 100),
+      description: String(parsed.description || "").slice(0, 5000),
+      tags: Array.isArray(parsed.tags) ? parsed.tags.map(String).slice(0, 15) : [],
+      hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.map(String).slice(0, 5) : [],
+      keywords: Array.isArray(parsed.keywords) ? parsed.keywords.map(String).slice(0, 12) : [],
+      language: String(parsed.language || "unknown"),
+      category_id: String(parsed.category_id || ""),
+      visual_frames_analysed: frames.length,
+      ai_providers: ["Groq Qwen (video frames, Gemini fallback)"]
+    };
+  } catch (groqError) {
+    console.error("Groq fallback failed:", groqError.message);
+    throw new Error("Gemini analysis failed. Groq fallback also failed: " + groqError.message);
+  }
+}
+
+async function analyzeVideo(file) {
+  try {
+    return await analyzeWithGemini(file);
+  } catch (geminiError) {
+    console.warn("Gemini analysis failed. Trying Groq fallback:", geminiError.message);
+    return await analyzeWithGroqFallback(file, geminiError);
   }
 }
 
@@ -505,7 +546,7 @@ app.post("/api/analyze", videoUpload.single("video"), async (req, res) => {
     }
   }
   try {
-    const analysis = await analyzeWithGemini(req.file);
+    const analysis = await analyzeVideo(req.file);
     res.json({ success: true, analysis });
   } catch (err) {
     console.error("Video analysis failed:", err.message);
@@ -586,7 +627,7 @@ if (redisEnabled) {
   const concurrency = Number.isInteger(configuredConcurrency) ? Math.min(50, Math.max(1, configuredConcurrency)) : 4;
   const worker = new Worker(taskQueueName, async job => {
     try {
-      const analysis = await analyzeWithGemini(job.data);
+      const analysis = await analyzeVideo(job.data);
       await job.updateProgress(100);
       return analysis;
     } finally {

@@ -105,7 +105,7 @@ generatorForm.addEventListener("submit", async event => {
   if (!topic) return;
   generateButton.disabled = true;
   generateButton.textContent = "Generating video… keep this page open";
-  generatorStatus.textContent = "Creating the script, scenes and burned-in captions, then rendering your video. This can take a few minutes.";
+  generatorStatus.textContent = "Writing the narration, finding real science images, generating the voice and rendering your video. This can take a few minutes.";
   generatedDownload.classList.add("hidden");
   try {
     const response = await fetch("/api/generate", {
@@ -117,7 +117,12 @@ generatorForm.addEventListener("submit", async event => {
     if (!response.ok) throw new Error(data.error || "Video generation failed.");
     generatedDownload.href = data.downloadUrl;
     generatedDownload.classList.remove("hidden");
-    generatorStatus.textContent = "Your " + data.duration_seconds + "-second video is ready (" + data.format + "). Captions are burned into the video. Download it, then choose it in the publishing section below.";
+    form.elements.title.value = data.title || topic;
+    form.elements.description.value = data.description || "";
+    form.elements.tags.value = (data.tags || []).join(", ");
+    form.elements.hashtags.value = (data.hashtags || []).join(" ");
+    form.elements.keywords.value = (data.keywords || []).join(", ");
+    generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated video is ready. Voice: " + (data.voice_provider || "AI voice") + ". Real images, motion, captions and image credits are included. Download it, then select it in the publishing section below.";
   } catch (error) { generatorStatus.textContent = error.message; }
   finally {
     generateButton.disabled = false;

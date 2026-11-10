@@ -280,7 +280,7 @@ app.get("/auth/tiktok/callback", async (req, res) => {
     });
     const tokenData = await response.json();
     if (!response.ok || !tokenData.access_token) throw new Error(tokenData.error_description || tokenData.message || "TikTok token exchange failed.");
-    const profileResponse = await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,username", { headers: { Authorization: "Bearer " + tokenData.access_token } });
+    const profileResponse = await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name", { headers: { Authorization: "Bearer " + tokenData.access_token } });
     const profileData = await profileResponse.json();
     if (!profileResponse.ok) throw new Error(profileData.error?.message || "Could not retrieve TikTok profile.");
     req.session.socialAccounts = req.session.socialAccounts || {};

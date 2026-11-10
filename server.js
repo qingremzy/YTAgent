@@ -211,6 +211,96 @@ app.get("/auth/google/callback", async (req, res) => {
   }
 });
 
+
+function socialState(req, provider) {
+  const state = require("crypto").randomBytes(24).toString("hex");
+  req.session.socialOAuthState = { provider, state };
+  return state;
+}
+function verifySocialState(req, provider) {
+  const saved = req.session.socialOAuthState;
+  delete req.session.socialOAuthState;
+  return Boolean(saved && saved.provider === provider && req.query.state === saved.state);
+}
+
+app.get("/auth/meta", (req, res) => {
+  const { META_APP_ID, META_REDIRECT_URI } = process.env;
+  if (!META_APP_ID || !META_REDIRECT_URI) return res.status(503).send("Meta connection is not configured yet. Add META_APP_ID and META_REDIRECT_URI in Railway Variables.");
+  const state = socialState(req, "meta");
+  const url = new URL("https://www.facebook.com/v22.0/dialog/oauth");
+  url.search = new URLSearchParams({
+    client_id: META_APP_ID,
+    redirect_uri: META_REDIRECT_URI,
+    state,
+    response_type: "code",
+    scope: "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish"
+  }).toString();
+  req.session.save(error => error ? res.status(500).send("Could not start Meta connection.") : res.redirect(url.toString()));
+});
+
+app.get("/auth/meta/callback", async (req, res) => {
+  if (!verifySocialState(req, "meta")) return res.status(400).send("Meta connection state check failed. Please try again.");
+  try {
+    const { META_APP_ID, META_APP_SECRET, META_REDIRECT_URI } = process.env;
+    const tokenUrl = new URL("https://graph.facebook.com/v22.0/oauth/access_token");
+    tokenUrl.search = new URLSearchParams({ client_id: META_APP_ID, client_secret: META_APP_SECRET, redirect_uri: META_REDIRECT_URI, code: String(req.query.code || "") }).toString();
+    const tokenResponse = await fetch(tokenUrl);
+    const tokenData = await tokenResponse.json();
+    if (!tokenResponse.ok || !tokenData.access_token) throw new Error(tokenData.error?.message || "Meta token exchange failed.");
+    const pagesResponse = await fetch("https://graph.facebook.com/v22.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username}&access_token=" + encodeURIComponent(tokenData.access_token));
+    const pagesData = await pagesResponse.json();
+    if (!pagesResponse.ok) throw new Error(pagesData.error?.message || "Could not retrieve your Facebook Pages.");
+    req.session.socialAccounts = req.session.socialAccounts || {};
+    req.session.socialAccounts.facebook = { connected: true, pages: (pagesData.data || []).map(p => ({ id: p.id, name: p.name, access_token: p.access_token })) };
+    const instagram = (pagesData.data || []).find(p => p.instagram_business_account);
+    if (instagram) req.session.socialAccounts.instagram = { connected: true, username: instagram.instagram_business_account.username || instagram.instagram_business_account.id, accountId: instagram.instagram_business_account.id, pageId: instagram.id, access_token: instagram.access_token };
+    req.session.save(error => error ? res.status(500).send("Could not save Meta connection.") : res.redirect("/?social_connected=meta"));
+  } catch (error) {
+    console.error("Meta OAuth callback failed:", error.message);
+    res.status(500).send("Meta connection failed: " + error.message);
+  }
+});
+
+app.get("/auth/tiktok", (req, res) => {
+  const { TIKTOK_CLIENT_KEY, TIKTOK_REDIRECT_URI } = process.env;
+  if (!TIKTOK_CLIENT_KEY || !TIKTOK_REDIRECT_URI) return res.status(503).send("TikTok connection is not configured yet. Add TIKTOK_CLIENT_KEY and TIKTOK_REDIRECT_URI in Railway Variables.");
+  const state = socialState(req, "tiktok");
+  const url = new URL("https://www.tiktok.com/v2/auth/authorize/");
+  url.search = new URLSearchParams({ client_key: TIKTOK_CLIENT_KEY, response_type: "code", scope: "user.info.basic,video.publish", redirect_uri: TIKTOK_REDIRECT_URI, state }).toString();
+  req.session.save(error => error ? res.status(500).send("Could not start TikTok connection.") : res.redirect(url.toString()));
+});
+
+app.get("/auth/tiktok/callback", async (req, res) => {
+  if (!verifySocialState(req, "tiktok")) return res.status(400).send("TikTok connection state check failed. Please try again.");
+  try {
+    const response = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_key: process.env.TIKTOK_CLIENT_KEY, client_secret: process.env.TIKTOK_CLIENT_SECRET, code: String(req.query.code || ""), grant_type: "authorization_code", redirect_uri: process.env.TIKTOK_REDIRECT_URI })
+    });
+    const tokenData = await response.json();
+    if (!response.ok || !tokenData.access_token) throw new Error(tokenData.error_description || tokenData.message || "TikTok token exchange failed.");
+    const profileResponse = await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name", { headers: { Authorization: "Bearer " + tokenData.access_token } });
+    const profileData = await profileResponse.json();
+    if (!profileResponse.ok) throw new Error(profileData.error?.message || "Could not retrieve TikTok profile.");
+    req.session.socialAccounts = req.session.socialAccounts || {};
+    req.session.socialAccounts.tiktok = { connected: true, username: profileData.data?.user?.username || profileData.data?.user?.display_name || "TikTok account", openId: tokenData.open_id, access_token: tokenData.access_token, refresh_token: tokenData.refresh_token };
+    req.session.save(error => error ? res.status(500).send("Could not save TikTok connection.") : res.redirect("/?social_connected=tiktok"));
+  } catch (error) {
+    console.error("TikTok OAuth callback failed:", error.message);
+    res.status(500).send("TikTok connection failed: " + error.message);
+  }
+});
+
+app.get("/api/social-status", (req, res) => {
+  const accounts = req.session.socialAccounts || {};
+  res.json({
+    instagram: accounts.instagram ? { connected: true, username: accounts.instagram.username || "Instagram connected" } : { connected: false },
+    facebook: accounts.facebook ? { connected: true, pages: (accounts.facebook.pages || []).map(page => page.name) } : { connected: false },
+    tiktok: accounts.tiktok ? { connected: true, username: accounts.tiktok.username || "TikTok connected" } : { connected: false }
+  });
+});
+
 app.get("/api/status", async (req, res) => {
   if (!req.session.tokens) return res.json({ connected: false });
   try {

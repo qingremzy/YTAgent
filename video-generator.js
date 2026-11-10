@@ -20,10 +20,31 @@ function run(command, args) {
     child.on("close", code => code === 0 ? resolve() : reject(new Error(error.slice(-900) || "Video rendering failed.")));
   });
 }
+function wrapWords(value, limit, maxLines) {
+  const words = cleanText(value, 260).split(" ");
+  const lines = [];
+  let line = "";
+  for (const word of words) {
+    if ((line + " " + word).trim().length > limit && line) {
+      lines.push(line);
+      line = word;
+      if (lines.length >= maxLines) break;
+    } else line = (line + " " + word).trim();
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  if (lines.length === maxLines && words.join(" ").length > lines.join(" ").length) {
+    lines[maxLines - 1] = lines[maxLines - 1].replace(/[.,;:]?$/, "…");
+  }
+  return lines;
+}
+function svgLines(lines, x, y, fontSize, lineHeight, weight = 700) {
+  return '<text x="' + x + '" y="' + y + '" fill="#ffffff" font-family="Arial,sans-serif" font-size="' + fontSize + '" font-weight="' + weight + '">' +
+    lines.map((line, i) => '<tspan x="' + x + '" dy="' + (i ? lineHeight : 0) + '">' + escapeXml(line) + '</tspan>').join("") + '</text>';
+}
 function sceneSvg(scene, index, total) {
   const title = escapeXml(scene.title || "A question worth asking");
   const caption = escapeXml(scene.caption || scene.title || "");
-  const visual = escapeXml(scene.visual || "A cinematic abstract science illustration");
+  const visual = escapeXml(scene.visual || "A cinematic abstract science illustration");\n  const titleLines = wrapWords(scene.title || "A question worth asking", 19, 3);\n  const captionLines = wrapWords(scene.caption || scene.title || "", 35, 4);
   const palettes = [
     ["#07152d", "#123d59", "#26a6a1"],
     ["#170f32", "#49265f", "#f0a35e"],
@@ -45,9 +66,9 @@ function sceneSvg(scene, index, total) {
   <path d="M0 770 Q180 680 360 770 T720 760" fill="none" stroke="#ffffff" stroke-opacity=".14" stroke-width="2"/>
   <text x="54" y="110" fill="${accent}" font-family="Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="5">YT AGENT • WHAT IF?</text>
   <text x="54" y="690" fill="#ffffff" font-family="Arial,sans-serif" font-size="24" opacity=".72">SCENE ${index + 1} / ${total}</text>
-  <foreignObject x="54" y="735" width="612" height="210"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,sans-serif;color:white;font-size:54px;font-weight:800;line-height:1.12;letter-spacing:-1px">${title}</div></foreignObject>
+  ${svgLines(titleLines, 54, 805, 54, 62, 800)}
   <rect x="54" y="990" width="612" height="4" rx="2" fill="${accent}"/>
-  <foreignObject x="54" y="1020" width="612" height="190"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,sans-serif;color:#f3f6fb;font-size:31px;line-height:1.3">${caption}</div></foreignObject>
+  ${svgLines(captionLines, 54, 1065, 29, 38, 500)}
   <text x="54" y="1235" fill="#ffffff" opacity=".48" font-family="Arial,sans-serif" font-size="17">${visual}</text>
   </svg>`;
 }

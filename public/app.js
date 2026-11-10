@@ -9,10 +9,20 @@ const analysisStatus = document.getElementById("analysisStatus");
 const videoInput = document.getElementById("video");
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+async function readJsonResponse(response) {
+  const raw = await response.text();
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    const preview = raw.trim().slice(0, 180);
+    throw new Error("Server returned an invalid response (HTTP " + response.status + "). " + (preview || "Please try again."));
+  }
+}
+
 async function waitForAnalysis(jobId) {
   for (;;) {
     const response = await fetch("/api/analyze/" + encodeURIComponent(jobId));
-    const data = await response.json();
+    const data = await readJsonResponse(response);
     if (!response.ok) throw new Error(data.error || "Could not check analysis progress.");
     if (data.state === "completed") return data.analysis;
     if (data.state === "failed") throw new Error(data.error || "Video analysis failed.");
@@ -48,7 +58,7 @@ analyzeButton.addEventListener("click", async () => {
   data.append("video", videoInput.files[0]);
   try {
     const response = await fetch("/api/analyze", { method: "POST", body: data });
-    let payload = await response.json();
+    let payload = await readJsonResponse(response);
     if (!response.ok) throw new Error(payload.error || "Video analysis failed.");
     const a = payload.queued ? await waitForAnalysis(payload.jobId) : payload.analysis;
     form.elements.title.value = a.title || "";

@@ -7,7 +7,8 @@ A mobile-friendly YouTube publishing assistant with optional video-aware AI meta
 - Connect a YouTube channel through Google OAuth 2.0.
 - Upload a video to the connected channel.
 - Choose Public, Unlisted or Private visibility (Public is selected by default).
-- With a Gemini API key configured, analyse the selected video and generate a relevant title, description, tags, hashtags and a separate social-media caption.
+- With a Gemini API key configured, analyse the selected video and generate a relevant YouTube title, description, tags and hashtags.
+- Generate separate, platform-specific posts for TikTok, Instagram, Facebook and YouTube Community. Social account connections are not required to generate drafts.
 - Generate an SRT subtitle draft when intelligible speech is detected. Review the SRT before using it.
 - Review and edit all generated metadata before publishing.
 

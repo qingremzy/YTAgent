@@ -58,7 +58,11 @@ analyzeButton.addEventListener("click", async () => {
     form.elements.description.value = a.description || "";
     form.elements.tags.value = (a.tags || []).join(", ");
     form.elements.hashtags.value = (a.hashtags || []).join(" ");
-    document.getElementById("socialCaption").value = a.social_caption || "";
+    const posts = a.platform_posts || {};
+    document.getElementById("tiktokCaption").value = posts.tiktok || "";
+    document.getElementById("instagramCaption").value = posts.instagram || "";
+    document.getElementById("facebookCaption").value = posts.facebook || "";
+    document.getElementById("youtubeCommunityPost").value = posts.youtube_community || "";
     subtitlesSrt = a.subtitles_srt || "";
     downloadSrt.classList.toggle("hidden", !subtitlesSrt.trim());
     document.getElementById("subtitleStatus").textContent = subtitlesSrt.trim()

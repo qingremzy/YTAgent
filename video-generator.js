@@ -87,7 +87,7 @@ async function requestStoryboard(prompt) {
       const data = await response.json().catch(() => ({}));
       if (response.ok) {
         const raw = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
-        if (raw) return JSON.parse(raw.replace(/^\u0060\u0060\u0060(?:json)?\\s*/i, "").replace(/\\s*\u0060\u0060\u0060$/, ""));
+        if (raw) return JSON.parse(raw.replace(/^\u0060\u0060\u0060(?:json)?\s*/i, "").replace(/\s*\u0060\u0060\u0060$/, ""));
         throw new Error("Gemini returned an empty storyboard.");
       }
       geminiFailure = "Gemini HTTP " + response.status + (data.error?.message ? ": " + String(data.error.message).slice(0, 240) : "");
@@ -122,7 +122,7 @@ async function requestStoryboard(prompt) {
     const raw = data.choices?.[0]?.message?.content;
     if (!raw) throw new Error("Gemini was unavailable and Groq returned an empty storyboard.");
     try {
-      return JSON.parse(raw.replace(/^\u0060\u0060\u0060(?:json)?\\s*/i, "").replace(/\\s*\u0060\u0060\u0060$/, ""));
+      return JSON.parse(raw.replace(/^\u0060\u0060\u0060(?:json)?\s*/i, "").replace(/\s*\u0060\u0060\u0060$/, ""));
     } catch {
       throw new Error("The AI provider returned invalid storyboard JSON. Please try again.");
     }
@@ -167,7 +167,7 @@ Exactly 5 scenes. Each caption should be clear, factual, concise and readable. B
       segmentPaths.push(segmentPath);
     }
     const listPath = path.join(workDir, "concat.txt");
-    await fs.promises.writeFile(listPath, segmentPaths.map(file => "file '" + file.replace(/'/g, "'\\''") + "'").join("\\n"));
+    await fs.promises.writeFile(listPath, segmentPaths.map(file => "file '" + file.replace(/'/g, "'\\''") + "'").join("\n"));
     await run(ffmpegPath, ["-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", "-movflags", "+faststart", outputPath]);
     return {
       title: cleanText(storyboard.title || topic, 100),

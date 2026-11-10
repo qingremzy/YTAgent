@@ -84,6 +84,15 @@ async function waitForAnalysis(jobId) {
 }
 let subtitlesSrt = "";
 
+async function refreshSocialStatus() {
+  try {
+    const response = await fetch("/api/social-status");
+    const data = await response.json();
+    document.getElementById("instagramAccountStatus").textContent = data.instagram.connected ? "Connected: @" + data.instagram.username : "Not connected";
+    document.getElementById("facebookAccountStatus").textContent = data.facebook.connected ? "Connected: " + ((data.facebook.pages || []).join(", ") || "Facebook Pages") : "Not connected";
+    document.getElementById("tiktokAccountStatus").textContent = data.tiktok.connected ? "Connected: @" + data.tiktok.username : "Not connected";
+  } catch {}
+}
 async function refreshStatus() {
   try {
     const response = await fetch("/api/status");

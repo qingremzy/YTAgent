@@ -7,69 +7,7 @@ const submit = document.getElementById("submit");
 const analyzeButton = document.getElementById("analyze");
 const analysisStatus = document.getElementById("analysisStatus");
 const videoInput = document.getElementById("video");
-const downloadSrt = document.getElementById("downloadSrt");
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-const customPlatformList = document.getElementById("customPlatformList");
-const platformNameInput = document.getElementById("newPlatformName");
-const customPlatformsKey = "ytagent-custom-platforms-v1";
-let customPlatforms = [];
-try { customPlatforms = JSON.parse(localStorage.getItem(customPlatformsKey) || "[]"); } catch {}
-
-function platformId(name) {
-  return "custom-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-function saveCustomPlatforms() {
-  localStorage.setItem(customPlatformsKey, JSON.stringify(customPlatforms));
-}
-function renderCustomPlatforms() {
-  customPlatformList.replaceChildren();
-  customPlatforms.forEach(name => {
-    const id = platformId(name);
-    const label = document.createElement("label");
-    label.className = "custom-platform-label";
-    const heading = document.createElement("span");
-    const icon = document.createElement("span");
-    icon.className = "custom-platform-icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.textContent = "↗";
-    heading.append(icon, document.createTextNode(name + " caption"));
-    const textarea = document.createElement("textarea");
-    textarea.id = id;
-    textarea.rows = 3;
-    textarea.placeholder = "Write your " + name + " post here";
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "button secondary remove-platform";
-    remove.textContent = "Remove " + name;
-    remove.addEventListener("click", () => {
-      customPlatforms = customPlatforms.filter(item => item !== name);
-      saveCustomPlatforms();
-      renderCustomPlatforms();
-    });
-    label.append(heading, textarea, remove);
-    customPlatformList.append(label);
-  });
-}
-document.getElementById("addPlatform").addEventListener("click", () => {
-  const name = platformNameInput.value.trim().replace(/\s+/g, " ");
-  if (!name) { platformNameInput.focus(); return; }
-  if (customPlatforms.some(item => item.toLowerCase() === name.toLowerCase())) {
-    platformNameInput.value = "";
-    return;
-  }
-  customPlatforms.push(name);
-  saveCustomPlatforms();
-  renderCustomPlatforms();
-  platformNameInput.value = "";
-});
-platformNameInput.addEventListener("keydown", event => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    document.getElementById("addPlatform").click();
-  }
-});
-renderCustomPlatforms();
 
 async function waitForAnalysis(jobId) {
   for (;;) {
@@ -82,17 +20,7 @@ async function waitForAnalysis(jobId) {
     await wait(1500);
   }
 }
-let subtitlesSrt = "";
 
-async function refreshSocialStatus() {
-  try {
-    const response = await fetch("/api/social-status");
-    const data = await response.json();
-    document.getElementById("instagramAccountStatus").textContent = data.instagram.connected ? "Connected: @" + data.instagram.username : "Not connected";
-    document.getElementById("facebookAccountStatus").textContent = data.facebook.connected ? "Connected: " + ((data.facebook.pages || []).join(", ") || "Facebook Pages") : "Not connected";
-    document.getElementById("tiktokAccountStatus").textContent = data.tiktok.connected ? "Connected: @" + data.tiktok.username : "Not connected";
-  } catch {}
-}
 async function refreshStatus() {
   try {
     const response = await fetch("/api/status");
@@ -105,8 +33,7 @@ async function refreshStatus() {
 videoInput.addEventListener("change", event => {
   document.getElementById("fileLabel").textContent = event.target.files[0]?.name || "Choose video from your device";
   analysisStatus.textContent = "";
-  subtitlesSrt = "";
-  downloadSrt.classList.add("hidden");
+
 });
 disconnectButton.addEventListener("click", async () => {
   await fetch("/auth/logout", { method: "POST" });
@@ -128,27 +55,11 @@ analyzeButton.addEventListener("click", async () => {
     form.elements.description.value = a.description || "";
     form.elements.tags.value = (a.tags || []).join(", ");
     form.elements.hashtags.value = (a.hashtags || []).join(" ");
-    const posts = a.platform_posts || {};
-    document.getElementById("tiktokCaption").value = posts.tiktok || "";
-    document.getElementById("instagramCaption").value = posts.instagram || "";
-    document.getElementById("facebookCaption").value = posts.facebook || "";
-    document.getElementById("youtubeCommunityPost").value = posts.youtube_community || "";
-    subtitlesSrt = a.subtitles_srt || "";
-    downloadSrt.classList.toggle("hidden", !subtitlesSrt.trim());
-    document.getElementById("subtitleStatus").textContent = subtitlesSrt.trim()
-      ? "Subtitles generated. Download the SRT file to review or add to your video."
-      : "No clear spoken dialogue was detected, so no subtitle file was generated.";
-    analysisStatus.textContent = "Done. Review the title, description, tags and caption before publishing. Detected language: " + (a.language || "unknown") + ".";
+    form.elements.keywords.value = (a.keywords || []).join(", ");
+    document.getElementById("aiProviders").textContent = "AI reviewers used: " + (a.ai_providers || ["Google Gemini"]).join(" + ") + ".";
+    analysisStatus.textContent = "Done. Review the title, description, tags, keywords and hashtags before publishing. Detected language: " + (a.language || "unknown") + ".";
   } catch (error) { analysisStatus.textContent = error.message; }
   finally { analyzeButton.disabled = false; analyzeButton.textContent = "✦ Analyse video & generate everything"; }
-});
-downloadSrt.addEventListener("click", () => {
-  if (!subtitlesSrt) return;
-  const blob = new Blob([subtitlesSrt], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url; link.download = "ytagent-subtitles.srt"; link.click();
-  URL.revokeObjectURL(url);
 });
 form.addEventListener("submit", async event => {
   event.preventDefault();
@@ -163,9 +74,6 @@ form.addEventListener("submit", async event => {
     if (!response.ok) throw new Error(data.error || "Upload failed.");
     result.innerHTML = 'Published successfully! <a target="_blank" rel="noopener" href="' + data.url + '">Open your YouTube video</a>';
     form.reset();
-    subtitlesSrt = "";
-    downloadSrt.classList.add("hidden");
-    document.getElementById("subtitleStatus").textContent = "Generated from intelligible speech when available.";
     document.getElementById("fileLabel").textContent = "Choose video from your device";
     analysisStatus.textContent = "";
   } catch (error) { result.textContent = error.message; }

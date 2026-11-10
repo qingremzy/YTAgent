@@ -31,6 +31,15 @@
         <label>Instagram caption<textarea id="instagramCaption" rows="3" placeholder="Instagram Reel caption and hashtags"></textarea></label>
         <label>Facebook post<textarea id="facebookCaption" rows="3" placeholder="Facebook post that invites discussion"></textarea></label>
         <label>YouTube Community post<textarea id="youtubeCommunityPost" rows="3" placeholder="Community post for your subscribers"></textarea></label>
+        <div class="custom-platforms">
+          <h3>Add another social platform</h3>
+          <p class="muted">Type any platform name, then add its caption box.</p>
+          <div class="add-platform-row">
+            <input id="newPlatformName" maxlength="40" placeholder="e.g. Threads, Snapchat, Pinterest">
+            <button class="button secondary" id="addPlatform" type="button">＋ Add</button>
+          </div>
+          <div id="customPlatformList"></div>
+        </div>
         <div class="subtitle-tools">
           <div><strong>Subtitles (SRT)</strong><small id="subtitleStatus">Generated from intelligible speech when available.</small></div>
           <button class="button secondary hidden" id="downloadSrt" type="button">Download .srt</button>

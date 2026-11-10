@@ -2,7 +2,7 @@
   "name": "ytagent",
   "version": "1.0.0",
   "private": true,
-  "description": "Mobile-friendly YouTube upload agent",
+  "description": "Mobile-friendly YouTube publishing assistant with narrated video generation",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -21,6 +21,7 @@
     "bullmq": "^5.34.3",
     "ioredis": "^5.4.2",
     "ffmpeg-static": "^5.2.0",
-    "sharp": "^0.33.5"
+    "sharp": "^0.33.5",
+    "node-edge-tts": "^1.2.12"
   }
 }

@@ -82,7 +82,7 @@ async function extractVideoFrames(videoPath) {
       child.on("error", reject);
       child.on("close", code => code === 0 ? resolve() : reject(new Error(errorText.slice(0, 500) || "FFmpeg frame extraction failed.")));
     });
-    const names = (await fs.promises.readdir(frameDir)).filter(name => /^frame-\\d+\\.jpg$/.test(name)).sort();
+    const names = (await fs.promises.readdir(frameDir)).filter(name => /^frame-\d+\.jpg$/.test(name)).sort();
     if (!names.length) throw new Error("No readable frames could be extracted from this video.");
     return await Promise.all(names.map(async (name, index) => ({
       timestamp_seconds: index * 10,
@@ -144,7 +144,7 @@ async function reviewWithClaude(frames, draft) {
   });
   if (!response.ok) throw new Error("Claude visual analysis failed: HTTP " + response.status);
   const data = await response.json();
-  const output = data.content?.filter(item => item.type === "text").map(item => item.text).join("\\n");
+  const output = data.content?.filter(item => item.type === "text").map(item => item.text).join("\n");
   return output ? extractJson(output) : null;
 }
 

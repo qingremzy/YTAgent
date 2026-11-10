@@ -122,7 +122,7 @@ async function requestStoryboard(topic) {
             model: groqModel,
             messages: [
               { role: "system", content: "You are a strict JSON API. Output exactly one complete JSON object matching the schema. No markdown, explanations or trailing commas. Include exactly ten scenes." },
-              { role: "user", content: prompt + (attempt ? "\\nRETRY: The previous output failed validation. Return compact, complete valid JSON with exactly 10 scenes and no extra text." : "") }
+              { role: "user", content: prompt + (attempt ? "\nRETRY: The previous output failed validation. Return compact, complete valid JSON with exactly 10 scenes and no extra text." : "") }
             ],
             temperature: attempt ? 0.2 : 0.4,
             max_completion_tokens: 5000,

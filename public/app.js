@@ -33,7 +33,7 @@ analyzeButton.addEventListener("click", async () => {
   if (!videoInput.files.length) { analysisStatus.textContent = "Choose a video first."; return; }
   analyzeButton.disabled = true;
   analyzeButton.textContent = "Analysing video…";
-  analysisStatus.textContent = "AI is examining the video and its audio. This can take a little while.";
+  analysisStatus.textContent = "AI is examining the video and audio. You can generate details before connecting YouTube.";
   const data = new FormData();
   data.append("video", videoInput.files[0]);
   try {

@@ -29,7 +29,11 @@ function renderCustomPlatforms() {
     const label = document.createElement("label");
     label.className = "custom-platform-label";
     const heading = document.createElement("span");
-    heading.textContent = name + " caption";
+    const icon = document.createElement("span");
+    icon.className = "custom-platform-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "↗";
+    heading.append(icon, document.createTextNode(name + " caption"));
     const textarea = document.createElement("textarea");
     textarea.id = id;
     textarea.rows = 3;

@@ -46,7 +46,12 @@ function svgText(lines, x, y, size, lineHeight, weight = 700) {
 
 function parseStoryboardJson(raw) {
   if (typeof raw !== "string" || !raw.trim()) throw new Error("The AI returned an empty response.");
-  var text = raw.trim().replace(/^\`\`\`(?:json)?\\s*/i, "").replace(/\\s*\`\`\`$/, "").trim();
+  var text = raw.trim();
+  if (text.slice(0, 3) === "```") {
+    var lineEnd = text.indexOf("\n");
+    text = lineEnd >= 0 ? text.slice(lineEnd + 1) : text.slice(3);
+  }
+  if (text.slice(-3) === "```") text = text.slice(0, -3).trim();
   try { return JSON.parse(text); } catch (_) {}
   var first = text.indexOf("{");
   if (first < 0) throw new Error("No JSON object was found in the AI response.");
@@ -55,7 +60,7 @@ function parseStoryboardJson(raw) {
     var ch = text[i];
     if (quoted) {
       if (escaped) escaped = false;
-      else if (ch === "\\\\") escaped = true;
+      else if (ch.charCodeAt(0) === 92) escaped = true;
       else if (ch === '"') quoted = false;
       continue;
     }

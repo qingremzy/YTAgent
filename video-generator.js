@@ -43,52 +43,106 @@ function svgText(lines, x, y, size, lineHeight, weight = 700) {
     lines.map((line, i) => '<tspan x="' + x + '" dy="' + (i ? lineHeight : 0) + '">' + escapeXml(line) + '</tspan>').join("") + '</text>';
 }
 
+
+function parseStoryboardJson(raw) {
+  if (typeof raw !== "string" || !raw.trim()) throw new Error("The AI returned an empty response.");
+  var text = raw.trim();
+  if (text.slice(0, 3) === "```") {
+    var lineEnd = text.indexOf("\n");
+    text = lineEnd >= 0 ? text.slice(lineEnd + 1) : text.slice(3);
+  }
+  if (text.slice(-3) === "```") text = text.slice(0, -3).trim();
+  try { return JSON.parse(text); } catch (_) {}
+  var first = text.indexOf("{");
+  if (first < 0) throw new Error("No JSON object was found in the AI response.");
+  var depth = 0, quoted = false, escaped = false;
+  for (var i = first; i < text.length; i++) {
+    var ch = text[i];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (ch.charCodeAt(0) === 92) escaped = true;
+      else if (ch === '"') quoted = false;
+      continue;
+    }
+    if (ch === '"') quoted = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) return JSON.parse(text.slice(first, i + 1));
+  }
+  throw new Error("The AI response contained incomplete JSON.");
+}
+
+function validateStoryboard(storyboard) {
+  if (!storyboard || typeof storyboard !== "object" || Array.isArray(storyboard)) throw new Error("Storyboard must be a JSON object.");
+  if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 10) throw new Error("Storyboard must contain exactly 10 scenes.");
+  for (var i = 0; i < storyboard.scenes.length; i++) {
+    var scene = storyboard.scenes[i];
+    if (!scene || !scene.narration || !scene.visual_direction || !scene.caption) throw new Error("Scene " + (i + 1) + " is missing narration, visual_direction or caption.");
+  }
+  ["tags", "hashtags", "keywords"].forEach(function(key) { if (!Array.isArray(storyboard[key])) storyboard[key] = []; });
+  return storyboard;
+}
+
 async function requestStoryboard(topic) {
-  const prompt = `Create a factual, high-retention 60-second vertical YouTube science explainer about: "${cleanText(topic, 180)}".
-Return valid JSON only:
-{"title":"hook title","description":"accurate short description","tags":["..."],"hashtags":["#..."],"keywords":["..."],"scenes":[{"title":"short heading","narration":"natural spoken narration","caption":"short subtitle","visual_direction":"precise description of the 3D scene, subject and action"}]}.
-Exactly 10 scenes. Each narration must be 9 to 14 spoken words. Total narration should be 100 to 125 words. Each scene must show a different moment in a coherent visual story. Keep the main subject large and centered for a vertical 9:16 crop. The visual_direction must describe one concrete action that can be animated, not a static poster.
-VISUAL QUALITY: premium cinematic 3D educational animation, extremely detailed physically based CGI, realistic materials and anatomy, believable scale and physics, dramatic cinematic lighting, volumetric atmosphere, depth of field, macro close-ups, dynamic camera angles, smooth camera movement, rich but natural colours. Think polished theatrical science documentary animation. Avoid flat illustrations, abstract glowing shapes, HUDs, diagrams, symbols, placeholder graphics, title cards, watermarks, or text inside the generated scene.
-Be scientifically accurate. Build a powerful opening, clear cause and effect, escalating visual interest and a memorable ending. Do not imitate any creator's exact characters, scenes, branding or finished videos.`;
-  let geminiFailure = "";
+  var prompt = "Create a factual, high-retention 60-second vertical YouTube science explainer about: \"" + cleanText(topic, 180) + "\".\n" +
+    "Return ONE valid JSON object only. No markdown, commentary or extra text. Required keys: title, description, tags, hashtags, keywords, scenes. " +
+    "Exactly 10 scenes. Every scene must contain title, narration, caption and visual_direction. Each narration should be 9 to 14 spoken words. " +
+    "Each visual_direction must describe one concrete, animatable action. Keep the subject large and centered for vertical 9:16. " +
+    "Use premium cinematic realistic 3D educational CGI, physically based materials, believable anatomy and physics, dramatic lighting, volumetric atmosphere, macro detail and smooth camera movement. " +
+    "Be scientifically accurate. Build a strong hook, clear cause and effect, escalating visual interest and memorable ending. Do not imitate any creator's characters, scenes or branding.";
+  var failures = [];
   if (process.env.GEMINI_API_KEY) {
     try {
-      const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
+      var model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+      var response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
         method: "POST",
         headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.65 } })
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.4 } }),
+        signal: AbortSignal.timeout(45000)
       });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok) {
-        const raw = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
-        if (raw) return JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
-        geminiFailure = "Gemini returned an empty storyboard.";
-      } else geminiFailure = "Gemini HTTP " + response.status + (data.error?.message ? ": " + String(data.error.message).slice(0, 180) : "");
-    } catch (error) { geminiFailure = error.message || "Gemini request failed."; }
-  } else geminiFailure = "Gemini API key is missing.";
+      var data = await response.json().catch(function() { return {}; });
+      if (!response.ok) failures.push("Gemini HTTP " + response.status + (data.error && data.error.message ? ": " + String(data.error.message).slice(0, 180) : ""));
+      else {
+        var raw = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts ? data.candidates[0].content.parts.map(function(part) { return part.text || ""; }).join("") : "";
+        try { return validateStoryboard(parseStoryboardJson(raw)); }
+        catch (error) { failures.push("Gemini response: " + error.message); }
+      }
+    } catch (error) { failures.push("Gemini: " + (error.message || "request failed")); }
+  } else failures.push("Gemini API key is missing.");
+
   if (process.env.GROQ_API_KEY) {
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: process.env.GROQ_SCRIPT_MODEL || "openai/gpt-oss-20b",
-        messages: [
-          { role: "system", content: "You create accurate, cinematic 3D science video storyboards. Return valid JSON only and obey the exact schema." },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.65,
-        max_completion_tokens: 3600,
-        response_format: { type: "json_object" }
-      })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error("Gemini was unavailable (" + geminiFailure + "). Groq storyboard failed: " + (data.error?.message || "HTTP " + response.status));
-    const raw = data.choices?.[0]?.message?.content;
-    if (raw) return JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
-    throw new Error("Groq returned an empty storyboard.");
-  }
-  throw new Error("AI script generation failed: " + geminiFailure + ". Add GROQ_API_KEY in Railway Variables.");
+    var configuredModel = process.env.GROQ_SCRIPT_MODEL || "openai/gpt-oss-20b";
+    var models = [configuredModel, "llama-3.3-70b-versatile"].filter(function(model, index, all) { return all.indexOf(model) === index; });
+    for (var attempt = 0; attempt < 2; attempt++) {
+      var groqModel = models[Math.min(attempt, models.length - 1)];
+      try {
+        var groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: groqModel,
+            messages: [
+              { role: "system", content: "You are a strict JSON API. Output exactly one complete JSON object matching the schema. No markdown, explanations or trailing commas. Include exactly ten scenes." },
+              { role: "user", content: prompt + (attempt ? "\nRETRY: The previous output failed validation. Return compact, complete valid JSON with exactly 10 scenes and no extra text." : "") }
+            ],
+            temperature: attempt ? 0.2 : 0.4,
+            max_completion_tokens: 5000,
+            response_format: { type: "json_object" }
+          }),
+          signal: AbortSignal.timeout(60000)
+        });
+        var groqData = await groqResponse.json().catch(function() { return {}; });
+        if (!groqResponse.ok) {
+          var errorDetail = groqData.error && (groqData.error.failed_generation || groqData.error.message) || "HTTP " + groqResponse.status;
+          failures.push("Groq (" + groqModel + "): " + String(errorDetail).slice(0, 260));
+          continue;
+        }
+        var groqRaw = groqData.choices && groqData.choices[0] && groqData.choices[0].message ? groqData.choices[0].message.content : "";
+        try { return validateStoryboard(parseStoryboardJson(groqRaw)); }
+        catch (error) { failures.push("Groq (" + groqModel + "): " + error.message); }
+      } catch (error) { failures.push("Groq (" + groqModel + "): " + (error.message || "request failed")); }
+    }
+  } else failures.push("Groq API key is missing.");
+  throw new Error("Storyboard generation failed. " + failures.join(" | "));
 }
 
 function buildVideoPrompt(scene, topic, index) {

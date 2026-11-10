@@ -211,7 +211,7 @@ app.get("/api/status", async (req, res) => {
   }
 });
 
-app.post("/api/analyze", requireAuth, videoUpload.single("video"), async (req, res) => {
+app.post("/api/analyze", videoUpload.single("video"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Choose a video first." });
   try {
     const analysis = await analyzeWithGemini(req.file);

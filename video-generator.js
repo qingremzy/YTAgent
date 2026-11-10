@@ -45,8 +45,8 @@ function svgText(lines, x, y, size, lineHeight, weight = 700) {
 async function requestStoryboard(topic) {
   const prompt = `Create a factual, engaging 60-second vertical YouTube Shorts science explainer about: "${cleanText(topic, 180)}".
 Return valid JSON only:
-{"title":"hook title","description":"accurate short description","tags":["..."],"hashtags":["#..."],"scenes":[{"narration":"spoken narration for this scene, 25 to 34 words maximum","caption":"short readable subtitle, maximum 11 words","visual_query":"specific real-world image search phrase for the main subject of this scene","visual_direction":"what the image should show"}]}.
-Exactly 5 scenes. Narration must be natural spoken English, total around 115 to 135 words, no stage directions, no scene labels. Every visual_query must name a concrete subject that can be found in a real photograph or scientific image. No abstract graphics, UI, HUD, circles, grids, placeholder boxes, diagrams, text-only images, logos or watermarks. Keep science accurate. Build a strong opening, explain cause and effect, finish with a memorable takeaway.`;
+{"title":"hook title","description":"accurate short description","tags":["..."],"hashtags":["#..."],"keywords":["..."],"scenes":[{"title":"short scene heading","narration":"natural spoken narration, maximum 180 characters","caption":"short readable subtitle, maximum 11 words","visual_query":"specific real-world image search phrase for the main subject of this scene","visual_direction":"what the image should show"}]}.
+Exactly 5 scenes. Each narration must be 18 to 24 words and no more than 180 characters. Total narration should be around 100 to 120 words. Use natural spoken English, no stage directions, no scene labels. Every visual_query must name a concrete subject that can be found in a real photograph or scientific image. No abstract graphics, UI, HUD, circles, grids, placeholder boxes, diagrams, text-only images, logos or watermarks. Keep science accurate. Build a strong opening, explain cause and effect, finish with a memorable takeaway.`;
   let geminiFailure = "";
   if (process.env.GEMINI_API_KEY) {
     try {
@@ -220,8 +220,8 @@ async function generateEducationalVideo(topic, outputPath) {
     throw new Error("The AI storyboard did not contain exactly five scenes. Please try again.");
   }
   for (const [index, scene] of storyboard.scenes.entries()) {
-    if (!scene.narration || !scene.visual_query || !scene.caption) {
-      throw new Error("Scene " + (index + 1) + " is missing narration, a real-image search phrase or a caption. Please regenerate.");
+    if (!scene.narration || String(scene.narration).length > 195 || !scene.visual_query || !scene.caption) {
+      throw new Error("Scene " + (index + 1) + " is missing required content or its narration exceeds the 195-character voice limit. Please regenerate.");
     }
   }
 
@@ -278,6 +278,7 @@ async function generateEducationalVideo(topic, outputPath) {
     return {
       title: cleanText(storyboard.title || topic, 100),
       description,
+      keywords: Array.isArray(storyboard.keywords) ? storyboard.keywords.map(String).slice(0, 12) : [],
       tags: Array.isArray(storyboard.tags) ? storyboard.tags.map(String).slice(0, 15) : [],
       hashtags: Array.isArray(storyboard.hashtags) ? storyboard.hashtags.map(String).slice(0, 5) : [],
       duration_seconds: Math.round(totalDuration),

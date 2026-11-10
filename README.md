@@ -28,7 +28,9 @@ Copy `.env.example` to `.env` locally, or set the variables in your hosting prov
 - `GOOGLE_REDIRECT_URI`
 - `SESSION_SECRET` (use a long random value)
 - `GEMINI_API_KEY` (required for AI analysis)
-- `GEMINI_MODEL` (optional; defaults to `gemini-2.5-flash`)
+- `GEMINI_MODEL` (optional; selects the Gemini model used for analysis)
+- `REDIS_URL` (optional; enables queued background analysis and parallel workers)
+- `ANALYSIS_CONCURRENCY` (optional; number of simultaneous analysis jobs in this instance, defaults to 4 and is capped at 50)
 
 Never commit API keys, OAuth secrets, session secrets or user tokens.
 
@@ -51,6 +53,12 @@ https://YOUR-DOMAIN/auth/google/callback
 ```
 
 Register the exact same redirect URI in Google Cloud Console. Use a persistent session store (such as Redis or a database-backed store) for production multi-instance use.
+
+## Background task processing
+
+When `REDIS_URL` is configured, video analysis is submitted to a BullMQ queue backed by Redis. The app returns a task ID immediately, retries temporary job failures up to three times, and the browser polls for completion. `ANALYSIS_CONCURRENCY` controls simultaneous jobs per running app instance. Without Redis, analysis continues to run synchronously for compatibility.
+
+The queue can hold many waiting tasks, but actual simultaneous work is bounded by worker concurrency and the AI provider's rate limits. This first queue version runs its worker alongside the web server and stores uploaded files on that instance. Horizontal worker scaling requires shared object storage for video files and a separate worker service before increasing replicas.
 
 ## Important limitations
 

@@ -42,9 +42,8 @@ function svgLines(lines, x, y, fontSize, lineHeight, weight = 700) {
     lines.map((line, i) => '<tspan x="' + x + '" dy="' + (i ? lineHeight : 0) + '">' + escapeXml(line) + '</tspan>').join("") + '</text>';
 }
 function sceneSvg(scene, index, total) {
-  const title = escapeXml(scene.title || "A question worth asking");
-  const caption = escapeXml(scene.caption || scene.title || "");
-  const visual = escapeXml(scene.visual || "A cinematic abstract science illustration");\n  const titleLines = wrapWords(scene.title || "A question worth asking", 19, 3);\n  const captionLines = wrapWords(scene.caption || scene.title || "", 35, 4);
+  const visual = escapeXml(scene.visual || "A cinematic abstract science illustration");
+  const titleLines = wrapWords(scene.title || "A question worth asking", 19, 3);\n  const captionLines = wrapWords(scene.caption || scene.title || "", 35, 4);
   const palettes = [
     ["#07152d", "#123d59", "#26a6a1"],
     ["#170f32", "#49265f", "#f0a35e"],

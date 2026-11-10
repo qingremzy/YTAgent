@@ -9,7 +9,7 @@
   <main class="shell">
     <header><div class="brand"><span class="mark">▶</span><div><h1>YTAgent</h1><p>Your AI-powered YouTube publishing assistant</p></div></div><span class="badge">BETA</span></header>
     <section class="card connect">
-      <div><h2>YouTube connection</h2><p id="status">Checking connection…</p></div>
+      <div><h2>YouTube connection</h2><p id="status">Checking connection…</p><small class="muted">Connect only when you are ready to publish. AI analysis works without connecting.</small></div>
       <a class="button" id="connect" href="/auth/google">Connect YouTube</a>
       <button class="button secondary hidden" id="disconnect">Disconnect</button>
     </section>
@@ -25,7 +25,12 @@
         <label>YouTube description<textarea name="description" rows="4" maxlength="5000" placeholder="AI-generated, video-specific description"></textarea></label>
         <label>Tags <small>Comma-separated, based on the video</small><input name="tags" placeholder="Relevant tags"></label>
         <label>Hashtags <small>Relevant hashtags to append to the YouTube description</small><input name="hashtags" placeholder="#Wildlife #Nature"></label>
-        <label>Social media caption<textarea id="socialCaption" rows="3" placeholder="AI-generated caption for sharing the video"></textarea></label>
+        <h3>Platform-specific social posts</h3>
+        <p class="muted">Each platform gets its own caption and hashtags. You can generate these without connecting your accounts.</p>
+        <label>TikTok caption<textarea id="tiktokCaption" rows="3" placeholder="TikTok-ready hook, caption and hashtags"></textarea></label>
+        <label>Instagram caption<textarea id="instagramCaption" rows="3" placeholder="Instagram Reel caption and hashtags"></textarea></label>
+        <label>Facebook post<textarea id="facebookCaption" rows="3" placeholder="Facebook post that invites discussion"></textarea></label>
+        <label>YouTube Community post<textarea id="youtubeCommunityPost" rows="3" placeholder="Community post for your subscribers"></textarea></label>
         <div class="subtitle-tools">
           <div><strong>Subtitles (SRT)</strong><small id="subtitleStatus">Generated from intelligible speech when available.</small></div>
           <button class="button secondary hidden" id="downloadSrt" type="button">Download .srt</button>

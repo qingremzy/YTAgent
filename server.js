@@ -6,10 +6,16 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const { google } = require("googleapis");
+const { Queue, Worker } = require("bullmq");
+const IORedis = require("ioredis");
 
 const app = express();
 app.set("trust proxy", 1);
 const PORT = Number(process.env.PORT || 3000);
+const redisEnabled = Boolean(process.env.REDIS_URL);
+const taskQueueName = "ytagent-video-analysis";
+let analysisQueue = null;
+let redisConnection = null;
 const uploadDir = path.join(__dirname, "uploads");
 fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -100,7 +106,12 @@ async function analyzeWithGemini(file) {
   "description": "Accurate, engaging YouTube description, no invented facts",
   "tags": ["up to 15 accurate YouTube tags, each short"],
   "hashtags": ["3 to 5 relevant hashtags including #"],
-  "social_caption": "A separate engaging social-media caption that accurately describes this video",
+  "platform_posts": {
+    "tiktok": "A TikTok-native caption with a strong opening hook and relevant hashtags",
+    "instagram": "An Instagram Reel caption with a compelling first line and relevant hashtags",
+    "facebook": "A natural Facebook post that encourages genuine discussion without clickbait",
+    "youtube_community": "A YouTube Community post that invites viewers to engage with this video"
+  },
   "language": "main spoken language, or 'none' if no clear speech",
   "subtitles_srt": "SRT subtitles with timestamps if intelligible speech exists, otherwise empty string"
 }
@@ -152,7 +163,12 @@ For subtitles, transcribe only words that are actually audible. Use approximate 
       description: String(parsed.description || "").slice(0, 5000),
       tags: Array.isArray(parsed.tags) ? parsed.tags.map(String).slice(0, 15) : [],
       hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.map(String).slice(0, 8) : [],
-      social_caption: String(parsed.social_caption || ""),
+      platform_posts: {
+        tiktok: String(parsed.platform_posts?.tiktok || ""),
+        instagram: String(parsed.platform_posts?.instagram || ""),
+        facebook: String(parsed.platform_posts?.facebook || ""),
+        youtube_community: String(parsed.platform_posts?.youtube_community || "")
+      },
       language: String(parsed.language || "unknown"),
       subtitles_srt: String(parsed.subtitles_srt || "")
     };
@@ -211,8 +227,27 @@ app.get("/api/status", async (req, res) => {
   }
 });
 
-app.post("/api/analyze", requireAuth, videoUpload.single("video"), async (req, res) => {
+app.post("/api/analyze", videoUpload.single("video"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Choose a video first." });
+  if (analysisQueue) {
+    try {
+      const job = await analysisQueue.add("analyse-video", {
+        path: req.file.path,
+        mimetype: req.file.mimetype,
+        originalname: req.file.originalname
+      }, {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 1500 },
+        removeOnComplete: { age: 3600, count: 5000 },
+        removeOnFail: { age: 86400, count: 5000 }
+      });
+      return res.status(202).json({ success: true, queued: true, jobId: String(job.id) });
+    } catch (err) {
+      await fs.promises.unlink(req.file.path).catch(() => {});
+      console.error("Could not queue video analysis:", err.message);
+      return res.status(503).json({ error: "The task queue is temporarily unavailable. Please try again." });
+    }
+  }
   try {
     const analysis = await analyzeWithGemini(req.file);
     res.json({ success: true, analysis });
@@ -221,6 +256,21 @@ app.post("/api/analyze", requireAuth, videoUpload.single("video"), async (req, r
     res.status(502).json({ error: err.message || "Video analysis failed." });
   } finally {
     await fs.promises.unlink(req.file.path).catch(() => {});
+  }
+});
+
+app.get("/api/analyze/:jobId", async (req, res) => {
+  if (!analysisQueue) return res.status(404).json({ error: "Background task queue is not enabled." });
+  try {
+    const job = await analysisQueue.getJob(req.params.jobId);
+    if (!job) return res.status(404).json({ error: "Analysis task not found. Please submit the video again." });
+    const state = await job.getState();
+    if (state === "completed") return res.json({ state, analysis: job.returnvalue });
+    if (state === "failed") return res.json({ state, error: job.failedReason || "Video analysis failed." });
+    return res.json({ state, progress: job.progress || 0 });
+  } catch (err) {
+    console.error("Task status check failed:", err.message);
+    res.status(503).json({ error: "Could not check task progress. Please retry." });
   }
 });
 
@@ -260,4 +310,25 @@ app.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Video is too large. Maximum size is 256 MB." });
   res.status(400).json({ error: err.message || "Something went wrong." });
 });
+if (redisEnabled) {
+  redisConnection = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
+  analysisQueue = new Queue(taskQueueName, { connection: redisConnection });
+  const configuredConcurrency = Number(process.env.ANALYSIS_CONCURRENCY || 4);
+  const concurrency = Number.isInteger(configuredConcurrency) ? Math.min(50, Math.max(1, configuredConcurrency)) : 4;
+  const worker = new Worker(taskQueueName, async job => {
+    try {
+      const analysis = await analyzeWithGemini(job.data);
+      await job.updateProgress(100);
+      return analysis;
+    } finally {
+      await fs.promises.unlink(job.data.path).catch(() => {});
+    }
+  }, { connection: redisConnection, concurrency });
+  worker.on("failed", (job, error) => console.error("Analysis task failed:", job?.id, error.message));
+  worker.on("error", error => console.error("Analysis worker error:", error.message));
+  console.log("YTAgent task queue enabled. Worker concurrency:", concurrency);
+} else {
+  console.warn("REDIS_URL is not set. Analysis will run synchronously. Add Redis to enable queued parallel processing.");
+}
+
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

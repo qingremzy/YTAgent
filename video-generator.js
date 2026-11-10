@@ -5,7 +5,7 @@ const { spawn } = require("child_process");
 const sharp = require("sharp");
 const ffmpegPath = require("ffmpeg-static");
 
-function cleanText(value, max = 180) {
+function cleanText(value, max = 240) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
 }
 function escapeXml(value) {
@@ -17,7 +17,7 @@ function run(command, args) {
     let error = "";
     child.stderr.on("data", chunk => { error += chunk.toString(); });
     child.on("error", reject);
-    child.on("close", code => code === 0 ? resolve() : reject(new Error(error.slice(-900) || "Video rendering failed.")));
+    child.on("close", code => code === 0 ? resolve() : reject(new Error(error.slice(-1000) || "Video rendering failed.")));
   });
 }
 function wrapWords(value, limit, maxLines) {
@@ -37,101 +37,177 @@ function wrapWords(value, limit, maxLines) {
   }
   return lines;
 }
-function svgLines(lines, x, y, fontSize, lineHeight, weight = 700) {
-  return '<text x="' + x + '" y="' + y + '" fill="#ffffff" font-family="Arial,sans-serif" font-size="' + fontSize + '" font-weight="' + weight + '">' +
+function svgText(lines, x, y, size, lineHeight, weight = 700) {
+  return '<text x="' + x + '" y="' + y + '" fill="#fff" font-family="Arial,sans-serif" font-size="' + size + '" font-weight="' + weight + '" stroke="#07111f" stroke-width="5" stroke-linejoin="round" paint-order="stroke">' +
     lines.map((line, i) => '<tspan x="' + x + '" dy="' + (i ? lineHeight : 0) + '">' + escapeXml(line) + '</tspan>').join("") + '</text>';
 }
-function sceneSvg(scene, index, total) {
-  const visual = escapeXml(scene.visual || "A cinematic abstract science illustration");
-  const titleLines = wrapWords(scene.title || "A question worth asking", 19, 3);
-  const captionLines = wrapWords(scene.caption || scene.title || "", 35, 4);
-  const palettes = [
-    ["#07152d", "#123d59", "#26a6a1"],
-    ["#170f32", "#49265f", "#f0a35e"],
-    ["#101d31", "#24536b", "#63c6dc"],
-    ["#241329", "#66364f", "#f2b36f"],
-    ["#081c28", "#17636a", "#8be0c4"]
-  ];
-  const [a, b, accent] = palettes[index % palettes.length];
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1280" viewBox="0 0 720 1280">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient>
-    <radialGradient id="glow"><stop stop-color="${accent}" stop-opacity=".8"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient>
-    <filter id="blur"><feGaussianBlur stdDeviation="38"/></filter>
-  </defs>
-  <rect width="720" height="1280" fill="url(#bg)"/>
-  <circle cx="${index % 2 ? 545 : 150}" cy="380" r="250" fill="url(#glow)" filter="url(#blur)"/>
-  <circle cx="${index % 2 ? 545 : 150}" cy="380" r="126" fill="none" stroke="${accent}" stroke-opacity=".55" stroke-width="2"/>
-  <circle cx="${index % 2 ? 545 : 150}" cy="380" r="180" fill="none" stroke="#ffffff" stroke-opacity=".16" stroke-width="2" stroke-dasharray="8 16"/>
-  <path d="M0 770 Q180 680 360 770 T720 760" fill="none" stroke="#ffffff" stroke-opacity=".14" stroke-width="2"/>
-  <text x="54" y="110" fill="${accent}" font-family="Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="5">YT AGENT • WHAT IF?</text>
-  <text x="54" y="690" fill="#ffffff" font-family="Arial,sans-serif" font-size="24" opacity=".72">SCENE ${index + 1} / ${total}</text>
-  ${svgLines(titleLines, 54, 805, 54, 62, 800)}
-  <rect x="54" y="990" width="612" height="4" rx="2" fill="${accent}"/>
-  ${svgLines(captionLines, 54, 1065, 29, 38, 500)}
-  <text x="54" y="1235" fill="#ffffff" opacity=".48" font-family="Arial,sans-serif" font-size="17">${visual}</text>
-  </svg>`;
-}
 
-async function requestStoryboard(prompt) {
-  let geminiFailure = null;
-
+async function requestStoryboard(topic) {
+  const prompt = `Create a factual, engaging 60-second vertical YouTube Shorts science explainer about: "${cleanText(topic, 180)}".
+Return valid JSON only:
+{"title":"hook title","description":"accurate short description","tags":["..."],"hashtags":["#..."],"scenes":[{"narration":"spoken narration for this scene, 25 to 34 words maximum","caption":"short readable subtitle, maximum 11 words","visual_query":"specific real-world image search phrase for the main subject of this scene","visual_direction":"what the image should show"}]}.
+Exactly 5 scenes. Narration must be natural spoken English, total around 115 to 135 words, no stage directions, no scene labels. Every visual_query must name a concrete subject that can be found in a real photograph or scientific image. No abstract graphics, UI, HUD, circles, grids, placeholder boxes, diagrams, text-only images, logos or watermarks. Keep science accurate. Build a strong opening, explain cause and effect, finish with a memorable takeaway.`;
+  let geminiFailure = "";
   if (process.env.GEMINI_API_KEY) {
-    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
     try {
+      const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
       const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
         method: "POST",
         headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.65 } })
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.55 } })
       });
       const data = await response.json().catch(() => ({}));
       if (response.ok) {
         const raw = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
         if (raw) return JSON.parse(raw.replace(/^\u0060\u0060\u0060(?:json)?\s*/i, "").replace(/\s*\u0060\u0060\u0060$/, ""));
-        throw new Error("Gemini returned an empty storyboard.");
-      }
-      geminiFailure = "Gemini HTTP " + response.status + (data.error?.message ? ": " + String(data.error.message).slice(0, 240) : "");
-    } catch (error) {
-      geminiFailure = error.message || "Gemini request failed.";
-    }
-  } else {
-    geminiFailure = "Gemini API key is not configured.";
-  }
-
+        geminiFailure = "Gemini returned an empty storyboard.";
+      } else geminiFailure = "Gemini HTTP " + response.status + (data.error?.message ? ": " + String(data.error.message).slice(0, 180) : "");
+    } catch (error) { geminiFailure = error.message || "Gemini request failed."; }
+  } else geminiFailure = "Gemini API key is missing.";
   if (process.env.GROQ_API_KEY) {
-    const model = process.env.GROQ_SCRIPT_MODEL || "openai/gpt-oss-20b";
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model,
+        model: process.env.GROQ_SCRIPT_MODEL || "openai/gpt-oss-20b",
         messages: [
-          { role: "system", content: "You create accurate educational science video storyboards. Return valid JSON only, with no markdown." },
+          { role: "system", content: "You create accurate science video storyboards. Return valid JSON only. Follow every schema and visual restriction." },
           { role: "user", content: prompt }
         ],
-        temperature: 0.65,
-        max_completion_tokens: 1800,
+        temperature: 0.55,
+        max_completion_tokens: 2200,
         response_format: { type: "json_object" }
       })
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const detail = data.error?.message ? String(data.error.message).slice(0, 220) : "HTTP " + response.status;
-      throw new Error("Gemini was unavailable (" + geminiFailure + ") and Groq fallback failed (" + detail + "). Check the API quota/key in Railway Variables.");
-    }
+    if (!response.ok) throw new Error("Gemini was unavailable (" + geminiFailure + "). Groq storyboard failed: " + (data.error?.message || "HTTP " + response.status));
     const raw = data.choices?.[0]?.message?.content;
-    if (!raw) throw new Error("Gemini was unavailable and Groq returned an empty storyboard.");
-    try {
-      return JSON.parse(raw.replace(/^\u0060\u0060\u0060(?:json)?\s*/i, "").replace(/\s*\u0060\u0060\u0060$/, ""));
-    } catch {
-      throw new Error("The AI provider returned invalid storyboard JSON. Please try again.");
+    if (raw) return JSON.parse(raw.replace(/^\u0060\u0060\u0060(?:json)?\s*/i, "").replace(/\s*\u0060\u0060\u0060$/, ""));
+    throw new Error("Groq returned an empty storyboard.");
+  }
+  throw new Error("AI script generation failed: " + geminiFailure + ". Add GROQ_API_KEY in Railway Variables.");
+}
+
+async function findCommonsImage(query, fallbackQuery) {
+  const searches = [query, fallbackQuery].filter(Boolean);
+  for (const search of searches) {
+    const url = new URL("https://commons.wikimedia.org/w/api.php");
+    url.search = new URLSearchParams({
+      action: "query",
+      generator: "search",
+      gsrsearch: search + " filetype:bitmap",
+      gsrnamespace: "6",
+      gsrlimit: "8",
+      prop: "imageinfo",
+      iiprop: "url|extmetadata",
+      iiurlwidth: "1200",
+      format: "json"
+    });
+    const response = await fetch(url, { headers: { "User-Agent": "YTAgent/1.0 (educational video generator)" } });
+    if (!response.ok) continue;
+    const data = await response.json().catch(() => ({}));
+    const pages = Object.values(data.query?.pages || {});
+    const candidates = pages.map(page => {
+      const info = page.imageinfo?.[0] || {};
+      const meta = info.extmetadata || {};
+      const read = key => String(meta[key]?.value || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      return {
+        title: page.title || "",
+        url: info.thumburl || info.url,
+        description: read("ImageDescription"),
+        artist: read("Artist"),
+        license: read("LicenseShortName"),
+        licenseUrl: read("LicenseUrl")
+      };
+    }).filter(item => item.url && /^https?:\/\//i.test(item.url));
+    if (candidates.length) return candidates[0];
+  }
+  throw new Error("Could not find a usable real science image for: " + query + ". Try a more specific topic.");
+}
+
+async function downloadImage(url, outputPath) {
+  const response = await fetch(url, { headers: { "User-Agent": "YTAgent/1.0 educational video renderer" } });
+  if (!response.ok) throw new Error("A scene image could not be downloaded (HTTP " + response.status + ").");
+  const type = response.headers.get("content-type") || "";
+  if (!type.startsWith("image/")) throw new Error("The image source returned a non-image file.");
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > 18 * 1024 * 1024) throw new Error("A scene image was too large to process.");
+  await sharp(buffer).rotate().resize(720, 1280, { fit: "cover", position: "attention" }).jpeg({ quality: 88 }).toFile(outputPath);
+}
+
+async function generateNarration(text, outputPath) {
+  const narration = cleanText(text, 195);
+  if (!narration) throw new Error("One scene is missing its narration.");
+  if (process.env.GROQ_API_KEY) {
+    const response = await fetch("https://api.groq.com/openai/v1/audio/speech", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.GROQ_TTS_MODEL || "canopylabs/orpheus-v1-english",
+        input: narration,
+        voice: process.env.GROQ_TTS_VOICE || "hannah",
+        response_format: "wav"
+      })
+    });
+    if (response.ok) {
+      const audio = Buffer.from(await response.arrayBuffer());
+      if (audio.length > 1000) {
+        await fs.promises.writeFile(outputPath, audio);
+        return "Groq Orpheus";
+      }
+    } else {
+      const detail = await response.text().catch(() => "");
+      console.warn("Groq voice generation failed:", response.status, detail.slice(0, 220));
     }
   }
-
-  if (geminiFailure.includes("429")) {
-    throw new Error("Gemini's free API quota/rate limit has been reached, and GROQ_API_KEY is missing. Add or check GROQ_API_KEY in Railway Variables, then redeploy.");
+  try {
+    const { EdgeTTS } = require("node-edge-tts");
+    const tts = new EdgeTTS({
+      voice: process.env.EDGE_TTS_VOICE || "en-US-AriaNeural",
+      lang: "en-US",
+      outputFormat: "audio-24khz-96kbitrate-mono-mp3",
+      timeout: 30000
+    });
+    const mp3Path = outputPath.replace(/\.wav$/i, ".mp3");
+    await tts.ttsPromise(narration, mp3Path);
+    return { provider: "Microsoft Edge TTS", path: mp3Path };
+  } catch (error) {
+    throw new Error("Voice generation failed. Groq TTS was unavailable and the free voice fallback failed: " + (error.message || "unknown error"));
   }
-  throw new Error("AI script generation failed: " + geminiFailure + (process.env.GROQ_API_KEY ? " Groq fallback could not be used." : " Add GROQ_API_KEY in Railway Variables for fallback."));
+}
+
+function sceneArtwork(scene, index, total, credit) {
+  const titleLines = wrapWords(scene.title || "A question worth asking", 22, 2);
+  const captionLines = wrapWords(scene.caption || scene.title || "", 31, 3);
+  const heading = svgText(titleLines, 48, 115, 43, 52, 800);
+  const subtitle = svgText(captionLines, 48, 1040, 30, 39, 700);
+  const creditText = escapeXml(credit ? "Image: " + credit : "YTAgent original edit");
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1280">
+    <defs>
+      <linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#020817" stop-opacity=".9"/><stop offset="1" stop-color="#020817" stop-opacity="0"/></linearGradient>
+      <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#020817" stop-opacity="0"/><stop offset=".3" stop-color="#020817" stop-opacity=".82"/><stop offset="1" stop-color="#020817" stop-opacity=".96"/></linearGradient>
+    </defs>
+    <rect width="720" height="290" fill="url(#top)"/>
+    <rect y="820" width="720" height="460" fill="url(#bottom)"/>
+    <text x="48" y="55" fill="#67e8f9" font-family="Arial,sans-serif" font-size="18" font-weight="700" letter-spacing="3">YT AGENT • WHAT IF? • ${index + 1}/${total}</text>
+    ${heading}
+    <rect x="48" y="970" width="88" height="5" rx="2" fill="#67e8f9"/>
+    ${subtitle}
+    <text x="48" y="1235" fill="#ffffff" opacity=".7" font-family="Arial,sans-serif" font-size="13">${creditText}</text>
+  </svg>`);
+}
+
+function getMediaDuration(filePath) {
+  return new Promise(resolve => {
+    const child = spawn(ffmpegPath, ["-hide_banner", "-i", filePath, "-f", "null", "-"], { stdio: ["ignore", "ignore", "pipe"] });
+    let output = "";
+    child.stderr.on("data", chunk => { output += chunk.toString(); });
+    child.on("close", () => {
+      const match = output.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+      resolve(match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) : 8);
+    });
+    child.on("error", () => resolve(8));
+  });
 }
 
 async function generateEducationalVideo(topic, outputPath) {
@@ -139,43 +215,79 @@ async function generateEducationalVideo(topic, outputPath) {
     throw new Error("Add GEMINI_API_KEY or GROQ_API_KEY in Railway Variables before generating videos.");
   }
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable on this server.");
-  const prompt = `Create an original, accurate, 60-second educational science/what-if YouTube Shorts storyboard about: "${cleanText(topic, 180)}".
-Return JSON only: {"title":"short hook","description":"one-paragraph factual summary","scenes":[{"title":"short on-screen heading","caption":"subtitle/caption text, 12-22 words","visual":"short visual direction"}]}.
-Exactly 5 scenes. Each caption should be clear, factual, concise and readable. Build a strong hook, explain the sequence, and finish with a memorable takeaway. Do not invent scientific facts. No logos, no copyrighted characters, no fake quotations. Each scene represents about 12 seconds. The video will be rendered as animated motion-graphic scenes with burned-in captions, not photorealistic footage.`;
-  let storyboard;
-  try {
-    storyboard = await requestStoryboard(prompt);
-  } catch (error) {
-    if (error instanceof SyntaxError) throw new Error("AI returned invalid storyboard JSON. Please try again.");
-    throw error;
+  const storyboard = await requestStoryboard(topic);
+  if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 5) {
+    throw new Error("The AI storyboard did not contain exactly five scenes. Please try again.");
   }
-  if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 5) throw new Error("AI storyboard must contain exactly five scenes.");
+  for (const [index, scene] of storyboard.scenes.entries()) {
+    if (!scene.narration || !scene.visual_query || !scene.caption) {
+      throw new Error("Scene " + (index + 1) + " is missing narration, a real-image search phrase or a caption. Please regenerate.");
+    }
+  }
 
-  const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-render-"));
+  const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-cinema-"));
   try {
-    const segmentPaths = [];
+    const clips = [];
+    const voiceFiles = [];
+    const credits = [];
+    let voiceProvider = "Groq Orpheus";
     for (let i = 0; i < storyboard.scenes.length; i++) {
       const scene = storyboard.scenes[i];
-      const pngPath = path.join(workDir, "scene-" + i + ".png");
-      const segmentPath = path.join(workDir, "segment-" + i + ".mp4");
-      await sharp(Buffer.from(sceneSvg(scene, i, storyboard.scenes.length))).png().toFile(pngPath);
+      const image = await findCommonsImage(scene.visual_query, cleanText(topic, 100));
+      const imagePath = path.join(workDir, "image-" + i + ".jpg");
+      const artPath = path.join(workDir, "art-" + i + ".jpg");
+      const audioPath = path.join(workDir, "voice-" + i + ".wav");
+      const clipPath = path.join(workDir, "clip-" + i + ".mp4");
+      await downloadImage(image.url, imagePath);
+      const credit = [image.artist, image.license].filter(Boolean).join(" • ");
+      credits.push({ source: image.title, artist: image.artist, license: image.license, license_url: image.licenseUrl });
+      await sharp(imagePath).composite([{ input: sceneArtwork(scene, i, storyboard.scenes.length, credit), top: 0, left: 0 }]).jpeg({ quality: 90 }).toFile(artPath);
+
+      const speech = await generateNarration(scene.narration, audioPath);
+      let actualAudioPath = audioPath;
+      if (typeof speech === "object") {
+        voiceProvider = speech.provider;
+        actualAudioPath = speech.path;
+      } else voiceProvider = speech;
+
+      const duration = Math.max(5, Math.min(18, await getMediaDuration(actualAudioPath)));
+      voiceFiles.push(actualAudioPath);
+      const frames = Math.max(120, Math.ceil(duration * 24));
       await run(ffmpegPath, [
-        "-y", "-hide_banner", "-loglevel", "error", "-loop", "1", "-framerate", "24", "-i", pngPath,
-        "-vf", "zoompan=z='min(zoom+0.00045,1.13)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=288:s=720x1280:fps=24,format=yuv420p",
-        "-frames:v", "288", "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "27", segmentPath
+        "-y", "-hide_banner", "-loglevel", "error", "-loop", "1", "-framerate", "24", "-i", artPath,
+        "-i", actualAudioPath,
+        "-vf", "zoompan=z='min(zoom+0.00035,1.10)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=" + frames + ":s=720x1280:fps=24,format=yuv420p",
+        "-t", String(duration), "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24",
+        "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart", clipPath
       ]);
-      segmentPaths.push(segmentPath);
+      clips.push(clipPath);
     }
-    const listPath = path.join(workDir, "concat.txt");
-    await fs.promises.writeFile(listPath, segmentPaths.map(file => "file '" + file.replace(/'/g, "'\\''") + "'").join("\n"));
-    await run(ffmpegPath, ["-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", "-movflags", "+faststart", outputPath]);
+
+    const concatPath = path.join(workDir, "clips.txt");
+    await fs.promises.writeFile(concatPath, clips.map(file => "file '" + file.replace(/'/g, "'\\''") + "'").join("\n"));
+    await run(ffmpegPath, [
+      "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", concatPath,
+      "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24", "-c:a", "aac", "-b:a", "128k",
+      "-movflags", "+faststart", outputPath
+    ]);
+
+    const totalDuration = await getMediaDuration(outputPath);
+    const description = cleanText(storyboard.description || "", 1000) +
+      "\n\nImage credits (Wikimedia Commons):\n" +
+      credits.map((item, i) => (i + 1) + ". " + item.source + (item.artist ? " — " + item.artist : "") + (item.license ? " (" + item.license + ")" : "") + (item.license_url ? " " + item.license_url : "")).join("\n");
     return {
       title: cleanText(storyboard.title || topic, 100),
-      description: cleanText(storyboard.description || "", 1200),
-      duration_seconds: 60,
+      description,
+      tags: Array.isArray(storyboard.tags) ? storyboard.tags.map(String).slice(0, 15) : [],
+      hashtags: Array.isArray(storyboard.hashtags) ? storyboard.hashtags.map(String).slice(0, 5) : [],
+      duration_seconds: Math.round(totalDuration),
       scenes: storyboard.scenes.length,
       format: "720x1280 vertical MP4",
-      captions: "Burned into the video"
+      captions: "Burned into the video",
+      narration: "Included",
+      voice_provider: voiceProvider,
+      visuals: "Five topic-matched Wikimedia Commons photographs with cinematic pan and zoom",
+      image_credits: credits
     };
   } finally {
     await fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => {});

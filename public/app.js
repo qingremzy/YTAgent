@@ -61,7 +61,7 @@ analyzeButton.addEventListener("click", async () => {
   } catch (error) { analysisStatus.textContent = error.message; }
   finally { analyzeButton.disabled = false; analyzeButton.textContent = "✦ Analyse video & generate everything"; }
 });
-remove SRT download handlerform.addEventListener("submit", async event => {
+form.addEventListener("submit", async event => {
   event.preventDefault();
   if (!form.video.files.length) return;
   submit.disabled = true;

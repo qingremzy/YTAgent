@@ -24,26 +24,9 @@
         <label>Video title<input name="title" maxlength="100" placeholder="AI-generated title appears here" required></label>
         <label>YouTube description<textarea name="description" rows="4" maxlength="5000" placeholder="AI-generated, video-specific description"></textarea></label>
         <label>Tags <small>Comma-separated, based on the video</small><input name="tags" placeholder="Relevant tags"></label>
-        <label>Hashtags <small>Relevant hashtags to append to the YouTube description</small><input name="hashtags" placeholder="#Wildlife #Nature"></label>
-        <h3>Platform-specific social posts</h3>
-        <p class="muted">Each platform gets its own caption and hashtags. You can generate these without connecting your accounts.</p>
-        <label class="social-label"><span class="social-brand tiktok" aria-label="TikTok logo">♪</span>TikTok caption<textarea id="tiktokCaption" rows="3" placeholder="TikTok-ready hook, caption and hashtags"></textarea></label>
-        <label class="social-label"><span class="social-brand instagram" aria-label="Instagram logo">◎</span>Instagram caption<textarea id="instagramCaption" rows="3" placeholder="Instagram Reel caption and hashtags"></textarea></label>
-        <label class="social-label"><span class="social-brand facebook" aria-label="Facebook logo">f</span>Facebook post<textarea id="facebookCaption" rows="3" placeholder="Facebook post that invites discussion"></textarea></label>
-        <label class="social-label"><span class="social-brand youtube" aria-label="YouTube logo">▶</span>YouTube Community post<textarea id="youtubeCommunityPost" rows="3" placeholder="Community post for your subscribers"></textarea></label>
-        <div class="custom-platforms">
-          <h3>Add another social platform</h3>
-          <p class="muted">Type any platform name, then add its caption box.</p>
-          <div class="add-platform-row">
-            <input id="newPlatformName" maxlength="40" placeholder="e.g. Threads, Snapchat, Pinterest">
-            <button class="button secondary" id="addPlatform" type="button">＋ Add</button>
-          </div>
-          <div id="customPlatformList"></div>
-        </div>
-        <div class="subtitle-tools">
-          <div><strong>Subtitles (SRT)</strong><small id="subtitleStatus">Generated from intelligible speech when available.</small></div>
-          <button class="button secondary hidden" id="downloadSrt" type="button">Download .srt</button>
-        </div>
+        <label>Keywords <small>Search phrases viewers may use to find this video</small><input name="keywords" placeholder="AI-generated search keywords"></label>
+        <label>Hashtags <small>Relevant hashtags appended to the YouTube description</small><input name="hashtags" placeholder="#Science #Education"></label>
+        <p id="aiProviders" class="muted">AI analysis engine: Google Gemini. Add optional AI provider keys in Railway to enable independent second opinions.</p>
         <label>Visibility<select name="privacy"><option value="public" selected>Public</option><option value="unlisted">Unlisted</option><option value="private">Private</option></select></label>
         <button class="button primary" id="submit" type="submit">Publish to YouTube</button>
       </form>

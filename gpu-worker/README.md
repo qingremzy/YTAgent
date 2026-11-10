@@ -50,7 +50,7 @@ tunnel = subprocess.Popen(
     text=True
 )
 for line in iter(tunnel.stdout.readline, ""):
-    match = re.search(r"https://[a-z0-9-]+\\.trycloudflare\\.com", line)
+    match = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", line)
     if match:
         print("Set this in Railway as VIDEO_WORKER_URL:", match.group(0))
         break

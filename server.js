@@ -238,11 +238,11 @@ async function analyzeWithGemini(file) {
   "category_id": "best-fit YouTube category ID as a string, or empty if uncertain"
 }
 Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords must be natural search queries, not random broad words. Keep the title truthful, specific, clickable, and under 100 characters. `;
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
     const generationUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent";
     const generationBody = JSON.stringify({
       contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType || mimeType, file_uri: geminiFile.uri } }, { text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json", temperature: 0.35 }
+      generationConfig: { responseMimeType: "application/json" }
     });
     const maxRetries = 5;
     let generated;

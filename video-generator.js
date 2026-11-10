@@ -73,25 +73,82 @@ function sceneSvg(scene, index, total) {
   </svg>`;
 }
 
+async function requestStoryboard(prompt) {
+  let geminiFailure = null;
+
+  if (process.env.GEMINI_API_KEY) {
+    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+    try {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
+        method: "POST",
+        headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.65 } })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        const raw = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
+        if (raw) return JSON.parse(raw.replace(/^\u0060\u0060\u0060(?:json)?\s*/i, "").replace(/\s*\u0060\u0060\u0060$/, ""));
+        throw new Error("Gemini returned an empty storyboard.");
+      }
+      geminiFailure = "Gemini HTTP " + response.status + (data.error?.message ? ": " + String(data.error.message).slice(0, 240) : "");
+    } catch (error) {
+      geminiFailure = error.message || "Gemini request failed.";
+    }
+  } else {
+    geminiFailure = "Gemini API key is not configured.";
+  }
+
+  if (process.env.GROQ_API_KEY) {
+    const model = process.env.GROQ_SCRIPT_MODEL || "openai/gpt-oss-20b";
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: "You create accurate educational science video storyboards. Return valid JSON only, with no markdown." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.65,
+        max_completion_tokens: 1800,
+        response_format: { type: "json_object" }
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = data.error?.message ? String(data.error.message).slice(0, 220) : "HTTP " + response.status;
+      throw new Error("Gemini was unavailable (" + geminiFailure + ") and Groq fallback failed (" + detail + "). Check the API quota/key in Railway Variables.");
+    }
+    const raw = data.choices?.[0]?.message?.content;
+    if (!raw) throw new Error("Gemini was unavailable and Groq returned an empty storyboard.");
+    try {
+      return JSON.parse(raw.replace(/^\u0060\u0060\u0060(?:json)?\s*/i, "").replace(/\s*\u0060\u0060\u0060$/, ""));
+    } catch {
+      throw new Error("The AI provider returned invalid storyboard JSON. Please try again.");
+    }
+  }
+
+  if (geminiFailure.includes("429")) {
+    throw new Error("Gemini's free API quota/rate limit has been reached, and GROQ_API_KEY is missing. Add or check GROQ_API_KEY in Railway Variables, then redeploy.");
+  }
+  throw new Error("AI script generation failed: " + geminiFailure + (process.env.GROQ_API_KEY ? " Groq fallback could not be used." : " Add GROQ_API_KEY in Railway Variables for fallback."));
+}
+
 async function generateEducationalVideo(topic, outputPath) {
-  if (!process.env.GEMINI_API_KEY) throw new Error("Add GEMINI_API_KEY in Railway Variables before generating videos.");
+  if (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) {
+    throw new Error("Add GEMINI_API_KEY or GROQ_API_KEY in Railway Variables before generating videos.");
+  }
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable on this server.");
   const prompt = `Create an original, accurate, 60-second educational science/what-if YouTube Shorts storyboard about: "${cleanText(topic, 180)}".
 Return JSON only: {"title":"short hook","description":"one-paragraph factual summary","scenes":[{"title":"short on-screen heading","caption":"subtitle/caption text, 12-22 words","visual":"short visual direction"}]}.
 Exactly 5 scenes. Each caption should be clear, factual, concise and readable. Build a strong hook, explain the sequence, and finish with a memorable takeaway. Do not invent scientific facts. No logos, no copyrighted characters, no fake quotations. Each scene represents about 12 seconds. The video will be rendered as animated motion-graphic scenes with burned-in captions, not photorealistic footage.`;
-  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
-    method: "POST",
-    headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.65 } })
-  });
-  if (!response.ok) throw new Error("AI script generation failed (HTTP " + response.status + ").");
-  const data = await response.json();
-  const raw = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
-  if (!raw) throw new Error("AI did not return a video storyboard.");
   let storyboard;
-  try { storyboard = JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")); }
-  catch { throw new Error("AI returned an invalid storyboard. Please try another topic."); }
+  try {
+    storyboard = await requestStoryboard(prompt);
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new Error("AI returned invalid storyboard JSON. Please try again.");
+    throw error;
+  }
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 5) throw new Error("AI storyboard must contain exactly five scenes.");
 
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-render-"));
@@ -124,5 +181,4 @@ Exactly 5 scenes. Each caption should be clear, factual, concise and readable. B
     await fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
-
 module.exports = { generateEducationalVideo };

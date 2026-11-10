@@ -47,7 +47,39 @@ videoInput.addEventListener("change", event => {
 });
 disconnectButton.addEventListener("click", async () => {
   await fetch("/auth/logout", { method: "POST" });
-  refreshStatus();
+  const generatorForm = document.getElementById("generatorForm");
+const generateButton = document.getElementById("generateVideo");
+const generatorStatus = document.getElementById("generatorStatus");
+const generatedDownload = document.getElementById("generatedDownload");
+
+generatorForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const topic = document.getElementById("videoTopic").value.trim();
+  if (!topic) return;
+  generateButton.disabled = true;
+  generateButton.textContent = "Generating video… keep this page open";
+  generatorStatus.textContent = "Creating the script, scenes and burned-in captions, then rendering your video. This can take a few minutes.";
+  generatedDownload.classList.add("hidden");
+  try {
+    const response = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic })
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "Video generation failed.");
+    generatedDownload.href = data.downloadUrl;
+    generatedDownload.classList.remove("hidden");
+    generatorStatus.textContent = "Your " + data.duration_seconds + "-second video is ready (" + data.format + "). Captions are burned into the video. Download it, then choose it in the publishing section below.";
+  } catch (error) {
+    generatorStatus.textContent = error.message;
+  } finally {
+    generateButton.disabled = false;
+    generateButton.textContent = "✦ Generate 60-second video";
+  }
+});
+
+refreshStatus();
 });
 analyzeButton.addEventListener("click", async () => {
   if (!videoInput.files.length) { analysisStatus.textContent = "Choose a video first."; return; }

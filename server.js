@@ -106,7 +106,12 @@ async function analyzeWithGemini(file) {
   "description": "Accurate, engaging YouTube description, no invented facts",
   "tags": ["up to 15 accurate YouTube tags, each short"],
   "hashtags": ["3 to 5 relevant hashtags including #"],
-  "social_caption": "A separate engaging social-media caption that accurately describes this video",
+  "platform_posts": {
+    "tiktok": "A TikTok-native caption with a strong opening hook and relevant hashtags",
+    "instagram": "An Instagram Reel caption with a compelling first line and relevant hashtags",
+    "facebook": "A natural Facebook post that encourages genuine discussion without clickbait",
+    "youtube_community": "A YouTube Community post that invites viewers to engage with this video"
+  },
   "language": "main spoken language, or 'none' if no clear speech",
   "subtitles_srt": "SRT subtitles with timestamps if intelligible speech exists, otherwise empty string"
 }
@@ -158,7 +163,12 @@ For subtitles, transcribe only words that are actually audible. Use approximate 
       description: String(parsed.description || "").slice(0, 5000),
       tags: Array.isArray(parsed.tags) ? parsed.tags.map(String).slice(0, 15) : [],
       hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.map(String).slice(0, 8) : [],
-      social_caption: String(parsed.social_caption || ""),
+      platform_posts: {
+        tiktok: String(parsed.platform_posts?.tiktok || ""),
+        instagram: String(parsed.platform_posts?.instagram || ""),
+        facebook: String(parsed.platform_posts?.facebook || ""),
+        youtube_community: String(parsed.platform_posts?.youtube_community || "")
+      },
       language: String(parsed.language || "unknown"),
       subtitles_srt: String(parsed.subtitles_srt || "")
     };

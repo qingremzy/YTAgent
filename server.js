@@ -614,6 +614,33 @@ app.post("/api/upload", requireAuth, videoUpload.single("video"), async (req, re
   }
 });
 
+const { generateEducationalVideo } = require("./video-generator");
+
+app.post("/api/generate", async (req, res) => {
+  const topic = String(req.body?.topic || "").trim();
+  if (topic.length < 8) return res.status(400).json({ error: "Enter a video topic with at least 8 characters." });
+  if (topic.length > 180) return res.status(400).json({ error: "Keep the topic under 180 characters." });
+  const id = require("crypto").randomBytes(12).toString("hex");
+  const filename = "generated-" + id + ".mp4";
+  const outputPath = path.join(uploadDir, filename);
+  try {
+    const details = await generateEducationalVideo(topic, outputPath);
+    res.json({ success: true, ...details, downloadUrl: "/api/generated/" + filename });
+  } catch (error) {
+    await fs.promises.unlink(outputPath).catch(() => {});
+    console.error("AI video generation failed:", error.message);
+    res.status(502).json({ error: error.message || "Video generation failed. Please try again." });
+  }
+});
+
+app.get("/api/generated/:filename", (req, res) => {
+  const filename = String(req.params.filename || "");
+  if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename)) return res.status(404).send("Video not found.");
+  const filePath = path.join(uploadDir, filename);
+  if (!fs.existsSync(filePath)) return res.status(404).send("This generated video has expired or is no longer available.");
+  res.download(filePath, "YTAgent-video.mp4");
+});
+
 app.post("/auth/logout", (req, res) => req.session.destroy(() => res.json({ success: true })));
 app.get("/health", (_req, res) => res.json({ ok: true, app: "YTAgent" }));
 app.use((err, _req, res, _next) => {

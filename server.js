@@ -83,6 +83,26 @@ async function reviewWithOpenAI(evidence, draft) {
   return output ? extractJson(output) : null;
 }
 
+async function reviewWithClaude(evidence, draft) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+  const model = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1400,
+      system: "You are an independent YouTube metadata editor. You did not see the video. Use only the supplied video evidence. Never invent facts, people, dialogue, scenes, or claims. Improve title, description, tags, hashtags and search keywords for accuracy and discoverability. Return JSON only with title, description, tags, hashtags, keywords.",
+      messages: [{ role: "user", content: JSON.stringify({ video_evidence: evidence, draft_metadata: draft }) }]
+    })
+  });
+  if (!response.ok) throw new Error("Claude review failed: HTTP " + response.status);
+  const data = await response.json();
+  const output = data.content?.filter(item => item.type === "text").map(item => item.text).join("\\n");
+  return output ? extractJson(output) : null;
+}
+
 async function analyzeWithGemini(file) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("AI video analysis is not configured yet. Add GEMINI_API_KEY in Railway Variables.");
@@ -191,23 +211,33 @@ Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords
       category_id: String(parsed.category_id || "")
     };
     const providers = ["Google Gemini"];
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        const reviewed = await reviewWithOpenAI(result.evidence_summary, result);
-        if (reviewed) {
-          result = {
-            ...result,
-            title: String(reviewed.title || result.title).slice(0, 100),
-            description: String(reviewed.description || result.description).slice(0, 5000),
-            tags: Array.isArray(reviewed.tags) && reviewed.tags.length ? reviewed.tags.map(String).slice(0, 15) : result.tags,
-            hashtags: Array.isArray(reviewed.hashtags) && reviewed.hashtags.length ? reviewed.hashtags.map(String).slice(0, 5) : result.hashtags,
-            keywords: Array.isArray(reviewed.keywords) && reviewed.keywords.length ? reviewed.keywords.map(String).slice(0, 12) : result.keywords
-          };
-          providers.push("OpenAI");
-        }
-      } catch (reviewError) {
-        console.warn("OpenAI second-opinion skipped:", reviewError.message);
+    const reviewers = [];
+    const reviewTasks = [];
+    if (process.env.OPENAI_API_KEY) reviewTasks.push(reviewWithOpenAI(result.evidence_summary, result).then(value => ({ name: "OpenAI", value })));
+    if (process.env.ANTHROPIC_API_KEY) reviewTasks.push(reviewWithClaude(result.evidence_summary, result).then(value => ({ name: "Claude", value })));
+    const reviews = await Promise.allSettled(reviewTasks);
+    for (const review of reviews) {
+      if (review.status !== "fulfilled" || !review.value.value) {
+        if (review.status === "rejected") console.warn("Optional AI review skipped:", review.reason?.message || "Unknown error");
+        continue;
       }
+      reviewers.push(review.value);
+      providers.push(review.value.name);
+    }
+    if (reviewers.length) {
+      const candidates = reviewers.map(item => item.value);
+      const choose = key => {
+        const values = candidates.map(item => item[key]).filter(value => Array.isArray(value) ? value.length : typeof value === "string" && value.trim());
+        return values.length ? values[0] : result[key];
+      };
+      result = {
+        ...result,
+        title: String(choose("title") || result.title).slice(0, 100),
+        description: String(choose("description") || result.description).slice(0, 5000),
+        tags: Array.isArray(choose("tags")) ? choose("tags").map(String).slice(0, 15) : result.tags,
+        hashtags: Array.isArray(choose("hashtags")) ? choose("hashtags").map(String).slice(0, 5) : result.hashtags,
+        keywords: Array.isArray(choose("keywords")) ? choose("keywords").map(String).slice(0, 12) : result.keywords
+      };
     }
     result.ai_providers = providers;
     return result;

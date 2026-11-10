@@ -11,14 +11,12 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function readJsonResponse(response) {
   const raw = await response.text();
-  try {
-    return raw ? JSON.parse(raw) : {};
-  } catch {
+  try { return raw ? JSON.parse(raw) : {}; }
+  catch {
     const preview = raw.trim().slice(0, 180);
     throw new Error("Server returned an invalid response (HTTP " + response.status + "). " + (preview || "Please try again."));
   }
 }
-
 async function waitForAnalysis(jobId) {
   for (;;) {
     const response = await fetch("/api/analyze/" + encodeURIComponent(jobId));
@@ -30,7 +28,6 @@ async function waitForAnalysis(jobId) {
     await wait(1500);
   }
 }
-
 async function refreshStatus() {
   try {
     const response = await fetch("/api/status");
@@ -43,43 +40,10 @@ async function refreshStatus() {
 videoInput.addEventListener("change", event => {
   document.getElementById("fileLabel").textContent = event.target.files[0]?.name || "Choose video from your device";
   analysisStatus.textContent = "";
-
 });
 disconnectButton.addEventListener("click", async () => {
   await fetch("/auth/logout", { method: "POST" });
-  const generatorForm = document.getElementById("generatorForm");
-const generateButton = document.getElementById("generateVideo");
-const generatorStatus = document.getElementById("generatorStatus");
-const generatedDownload = document.getElementById("generatedDownload");
-
-generatorForm.addEventListener("submit", async event => {
-  event.preventDefault();
-  const topic = document.getElementById("videoTopic").value.trim();
-  if (!topic) return;
-  generateButton.disabled = true;
-  generateButton.textContent = "Generating video… keep this page open";
-  generatorStatus.textContent = "Creating the script, scenes and burned-in captions, then rendering your video. This can take a few minutes.";
-  generatedDownload.classList.add("hidden");
-  try {
-    const response = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic })
-    });
-    const data = await readJsonResponse(response);
-    if (!response.ok) throw new Error(data.error || "Video generation failed.");
-    generatedDownload.href = data.downloadUrl;
-    generatedDownload.classList.remove("hidden");
-    generatorStatus.textContent = "Your " + data.duration_seconds + "-second video is ready (" + data.format + "). Captions are burned into the video. Download it, then choose it in the publishing section below.";
-  } catch (error) {
-    generatorStatus.textContent = error.message;
-  } finally {
-    generateButton.disabled = false;
-    generateButton.textContent = "✦ Generate 60-second video";
-  }
-});
-
-refreshStatus();
+  refreshStatus();
 });
 analyzeButton.addEventListener("click", async () => {
   if (!videoInput.files.length) { analysisStatus.textContent = "Choose a video first."; return; }
@@ -90,7 +54,7 @@ analyzeButton.addEventListener("click", async () => {
   data.append("video", videoInput.files[0]);
   try {
     const response = await fetch("/api/analyze", { method: "POST", body: data });
-    let payload = await readJsonResponse(response);
+    const payload = await readJsonResponse(response);
     if (!response.ok) throw new Error(payload.error || "Video analysis failed.");
     const a = payload.queued ? await waitForAnalysis(payload.jobId) : payload.analysis;
     form.elements.title.value = a.title || "";
@@ -112,7 +76,7 @@ form.addEventListener("submit", async event => {
   result.textContent = "Uploading your video to YouTube. Please keep this page open.";
   try {
     const response = await fetch("/api/upload", { method: "POST", body: new FormData(form) });
-    const data = await response.json();
+    const data = await readJsonResponse(response);
     if (!response.ok) throw new Error(data.error || "Upload failed.");
     result.innerHTML = 'Published successfully! <a target="_blank" rel="noopener" href="' + data.url + '">Open your YouTube video</a>';
     form.reset();
@@ -129,5 +93,35 @@ document.getElementById("runCommand").addEventListener("click", () => {
     videoInput.click();
     reply.textContent = "Choose your video, analyse it, review the generated details, then publish.";
   } else reply.textContent = 'Try: "analyse and publish my video".';
+});
+
+const generatorForm = document.getElementById("generatorForm");
+const generateButton = document.getElementById("generateVideo");
+const generatorStatus = document.getElementById("generatorStatus");
+const generatedDownload = document.getElementById("generatedDownload");
+generatorForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const topic = document.getElementById("videoTopic").value.trim();
+  if (!topic) return;
+  generateButton.disabled = true;
+  generateButton.textContent = "Generating video… keep this page open";
+  generatorStatus.textContent = "Creating the script, scenes and burned-in captions, then rendering your video. This can take a few minutes.";
+  generatedDownload.classList.add("hidden");
+  try {
+    const response = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic })
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "Video generation failed.");
+    generatedDownload.href = data.downloadUrl;
+    generatedDownload.classList.remove("hidden");
+    generatorStatus.textContent = "Your " + data.duration_seconds + "-second video is ready (" + data.format + "). Captions are burned into the video. Download it, then choose it in the publishing section below.";
+  } catch (error) { generatorStatus.textContent = error.message; }
+  finally {
+    generateButton.disabled = false;
+    generateButton.textContent = "✦ Generate 60-second video";
+  }
 });
 refreshStatus();

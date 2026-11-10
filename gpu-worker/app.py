@@ -65,8 +65,10 @@ def run_job(job_id, prompts, seed):
     global ACTIVE_JOB
     work = ROOT / job_id
     work.mkdir(parents=True, exist_ok=True)
+    lock_acquired = False
     try:
-        if not GPU_LOCK.acquire(blocking=False):
+        lock_acquired = GPU_LOCK.acquire(blocking=False)
+        if not lock_acquired:
             raise RuntimeError("The GPU worker is busy with another generation.")
         ACTIVE_JOB = job_id
         JOBS[job_id]["status"] = "loading"
@@ -108,7 +110,7 @@ def run_job(job_id, prompts, seed):
     except Exception as exc:
         JOBS[job_id].update({"status": "failed", "message": str(exc)[:700]})
     finally:
-        if GPU_LOCK.locked():
+        if lock_acquired:
             GPU_LOCK.release()
         ACTIVE_JOB = None
 
@@ -118,10 +120,12 @@ def health():
 
 @app.post("/generate")
 def generate(body: GenerateRequest, background: BackgroundTasks, authorization: str = Header(default="")):
+    global ACTIVE_JOB
     authorize(authorization)
     if ACTIVE_JOB is not None:
         raise HTTPException(status_code=409, detail="GPU worker is busy. Wait for the current job to finish.")
     job_id = uuid.uuid4().hex
+    ACTIVE_JOB = job_id
     JOBS[job_id] = {"status": "queued", "progress": 0, "message": "Generation queued."}
     background.add_task(run_job, job_id, [scene.prompt for scene in body.scenes], body.seed)
     return {"job_id": job_id, "status": "queued"}

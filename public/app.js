@@ -105,7 +105,7 @@ generatorForm.addEventListener("submit", async event => {
   if (!topic) return;
   generateButton.disabled = true;
   generateButton.textContent = "Generating video… keep this page open";
-  generatorStatus.textContent = "Writing the narration, finding real science images, generating the voice and rendering your video. This can take a few minutes.";
+  generatorStatus.textContent = "AI director is planning ten scenes. The free GPU is generating real moving 3D video clips, then YTAgent adds narration, captions and sound. This can take a long time.";
   generatedDownload.classList.add("hidden");
   try {
     const response = await fetch("/api/generate", {
@@ -122,7 +122,7 @@ generatorForm.addEventListener("submit", async event => {
     form.elements.tags.value = (data.tags || []).join(", ");
     form.elements.hashtags.value = (data.hashtags || []).join(" ");
     form.elements.keywords.value = (data.keywords || []).join(", ");
-    generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated video is ready. Voice: " + (data.voice_provider || "AI voice") + ". Real images, motion, captions and image credits are included. Download it, then select it in the publishing section below.";
+    generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated video is ready. Voice: " + (data.voice_provider || "AI voice") + ". Ten AI-generated moving 3D scenes, narration and captions are included. Download it, then select it in the publishing section below.";
   } catch (error) { generatorStatus.textContent = error.message; }
   finally {
     generateButton.disabled = false;

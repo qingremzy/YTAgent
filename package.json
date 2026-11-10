@@ -22,6 +22,7 @@
     "ioredis": "^5.4.2",
     "ffmpeg-static": "^5.2.0",
     "sharp": "^0.33.5",
-    "node-edge-tts": "^1.2.12"
+    "node-edge-tts": "^1.2.12",
+    "adm-zip": "^0.5.16"
   }
 }

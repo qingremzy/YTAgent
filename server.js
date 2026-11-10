@@ -635,7 +635,7 @@ app.post("/api/generate", async (req, res) => {
 
 app.get("/api/generated/:filename", (req, res) => {
   const filename = String(req.params.filename || "");
-  if (!/^generated-[a-f0-9]{24}\\.mp4$/.test(filename)) return res.status(404).send("Video not found.");
+  if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename)) return res.status(404).send("Video not found.");
   const filePath = path.join(uploadDir, filename);
   if (!fs.existsSync(filePath)) return res.status(404).send("This generated video has expired or is no longer available.");
   res.download(filePath, "YTAgent-video.mp4");

@@ -10,6 +10,63 @@ const videoInput = document.getElementById("video");
 const downloadSrt = document.getElementById("downloadSrt");
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+const customPlatformList = document.getElementById("customPlatformList");
+const platformNameInput = document.getElementById("newPlatformName");
+const customPlatformsKey = "ytagent-custom-platforms-v1";
+let customPlatforms = [];
+try { customPlatforms = JSON.parse(localStorage.getItem(customPlatformsKey) || "[]"); } catch {}
+
+function platformId(name) {
+  return "custom-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+function saveCustomPlatforms() {
+  localStorage.setItem(customPlatformsKey, JSON.stringify(customPlatforms));
+}
+function renderCustomPlatforms() {
+  customPlatformList.replaceChildren();
+  customPlatforms.forEach(name => {
+    const id = platformId(name);
+    const label = document.createElement("label");
+    label.className = "custom-platform-label";
+    const heading = document.createElement("span");
+    heading.textContent = name + " caption";
+    const textarea = document.createElement("textarea");
+    textarea.id = id;
+    textarea.rows = 3;
+    textarea.placeholder = "Write your " + name + " post here";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "button secondary remove-platform";
+    remove.textContent = "Remove " + name;
+    remove.addEventListener("click", () => {
+      customPlatforms = customPlatforms.filter(item => item !== name);
+      saveCustomPlatforms();
+      renderCustomPlatforms();
+    });
+    label.append(heading, textarea, remove);
+    customPlatformList.append(label);
+  });
+}
+document.getElementById("addPlatform").addEventListener("click", () => {
+  const name = platformNameInput.value.trim().replace(/\s+/g, " ");
+  if (!name) { platformNameInput.focus(); return; }
+  if (customPlatforms.some(item => item.toLowerCase() === name.toLowerCase())) {
+    platformNameInput.value = "";
+    return;
+  }
+  customPlatforms.push(name);
+  saveCustomPlatforms();
+  renderCustomPlatforms();
+  platformNameInput.value = "";
+});
+platformNameInput.addEventListener("keydown", event => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    document.getElementById("addPlatform").click();
+  }
+});
+renderCustomPlatforms();
+
 async function waitForAnalysis(jobId) {
   for (;;) {
     const response = await fetch("/api/analyze/" + encodeURIComponent(jobId));

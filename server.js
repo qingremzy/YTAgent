@@ -55,7 +55,7 @@ function requireAuth(req, res, next) {
 }
 
 function extractJson(text) {
-  const cleaned = String(text || "").trim().replace(/^```(?:json)?s*/i, "").replace(/s*```$/, "");
+  const cleaned = String(text || "").trim().replace(/^```(?:json)?\\s*/i, "").replace(/\\s*```$/, "");
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
   if (start < 0 || end <= start) throw new Error("AI returned an invalid analysis format.");

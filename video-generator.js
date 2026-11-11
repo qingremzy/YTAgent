@@ -178,10 +178,24 @@ function isGroqTtsEnabled(env = process.env) {
   return Boolean(env.GROQ_API_KEY && env.GROQ_TTS_ENABLED === "true");
 }
 
-async function generateNarration(text, outputPath) {
+function isRateLimitError(error) {
+  return /\b429\b|too many requests|rate.?limit/i.test(String(error && error.message || error || ""));
+}
+
+function edgeTtsRetryDelayMs(attempt) {
+  return Math.min(8000, 2000 * Math.pow(2, Math.max(0, attempt)));
+}
+
+function shouldAttemptGroqTts(voiceState = {}, env = process.env) {
+  return isGroqTtsEnabled(env) && voiceState.groqRateLimited !== true;
+}
+
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function generateNarration(text, outputPath, voiceState = {}) {
   const narration = cleanText(text, 220);
   if (!narration) throw new Error("One scene is missing its narration.");
-  if (isGroqTtsEnabled()) {
+  if (shouldAttemptGroqTts(voiceState)) {
     try {
       const response = await fetch("https://api.groq.com/openai/v1/audio/speech", {
         method: "POST",
@@ -204,25 +218,33 @@ async function generateNarration(text, outputPath) {
       } else {
         const detail = await response.text().catch(() => "");
         console.warn("Groq voice generation failed:", response.status, detail.slice(0, 220));
+        if (response.status === 429) voiceState.groqRateLimited = true;
       }
     } catch (error) {
       console.warn("Groq voice generation request failed. Trying the free voice fallback:", error.message || error);
     }
   }
-  try {
-    const { EdgeTTS } = require("node-edge-tts");
-    const tts = new EdgeTTS({
-      voice: process.env.EDGE_TTS_VOICE || "en-US-AriaNeural",
-      lang: "en-US",
-      outputFormat: "audio-24khz-96kbitrate-mono-mp3",
-      timeout: 30000
-    });
-    const mp3Path = outputPath.replace(/\.wav$/i, ".mp3");
-    await tts.ttsPromise(narration, mp3Path);
-    return { provider: "Microsoft Edge TTS", path: mp3Path };
-  } catch (error) {
-    throw new Error("Voice generation failed. Groq TTS and the free voice fallback were unavailable: " + (error.message || "unknown error"));
+  const { EdgeTTS } = require("node-edge-tts");
+  const mp3Path = outputPath.replace(/\\.wav$/i, ".mp3");
+  let edgeError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (attempt > 0) await wait(edgeTtsRetryDelayMs(attempt - 1));
+      const tts = new EdgeTTS({
+        voice: process.env.EDGE_TTS_VOICE || "en-US-AriaNeural",
+        lang: "en-US",
+        outputFormat: "audio-24khz-96kbitrate-mono-mp3",
+        timeout: 30000
+      });
+      await tts.ttsPromise(narration, mp3Path);
+      return { provider: "Microsoft Edge TTS", path: mp3Path };
+    } catch (error) {
+      edgeError = error;
+      if (!isRateLimitError(error) || attempt === 2) break;
+      console.warn("Microsoft Edge TTS is rate-limiting requests. Retrying after a short delay.");
+    }
   }
+  throw new Error("Voice generation failed. Groq TTS may be rate-limited and Microsoft Edge TTS could not recover after retries: " + (edgeError && edgeError.message || "unknown error"));
 }
 
 function sceneArtwork(scene, index, total) {
@@ -281,10 +303,11 @@ async function generateEducationalVideo(topic, outputPath) {
     const visualResult = await requestGeneratedScenes(storyboard.scenes, topic, workDir);
     const generatedClips = visualResult.clips;
     const voiceProviders = new Set();
+    const voiceState = {};
     const sceneAssets = [];
     for (let i = 0; i < storyboard.scenes.length; i++) {
       const audioPath = path.join(workDir, "narration-" + String(i + 1).padStart(2, "0") + ".wav");
-      const speech = await generateNarration(storyboard.scenes[i].narration, audioPath);
+      const speech = await generateNarration(storyboard.scenes[i].narration, audioPath, voiceState);
       voiceProviders.add(speech.provider);
       // Measure the actual generated speech before rendering so six-second scenes never silently chop words.
       const speechDuration = await getMediaDuration(speech.path);
@@ -324,4 +347,4 @@ async function generateEducationalVideo(topic, outputPath) {
     await fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
-module.exports = { generateEducationalVideo, isGroqTtsEnabled, validateStoryboard, countNarrationWords };
+module.exports = { generateEducationalVideo, isGroqTtsEnabled, shouldAttemptGroqTts, isRateLimitError, edgeTtsRetryDelayMs, validateStoryboard, countNarrationWords };

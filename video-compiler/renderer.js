@@ -122,8 +122,9 @@ async function renderFilm(input) {
       await makeOverlay(blueprint.scenes[i], i, 10, overlayPath);
       args.push("-loop", "1", "-framerate", "30", "-i", overlayPath);
       const v = "v" + i, a = "a" + i;
-      filters.push("[" + videoIndex + ":v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1,trim=duration=6,setpts=PTS-STARTPTS[base" + i + "]");
-      filters.push("[base" + i + "][" + overlayIndex + ":v]overlay=0:0:shortest=1,format=yuv420p[" + v + "]");
+      filters.push("[" + videoIndex + ":v]scale=540:960:force_original_aspect_ratio=increase,crop=540:960,fps=24,setsar=1,trim=duration=6,setpts=PTS-STARTPTS[base" + i + "]");
+      filters.push("[" + overlayIndex + ":v]scale=540:960[ov" + i + "]");
+      filters.push("[base" + i + "][ov" + i + "]overlay=0:0:shortest=1,format=yuv420p[" + v + "]");
       filters.push("[" + voiceIndex + ":a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=duration=6,asetpts=PTS-STARTPTS[" + a + "]");
       videoLabels.push("[" + v + "]");
       voiceLabels.push("[" + a + "]");

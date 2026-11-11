@@ -53,7 +53,7 @@ async function workerRequest(baseUrl, token, route, options = {}, timeoutMs = 60
   return response;
 }
 
-async function generateWanSceneClips(scenes, topic, workDir, onProgress) {
+async function generateWanSceneClips(scenes, topic, workDir, onProgress, onQueued) {
   const configuredUrl = process.env.VIDEO_WORKER_URL;
   const token = process.env.YT_AGENT_WORKER_TOKEN;
   if (!Array.isArray(scenes) || scenes.length !== 10) {
@@ -66,7 +66,7 @@ async function generateWanSceneClips(scenes, topic, workDir, onProgress) {
     const prompts = scenes.map((scene, index) => buildWanScenePrompt(scene, topic, index));
     const narrations = scenes.map(scene => clean(scene.narration, 220));
     const seed = crypto.randomInt(1, 2147483647);
-    return enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress });
+    return enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueued });
   }
   if (!configuredUrl || !token) {
     throw new Error("Wan GPU worker is not configured. Set VIDEO_WORKER_URL and YT_AGENT_WORKER_TOKEN while the free GPU notebook is running.");

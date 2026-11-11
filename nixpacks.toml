@@ -1,0 +1,5 @@
+[phases.setup]
+nixPkgs = ["fontconfig", "dejavu_fonts"]
+
+[variables]
+FONTCONFIG_FILE = "/etc/fonts/fonts.conf"

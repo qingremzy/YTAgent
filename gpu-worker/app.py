@@ -184,6 +184,8 @@ def run_job(job_id, prompts, seed, remote_job_id=None):
         if lock_acquired:
             GPU_LOCK.release()
         ACTIVE_JOB = None
+        if remote_job_id:
+            shutil.rmtree(work, ignore_errors=True)
 
 @app.get("/health")
 def health():

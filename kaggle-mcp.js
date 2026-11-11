@@ -82,7 +82,8 @@ async function listKaggleTools() {
   if (!Array.isArray(tools)) throw new Error("Kaggle connected, but returned no tool list.");
   return tools.map(tool => ({
     name: String(tool.name || ""),
-    description: String(tool.description || "").slice(0, 500)
+    description: String(tool.description || "").slice(0, 500),
+    inputSchema: tool.inputSchema && typeof tool.inputSchema === "object" ? tool.inputSchema : null
   })).filter(tool => tool.name);
 }
 

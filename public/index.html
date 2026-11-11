@@ -17,6 +17,19 @@
   </div>
   <main class="shell">
     <header><div class="brand"><span class="mark">▶</span><div><h1>YTAgent<span class="brand-dot">_</span></h1><p>Autonomous media intelligence // Qing Remzy</p></div></div><span class="badge"><i></i> SYSTEM ONLINE</span></header>
+
+    <section class="studio-stage" aria-label="Interactive 3D production studio">
+      <div class="studio-topline"><span><i class="live-dot"></i> VIRTUAL PRODUCTION FLOOR</span><span class="studio-version">REAL-TIME 3D · THREE.JS</span></div>
+      <div class="studio-viewport" id="studioViewport">
+        <canvas id="studioCanvas" aria-label="Interactive three-dimensional YTAgent studio"></canvas>
+        <div class="studio-vignette"></div>
+        <div class="studio-hud hud-left"><span class="hud-label" id="hudMode">DIRECTOR'S BAY</span><strong id="hudTitle">Your studio is ready.</strong><small id="hudDetail">A real-time 3D environment. Drag to explore.</small></div>
+        <div class="studio-hud hud-right"><span class="hud-label">ENGINE STATUS</span><strong><i class="live-dot"></i> STANDBY</strong><small>Awaiting your next production</small></div>
+        <div class="studio-crosshair" aria-hidden="true">✦</div>
+        <div class="studio-bottom"><div class="studio-tabs" role="group" aria-label="Studio views"><button class="studio-tab active" data-view="studio">Studio</button><button class="studio-tab" data-view="scenes">Scene plan</button><button class="studio-tab" data-view="system">System</button></div><button class="studio-enter" id="enterStudio">OPEN PRODUCTION <span>↗</span></button></div>
+      </div>
+      <div class="studio-footnote"><span>● INTERACTIVE ENVIRONMENT</span><span>DRAG TO ROTATE · PINCH TO ZOOM</span></div>
+    </section>
     <section class="card connect">
       <div><h2>YouTube connection</h2><p id="status">Checking connection…</p><small class="muted">Connect only when you are ready to publish. AI analysis works without connecting.</small></div>
       <a class="button" id="connect" href="/auth/google">Connect YouTube</a>
@@ -59,5 +72,6 @@
     <section class="card"><div class="eyebrow">03 // COMMAND INTERFACE</div><h2>Quick command</h2><p class="muted">Type a command to open the video workflow.</p><div class="command"><input id="command" placeholder="e.g. analyse and publish this video"><button class="button secondary" id="runCommand">Run</button></div><p id="commandReply" class="muted"></p></section>
     <footer>YTAgent // An independent creation system by Qing Remzy</footer>
   </main>
+  <script type="module" src="/studio.js"></script>
   <script src="/app.js"></script>
 </body></html>

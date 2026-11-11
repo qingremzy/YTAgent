@@ -12,6 +12,7 @@ const { google } = require("googleapis");
 const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const { createRateLimiter } = require("./middleware/rate-limit");
+const { listKaggleTools } = require("./kaggle-mcp");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -851,6 +852,27 @@ app.get("/api/generated/:filename", (req, res) => {
       res.status(500).send("The video download failed. Please try again before the temporary file expires.");
     }
   });
+});
+
+
+app.get("/api/kaggle/status", async (_req, res) => {
+  if (!process.env.KAGGLE_API_TOKEN) {
+    return res.status(503).json({ connected: false, error: "Kaggle API token is not configured." });
+  }
+  try {
+    const tools = await listKaggleTools();
+    const notebookTools = tools.filter(tool => /kernel|notebook/i.test(tool.name + " " + tool.description));
+    res.json({
+      connected: true,
+      provider: "Kaggle MCP",
+      notebookRef: process.env.KAGGLE_NOTEBOOK_REF || null,
+      toolCount: tools.length,
+      notebookTools
+    });
+  } catch (error) {
+    console.error("Kaggle connection check failed:", error.message);
+    res.status(502).json({ connected: false, error: error.message });
+  }
 });
 
 app.post("/auth/logout", (req, res) => req.session.destroy(() => res.json({ success: true })));

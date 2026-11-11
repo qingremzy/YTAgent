@@ -105,7 +105,7 @@ generatorForm.addEventListener("submit", async event => {
   if (!topic) return;
   generateButton.disabled = true;
   generateButton.textContent = "Generating video… keep this page open";
-  generatorStatus.textContent = "AI director is planning ten scenes. The free GPU is generating real moving 3D video clips, then YTAgent adds narration, captions and sound. This can take a long time.";
+  generatorStatus.textContent = "AI director is planning ten scenes. The hosted video engine is generating five cinematic clips. YTAgent will split and assemble them, then add the required narrator. This may take several minutes.";
   generatedDownload.classList.add("hidden");
   try {
     const response = await fetch("/api/generate", {

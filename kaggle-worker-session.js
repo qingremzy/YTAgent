@@ -62,7 +62,13 @@ function createKaggleWorkerSessionManager({
     // Kaggle's interactive-session API only opens a Jupyter session; it does not
     // execute the notebook cells. SaveAndRunAll actually launches the GPU worker.
     lastStartAt = now;
-    const operation = kaggleToolData(await callKaggleTool("save_notebook", request));
+    let operation;
+    try {
+      operation = kaggleToolData(await callKaggleTool("save_notebook", request));
+    } catch (error) {
+      lastStartAt = 0;
+      throw error;
+    }
     if (operation?.error) {
       lastStartAt = 0;
       throw new Error(String(operation.error));

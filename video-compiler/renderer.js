@@ -103,7 +103,7 @@ async function renderFilm(input) {
   await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
   const temp = await fs.promises.mkdtemp(path.join(path.dirname(outputPath), "ytagent-render-"));
   try {
-    const args = ["-y", "-hide_banner", "-loglevel", "warning"];
+    const args = ["-y", "-hide_banner", "-loglevel", "warning", "-threads", "1", "-filter_threads", "1", "-filter_complex_threads", "1", "-probesize", "1M", "-analyzeduration", "1M"];
     const filters = [], videoLabels = [], voiceLabels = [], sfxLabels = [];
     let inputIndex = 0;
     for (let i = 0; i < 10; i++) {
@@ -122,8 +122,9 @@ async function renderFilm(input) {
       await makeOverlay(blueprint.scenes[i], i, 10, overlayPath);
       args.push("-loop", "1", "-framerate", "30", "-i", overlayPath);
       const v = "v" + i, a = "a" + i;
-      filters.push("[" + videoIndex + ":v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1,trim=duration=6,setpts=PTS-STARTPTS[base" + i + "]");
-      filters.push("[base" + i + "][" + overlayIndex + ":v]overlay=0:0:shortest=1,format=yuv420p[" + v + "]");
+      filters.push("[" + videoIndex + ":v]scale=540:960:force_original_aspect_ratio=increase,crop=540:960,fps=24,setsar=1,trim=duration=6,setpts=PTS-STARTPTS[base" + i + "]");
+      filters.push("[" + overlayIndex + ":v]scale=540:960[ov" + i + "]");
+      filters.push("[base" + i + "][ov" + i + "]overlay=0:0:shortest=1,format=yuv420p[" + v + "]");
       filters.push("[" + voiceIndex + ":a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=duration=6,asetpts=PTS-STARTPTS[" + a + "]");
       videoLabels.push("[" + v + "]");
       voiceLabels.push("[" + a + "]");
@@ -149,12 +150,12 @@ async function renderFilm(input) {
       filters.push("[voice]alimiter=limit=0.89[aout]");
     }
     args.push("-filter_complex", filters.join(";"), "-map", "[vout]", "-map", "[aout]",
-      "-t", "60", "-r", "30", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+      "-t", "60", "-r", "24", "-threads", "1", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24",
       "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", outputPath);
     await run(args);
     const stat = await fs.promises.stat(outputPath);
     if (stat.size < 100000) throw new Error("MP4 output failed the basic file-size quality check.");
-    return { outputPath, duration_seconds: 60, resolution: "720x1280", fps: 30, narrator_required: true, music_added: Boolean(musicPath), sound_effect_scenes: sfxLabels.length };
+    return { outputPath, duration_seconds: 60, resolution: "540x960", fps: 24, narrator_required: true, music_added: Boolean(musicPath), sound_effect_scenes: sfxLabels.length };
   } finally {
     await fs.promises.rm(temp, { recursive: true, force: true }).catch(() => {});
   }

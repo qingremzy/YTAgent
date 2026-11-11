@@ -15,6 +15,7 @@ const { createRateLimiter } = require("./middleware/rate-limit");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
 const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
 const { claimNextGpuJob, noteGpuWorkerPoll, getGpuWorkerStatus, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
+const { readStudioProject, saveStudioProject, resolveStudioAsset } = require("./studio-project");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -27,6 +28,7 @@ let generationQueue = null;
 let redisConnection = null;
 const localGenerationJobs = new Map();
 const uploadDir = path.join(__dirname, "uploads");
+const studioProjectRoot = path.join(uploadDir, "studio-projects");
 const generationJobsFile = path.join(uploadDir, "generation-jobs.json");
 
 function persistGenerationJobs() {
@@ -106,6 +108,38 @@ function scheduleGeneratedFileExpiry(filePath, delayMs = GENERATED_FILE_TTL_MS) 
   timer.unref();
 }
 
+function scheduleStudioProjectExpiry(projectId, delayMs = GENERATED_FILE_TTL_MS) {
+  if (!/^[a-f0-9]{24}$/i.test(String(projectId || ""))) return;
+  const projectDir = path.join(studioProjectRoot, String(projectId).toLowerCase());
+  const timer = setTimeout(() => {
+    fs.promises.rm(projectDir, { recursive: true, force: true }).catch(() => {});
+  }, Math.max(1, delayMs));
+  timer.unref();
+}
+
+function restoreStudioProjectExpiries() {
+  try {
+    if (!fs.existsSync(studioProjectRoot)) return;
+    for (const id of fs.readdirSync(studioProjectRoot)) {
+      if (!/^[a-f0-9]{24}$/i.test(id)) continue;
+      const manifest = path.join(studioProjectRoot, id, "project.json");
+      if (!fs.existsSync(manifest)) {
+        fs.promises.rm(path.join(studioProjectRoot, id), { recursive: true, force: true }).catch(() => {});
+        continue;
+      }
+      const stat = fs.statSync(manifest);
+      const remainingMs = GENERATED_FILE_TTL_MS - (Date.now() - stat.mtimeMs);
+      if (remainingMs <= 0) {
+        fs.promises.rm(path.join(studioProjectRoot, id), { recursive: true, force: true }).catch(() => {});
+      } else {
+        scheduleStudioProjectExpiry(id, remainingMs);
+      }
+    }
+  } catch (error) {
+    console.warn("Could not restore studio project expiry timers:", error.message);
+  }
+}
+
 function restoreGeneratedFileExpiries() {
   try {
     for (const filename of fs.readdirSync(uploadDir)) {
@@ -175,6 +209,42 @@ function requireAuth(req, res, next) {
   if (!req.session.tokens) return res.status(401).json({ error: "Connect your YouTube account first." });
   next();
 }
+
+app.get("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
+  try {
+    const project = await readStudioProject(studioProjectRoot, req.params.projectId);
+    if (!project) return res.status(404).json({ error: "This editable project has expired or could not be found." });
+    res.set("Cache-Control", "private, no-store");
+    res.json(project);
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Could not read the studio project." });
+  }
+});
+
+app.put("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
+  try {
+    const project = await saveStudioProject(studioProjectRoot, req.params.projectId, req.body?.source);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ saved: true, id: project.id, updatedAt: project.updatedAt });
+  } catch (error) {
+    const message = String(error.message || error);
+    const status = /not found|expired/i.test(message) ? 404 : 400;
+    res.status(status).json({ saved: false, error: message.slice(0, 300) });
+  }
+});
+
+app.get("/api/studio/projects/:projectId/assets/:filename", requireAuth, async (req, res) => {
+  try {
+    const assetPath = resolveStudioAsset(studioProjectRoot, req.params.projectId, req.params.filename);
+    const stat = await fs.promises.stat(assetPath);
+    if (!stat.isFile()) return res.status(404).send("Studio asset not found.");
+    res.set("Cache-Control", "private, max-age=300");
+    res.sendFile(assetPath);
+  } catch (error) {
+    if (error.code === "ENOENT") return res.status(404).send("Studio asset not found.");
+    res.status(400).send(error.message || "Invalid studio asset.");
+  }
+});
 
 function extractJson(text) {
   const cleaned = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
@@ -855,13 +925,14 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
         job.progress = Math.max(job.progress || 0, Math.min(99, Number(progress) || 0));
         if (message) job.message = String(message).slice(0, 180);
         persistGenerationJobs();
-      });
+      }, { studioProjectRoot });
       job.result = { ...details, downloadUrl: "/api/generated/" + filename };
       job.progress = 100;
       job.message = "Your finished film is ready.";
       job.state = "completed";
       job.completedAt = Date.now();
       scheduleGeneratedFileExpiry(outputPath);
+      if (details.studioProjectId) scheduleStudioProjectExpiry(details.studioProjectId);
       persistGenerationJobs();
       scheduleGenerationJobCleanup(id);
     } catch (error) {
@@ -1140,9 +1211,10 @@ if (redisEnabled) {
       const details = await generateEducationalVideo(job.data.topic, job.data.outputPath, async (progress, message) => {
         await job.updateProgress(Math.max(0, Math.min(99, Number(progress) || 0)));
         await job.updateData({ ...job.data, message: String(message || "").slice(0, 180) });
-      });
+      }, { studioProjectRoot });
       await job.updateProgress(100);
       scheduleGeneratedFileExpiry(job.data.outputPath);
+      if (details.studioProjectId) scheduleStudioProjectExpiry(details.studioProjectId);
       return { ...details, downloadUrl: "/api/generated/" + job.data.filename };
     } catch (error) {
       await fs.promises.unlink(job.data.outputPath).catch(() => {});
@@ -1158,5 +1230,6 @@ if (redisEnabled) {
 
 restoreGenerationJobs();
 restoreGeneratedFileExpiries();
+restoreStudioProjectExpiries();
 console.log("Generated videos use temporary local storage, are deleted after successful download, and expire after six hours.");
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

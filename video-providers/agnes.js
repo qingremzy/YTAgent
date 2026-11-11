@@ -7,6 +7,8 @@ const BASE_URL = "https://apihub.agnes-ai.com";
 const DEFAULT_MODEL = "agnes-video-2.5-flash";
 const CLIP_SECONDS = 12;
 const HALF_SECONDS = 6;
+const SUCCESS_STATUSES = new Set(["completed", "succeeded", "success"]);
+const FAILURE_STATUSES = new Set(["failed", "error", "cancelled", "canceled", "rejected"]);
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -50,12 +52,40 @@ function getVideoId(payload) {
 
 function getTaskStatus(payload) {
   const data = taskPayload(payload);
-  return String(data.status || data.state || "").toLowerCase();
+  return String(data.status || data.state || "").trim().toLowerCase();
+}
+
+function isSuccessfulStatus(status) {
+  return SUCCESS_STATUSES.has(String(status || "").toLowerCase());
+}
+
+function isFailedStatus(status) {
+  return FAILURE_STATUSES.has(String(status || "").toLowerCase());
+}
+
+function getGenerationErrorDetail(payload) {
+  const data = taskPayload(payload);
+  if (typeof data.error === "string") return data.error;
+  return data.error?.message || data.error?.detail || data.message || data.detail ||
+    "The provider could not generate this scene.";
 }
 
 function getVideoUrl(payload) {
   const data = taskPayload(payload);
-  return data.metadata?.url || data.video_url || data.url || "";
+  const firstOutput = Array.isArray(data.outputs) ? data.outputs[0] : null;
+  return data.metadata?.url || data.video_url || data.url ||
+    data.output?.url || (typeof firstOutput === "string" ? firstOutput : firstOutput?.url) || "";
+}
+
+function getRetryAfterMs(headers) {
+  if (!headers || typeof headers.get !== "function") return 0;
+  const value = headers.get("retry-after");
+  if (!value) return 0;
+  const seconds = Number(value);
+  const milliseconds = Number.isFinite(seconds)
+    ? seconds * 1000
+    : Math.max(0, Date.parse(value) - Date.now());
+  return Math.min(30000, Math.max(0, milliseconds));
 }
 
 async function requestJson(url, options, label, timeoutMs) {
@@ -81,6 +111,7 @@ async function requestJson(url, options, label, timeoutMs) {
     const error = new Error(label + " failed: " + String(detail).slice(0, 300));
     error.status = response.status;
     error.providerCode = data.error?.code || data.code || detail;
+    error.retryAfterMs = getRetryAfterMs(response.headers);
     throw error;
   }
   return data;
@@ -122,20 +153,19 @@ async function waitForVideo(apiKey, model, videoId, onProgress) {
         isQueueFullError(error) ||
         /rate.?limit|too many|temporarily unavailable|network request failed|fetch failed|timeout/i.test(error.message);
       if (!retryable) throw error;
-      waitMs = Math.min(30000, Math.max(12000, waitMs * 2));
+      waitMs = Math.min(30000, Math.max(12000, error.retryAfterMs || waitMs * 2));
       continue;
     }
     const status = getTaskStatus(payload);
     const data = taskPayload(payload);
     if (typeof onProgress === "function") onProgress(status, Number(data.progress || 0));
-    if (status === "completed") {
+    if (isSuccessfulStatus(status)) {
       const videoUrl = getVideoUrl(payload);
       if (!videoUrl) throw new Error("Agnes marked the scene complete but returned no video URL.");
       return videoUrl;
     }
-    if (status === "failed") {
-      const detail = data.error?.message || data.error?.detail || data.message || "The provider could not generate this scene.";
-      throw new Error("Agnes video generation failed: " + String(detail).slice(0, 300));
+    if (isFailedStatus(status)) {
+      throw new Error("Agnes video generation failed: " + String(getGenerationErrorDetail(payload)).slice(0, 300));
     }
     if (data.error || data.code) {
       const detail = data.error?.message || data.message || data.code;
@@ -274,6 +304,10 @@ module.exports = {
   getVideoId,
   getTaskStatus,
   getVideoUrl,
+  isSuccessfulStatus,
+  isFailedStatus,
+  getGenerationErrorDetail,
+  getRetryAfterMs,
   isQueueFullError,
   submissionRetryDelay
 };

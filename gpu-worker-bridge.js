@@ -6,6 +6,8 @@ const jobs = new Map();
 const pending = [];
 const JOB_TIMEOUT_MS = 90 * 60 * 1000;
 const CLAIM_TIMEOUT_MS = 20 * 60 * 1000;
+const WORKER_HEARTBEAT_TIMEOUT_MS = 120 * 1000;
+const WORKER_HEARTBEAT_CHECK_MS = 15 * 1000;
 let lastWorkerPollAt = 0;
 
 function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueued, claimTimeoutMs = CLAIM_TIMEOUT_MS }) {
@@ -14,7 +16,7 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueue
   }
   const id = crypto.randomBytes(16).toString("hex");
   return new Promise((resolve, reject) => {
-    const job = { id, prompts, narrations, seed, workDir, onProgress, progress: 0, state: "queued", clips: new Array(10), audios: new Array(10), received: new Set(), audioReceived: new Set(), resolve, reject };
+    const job = { id, prompts, narrations, seed, workDir, onProgress, progress: 0, state: "queued", clips: new Array(10), audios: new Array(10), received: new Set(), audioReceived: new Set(), lastHeartbeatAt: Date.now(), heartbeatTimer: null, resolve, reject };
     job.timer = setTimeout(() => {
       if (job.state === "queued") {
         jobs.delete(id);
@@ -39,6 +41,7 @@ function updateGpuJobProgress(id, progress, message) {
   if (!job || job.state !== "active") return false;
   const value = Math.max(0, Math.min(99, Math.round(Number(progress) || 0)));
   job.progress = Math.max(job.progress, value);
+  job.lastHeartbeatAt = Date.now();
   const detail = String(message || "").replace(/[<>]/g, "").slice(0, 180);
   if (typeof job.onProgress === "function") {
     try {
@@ -65,11 +68,21 @@ function claimNextGpuJob() {
     if (!job || job.state !== "queued") continue;
     clearTimeout(job.timer);
     job.state = "active";
+    job.lastHeartbeatAt = Date.now();
     job.timer = setTimeout(() => {
+      if (job.heartbeatTimer) clearInterval(job.heartbeatTimer);
       jobs.delete(id);
       job.reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may have disconnected or run out of GPU quota."));
     }, JOB_TIMEOUT_MS);
     if (job.timer.unref) job.timer.unref();
+    job.heartbeatTimer = setInterval(() => {
+      if (Date.now() - job.lastHeartbeatAt <= WORKER_HEARTBEAT_TIMEOUT_MS) return;
+      clearInterval(job.heartbeatTimer);
+      clearTimeout(job.timer);
+      jobs.delete(id);
+      job.reject(new Error("The Kaggle GPU worker stopped reporting progress for two minutes. The batch run likely stopped or ran out of resources. Restart the worker and try again."));
+    }, WORKER_HEARTBEAT_CHECK_MS);
+    if (job.heartbeatTimer.unref) job.heartbeatTimer.unref();
     return { job_id: id, prompts: job.prompts, narrations: job.narrations, seed: job.seed };
   }
   return null;
@@ -83,6 +96,7 @@ async function receiveGpuScene(id, index, bytes) {
     throw new Error("The GPU worker uploaded an invalid or incomplete MP4 scene.");
   }
   if (job.received.has(index)) throw new Error("This scene was already received.");
+  job.lastHeartbeatAt = Date.now();
   const filename = path.join(job.workDir, "wan-scene-" + String(index + 1).padStart(2, "0") + ".mp4");
   await fs.promises.writeFile(filename, bytes);
   job.clips[index] = filename;
@@ -90,6 +104,7 @@ async function receiveGpuScene(id, index, bytes) {
   if (job.received.size === 10 && job.audioReceived.size === 10) {
     job.state = "completed";
     clearTimeout(job.timer);
+    if (job.heartbeatTimer) clearInterval(job.heartbeatTimer);
     jobs.delete(id);
     job.resolve({ clips: job.clips, narrations: job.audios });
     return { received: 10, completed: true };
@@ -105,6 +120,7 @@ async function receiveGpuAudio(id, index, bytes) {
     throw new Error("The GPU worker uploaded an invalid WAV narration file.");
   }
   if (job.audioReceived.has(index)) throw new Error("This narration was already received.");
+  job.lastHeartbeatAt = Date.now();
   const filename = path.join(job.workDir, "narration-" + String(index + 1).padStart(2, "0") + ".wav");
   await fs.promises.writeFile(filename, bytes);
   job.audios[index] = filename;
@@ -112,6 +128,7 @@ async function receiveGpuAudio(id, index, bytes) {
   if (job.received.size === 10 && job.audioReceived.size === 10) {
     job.state = "completed";
     clearTimeout(job.timer);
+    if (job.heartbeatTimer) clearInterval(job.heartbeatTimer);
     jobs.delete(id);
     job.resolve({ clips: job.clips, narrations: job.audios });
     return { received: 10, completed: true };
@@ -124,6 +141,7 @@ function failGpuJob(id, message) {
   if (!job) return false;
   job.state = "failed";
   clearTimeout(job.timer);
+  if (job.heartbeatTimer) clearInterval(job.heartbeatTimer);
   jobs.delete(id);
   const safeMessage = String(message || "The free GPU worker failed.").replace(/[<>]/g, "").slice(0, 500);
   job.reject(new Error(safeMessage));

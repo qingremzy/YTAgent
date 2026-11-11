@@ -77,3 +77,4 @@ The pipeline no longer requires a Kaggle notebook, a temporary GPU tunnel, `VIDE
 - Long video jobs need a durable background queue before unattended scheduled publishing is enabled.
 - YouTube API quota and channel verification requirements still apply.
 - Uploaded videos are limited to 256 MB in this starter version.
+- Public AI endpoints are limited per IP to two generations and five analyses per hour to reduce accidental or abusive API-quota use. This lightweight in-memory limit resets when the server restarts and is not a substitute for owner authentication.

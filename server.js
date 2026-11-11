@@ -624,6 +624,20 @@ app.post("/api/generate", async (req, res) => {
   if (topic.length < 8) return res.status(400).json({ error: "Enter a video topic with at least 8 characters." });
   if (topic.length > 180) return res.status(400).json({ error: "Keep the topic under 180 characters." });
   if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: "The hosted video engine is not configured yet. Add AGNES_API_KEY in Railway Variables." });
+  if (generationQueue) {
+    try {
+      const counts = await generationQueue.getJobCounts("waiting", "active", "delayed");
+      if (counts.waiting + counts.active + counts.delayed > 0) {
+        return res.status(409).json({ error: "YTAgent is already generating a film. Wait for it to finish before starting another." });
+      }
+    } catch (error) {
+      console.error("Could not check the video queue:", error.message);
+      return res.status(503).json({ error: "The video task queue is temporarily unavailable." });
+    }
+  } else if (Array.from(localGenerationJobs.values()).some(job => job.state === "waiting" || job.state === "active")) {
+    return res.status(409).json({ error: "YTAgent is already generating a film. Wait for it to finish before starting another." });
+  }
+
   const id = require("crypto").randomBytes(12).toString("hex");
   const filename = "generated-" + id + ".mp4";
   const outputPath = path.join(uploadDir, filename);

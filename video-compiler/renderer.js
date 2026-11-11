@@ -96,7 +96,7 @@ async function renderFilm(input) {
       const overlayIndex = inputIndex++;
       const overlayPath = path.join(temp, "overlay-" + i + ".png");
       await makeOverlay(blueprint.scenes[i], i, 10, overlayPath);
-      args.push("-i", overlayPath);
+      args.push("-loop", "1", "-framerate", "30", "-i", overlayPath);
       const v = "v" + i, a = "a" + i;
       filters.push("[" + videoIndex + ":v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1,trim=duration=6,setpts=PTS-STARTPTS[base" + i + "]");
       filters.push("[base" + i + "][" + overlayIndex + ":v]overlay=0:0:shortest=1,format=yuv420p[" + v + "]");

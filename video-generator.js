@@ -252,9 +252,9 @@ function getMediaDuration(filePath) {
     child.stderr.on("data", chunk => { output += chunk.toString(); });
     child.on("close", () => {
       const match = output.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
-      resolve(match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) : 6);
+      resolve(match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) : null);
     });
-    child.on("error", () => resolve(6));
+    child.on("error", () => resolve(null));
   });
 }
 
@@ -286,8 +286,17 @@ async function generateEducationalVideo(topic, outputPath) {
       const audioPath = path.join(workDir, "narration-" + String(i + 1).padStart(2, "0") + ".wav");
       const speech = await generateNarration(storyboard.scenes[i].narration, audioPath);
       voiceProviders.add(speech.provider);
-      // The renderer checks that every voice file exists and refuses silent scenes.
-      sceneAssets.push({ videoPath: generatedClips[i], narrationPath: speech.path });
+      // Measure the actual generated speech before rendering so six-second scenes never silently chop words.
+      const speechDuration = await getMediaDuration(speech.path);
+      if (!Number.isFinite(speechDuration) || speechDuration <= 0) {
+        throw new Error("Could not measure narration audio for scene " + (i + 1) + ". The film was stopped to avoid cutting off speech.");
+      }
+      const audioTempo = Math.max(1, speechDuration / 6);
+      if (audioTempo > 1.35) {
+        throw new Error("Scene " + (i + 1) + " narration is too long (" + speechDuration.toFixed(1) + " seconds). Shorten the line and try again. YTAgent will not cut off spoken words.");
+      }
+      // The renderer applies only the small speed-up needed to fit the six-second slot.
+      sceneAssets.push({ videoPath: generatedClips[i], narrationPath: speech.path, audioTempo });
     }
 
     const rendered = await renderFilm({ blueprint, sceneAssets, outputPath });

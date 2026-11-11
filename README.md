@@ -40,7 +40,7 @@ Set these in the hosting provider. Never commit keys or OAuth secrets.
 - `REDIS_URL` — optional. Enables BullMQ background queues. Without it, job records are saved to the app's temporary filesystem and restored after a process restart when that filesystem survives. An interrupted film is marked failed and must be resubmitted.
 - `ANALYSIS_CONCURRENCY` — optional analysis worker concurrency.
 
-YTAgent uses the outbound-polling Wan 2.1 free GPU worker when its private worker token is configured. The Kaggle notebook must remain active during generation, and free GPU availability is not guaranteed. Rewind is optional and can be disabled. Agnes is only attempted when `AGNES_FREE_QUOTA_CONFIRMED=true` is explicitly set. YTAgent does not substitute abstract animated artwork when genuine video generation fails.
+YTAgent uses the outbound-polling Wan 2.1 free GPU worker when its private worker token is configured. The Kaggle notebook must remain active during generation, and free GPU availability is not guaranteed. Agnes is only attempted when `AGNES_FREE_QUOTA_CONFIRMED=true` is explicitly set. YTAgent does not substitute abstract animated artwork when genuine video generation fails.
 
 ## Run locally
 

@@ -231,7 +231,7 @@ async function generateNarration(text, outputPath, voiceState = {}) {
     try {
       if (attempt > 0) await wait(edgeTtsRetryDelayMs(attempt - 1));
       const tts = new EdgeTTS({
-        voice: process.env.EDGE_TTS_VOICE || "en-US-AriaNeural",
+        voice: process.env.EDGE_TTS_VOICE || "en-US-ChristopherNeural",
         lang: "en-US",
         outputFormat: "audio-24khz-96kbitrate-mono-mp3",
         timeout: 30000
@@ -296,7 +296,7 @@ async function generateEducationalVideo(topic, outputPath) {
   }
 
   // Convert the director's storyboard into the compiler's constrained film plan.
-  const blueprint = compileBlueprint(storyboard, { language: "en", voiceId: process.env.EDGE_TTS_VOICE || "en-US-AriaNeural" });
+  const blueprint = compileBlueprint(storyboard, { language: "en", voiceId: process.env.EDGE_TTS_VOICE || "en-US-ChristopherNeural" });
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-film-"));
   try {
     // Agnes supplies five 12-second cinematic clips, which are split into ten scene plates.

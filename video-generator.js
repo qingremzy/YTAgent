@@ -310,7 +310,7 @@ function getMediaDuration(filePath) {
 async function generateEducationalVideo(topic, outputPath, onProgress = () => {}) {
   const reportProgress = (progress, message) => {
     try {
-      const result = reportProgress(progress, message);
+      const result = onProgress(progress, message);
       if (result && typeof result.catch === "function") result.catch(() => {});
     } catch (_) {}
   };
@@ -335,7 +335,7 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-film-"));
   try {
     // Agnes supplies five 12-second cinematic clips, which are split into ten scene plates.
-    const visualResult = await requestGeneratedScenes(storyboard.scenes, topic, workDir, onProgress);
+    const visualResult = await requestGeneratedScenes(storyboard.scenes, topic, workDir, reportProgress);
     reportProgress(92, "All visuals and narration are ready. Mixing the film.");
     const generatedClips = visualResult.clips;
     const voiceProviders = new Set();

@@ -32,7 +32,7 @@ Set these in the hosting provider. Never commit keys or OAuth secrets.
 - `GEMINI_API_KEY` and/or `GROQ_API_KEY` — storyboard generation.
 - `AGNES_API_KEY` — required for generated moving video scenes.
 - `AGNES_VIDEO_MODEL` — optional. Defaults to `agnes-video-2.5-flash`.
-- `REDIS_URL` — recommended. Enables persistent BullMQ queues for video analysis and long-running video generation.
+- `REDIS_URL` — optional. Enables BullMQ background queues. Without it, generation jobs are held in process memory and are lost if the app restarts.
 - `ANALYSIS_CONCURRENCY` — optional analysis worker concurrency.
 
 The Flash video model has been advertised with a limited-time free promotion. Availability, queues, quotas and pricing can change. YTAgent defaults to Flash and does not silently switch to the paid model. The paid `agnes-video-2.5` model is only used when explicitly configured.
@@ -49,7 +49,7 @@ Open `http://localhost:3000`.
 
 ## Deploying
 
-Use a Node.js host that supports long-running requests and persistent storage. Set `GOOGLE_REDIRECT_URI` to:
+Use a Node.js host that supports long-running requests. Set `GOOGLE_REDIRECT_URI` to:
 
 ```
 https://YOUR-DOMAIN/auth/google/callback
@@ -66,13 +66,13 @@ Register the exact same redirect URI in Google Cloud Console. Use a persistent s
 5. FFmpeg compiles the ten scene plates and narrator tracks into one 60-second MP4.
 6. The render is rejected if narration is missing or the duration check fails.
 
-The pipeline no longer requires a Kaggle notebook, a temporary GPU tunnel, `VIDEO_WORKER_URL` or `YT_AGENT_WORKER_TOKEN`. Generation runs as a background job so the browser does not need to hold one long HTTP request open. With `REDIS_URL`, BullMQ stores generation jobs in Redis and runs one film at a time. Without Redis, a process-local fallback is used and an app restart loses its active jobs. Generated MP4 files are still stored on the app instance. The hosted video provider has rate limits and may queue or reject requests. A full end-to-end production render has not yet been verified.
+The pipeline no longer requires a Kaggle notebook, a temporary GPU tunnel, `VIDEO_WORKER_URL` or `YT_AGENT_WORKER_TOKEN`. Generation runs as a background job so the browser does not need to hold one long HTTP request open. With `REDIS_URL`, BullMQ stores generation jobs in Redis and runs one film at a time. Without Redis, a process-local fallback is used and an app restart loses its active jobs. Generated MP4s are stored temporarily on the app instance only while the user needs to download them. The download route deletes the MP4 after a successful transfer, with a six-hour expiry as a cleanup safeguard if the user never downloads it. No persistent video volume or paid storage service is required. Temporary files can still disappear if the hosting instance restarts before the download. The hosted video provider has rate limits and may queue or reject requests. A full end-to-end production render has not yet been verified.
 
 ## Other limitations
 
 - The current renderer uses scene-level captions, not verified word-by-word captions.
 - Background music and sound effects are not yet guaranteed in every render.
-- Generated videos are stored on the running app instance. Persistent object storage is needed for durable downloads across restarts or multiple instances.
+- Generated videos are temporary. They are deleted after successful download or automatically expire after six hours. A server restart before download may remove them.
 - Long video jobs need a durable background queue before unattended scheduled publishing is enabled.
 - YouTube API quota and channel verification requirements still apply.
 - Uploaded videos are limited to 256 MB in this starter version.

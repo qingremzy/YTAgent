@@ -23,7 +23,15 @@ let generationQueue = null;
 let redisConnection = null;
 const localGenerationJobs = new Map();
 const uploadDir = path.join(__dirname, "uploads");
+const GENERATED_FILE_TTL_MS = 6 * 60 * 60 * 1000;
 fs.mkdirSync(uploadDir, { recursive: true });
+
+function scheduleGeneratedFileExpiry(filePath) {
+  const timer = setTimeout(() => {
+    fs.promises.unlink(filePath).catch(() => {});
+  }, GENERATED_FILE_TTL_MS);
+  timer.unref();
+}
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "1mb" }));
@@ -623,7 +631,6 @@ app.post("/api/generate", async (req, res) => {
   const topic = String(req.body?.topic || "").trim();
   if (topic.length < 8) return res.status(400).json({ error: "Enter a video topic with at least 8 characters." });
   if (topic.length > 180) return res.status(400).json({ error: "Keep the topic under 180 characters." });
-  if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: "The hosted video engine is not configured yet. Add AGNES_API_KEY in Railway Variables." });
   if (generationQueue) {
     try {
       const counts = await generationQueue.getJobCounts("waiting", "active", "delayed");
@@ -664,6 +671,7 @@ app.post("/api/generate", async (req, res) => {
       const details = await generateEducationalVideo(topic, outputPath);
       job.result = { ...details, downloadUrl: "/api/generated/" + filename };
       job.state = "completed";
+      scheduleGeneratedFileExpiry(outputPath);
     } catch (error) {
       await fs.promises.unlink(outputPath).catch(() => {});
       job.error = error.message || "Video generation failed.";
@@ -701,11 +709,23 @@ app.get("/api/generated/:filename", (req, res) => {
   if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename)) return res.status(404).send("Video not found.");
   const filePath = path.join(uploadDir, filename);
   if (!fs.existsSync(filePath)) return res.status(404).send("This generated video has expired or is no longer available.");
-  res.download(filePath, "YTAgent-video.mp4");
+  res.download(filePath, "YTAgent-video.mp4", error => {
+    if (!error) {
+      fs.promises.unlink(filePath).catch(unlinkError => console.warn("Downloaded video cleanup failed:", unlinkError.message));
+    } else if (!res.headersSent) {
+      res.status(500).send("The video download failed. Please try again before the temporary file expires.");
+    }
+  });
 });
 
 app.post("/auth/logout", (req, res) => req.session.destroy(() => res.json({ success: true })));
-app.get("/health", (_req, res) => res.json({ ok: true, app: "YTAgent" }));
+app.get("/health", (_req, res) => res.json({
+  ok: true,
+  app: "YTAgent",
+  storage: { mode: "temporary", autoDeleteAfterDownload: true, expiryHours: 6 },
+  jobs: { redisQueueEnabled: redisEnabled, durableQueueConfigured: redisEnabled },
+  durabilityReady: false
+}));
 app.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Video is too large. Maximum size is 256 MB." });
   res.status(400).json({ error: err.message || "Something went wrong." });
@@ -733,6 +753,7 @@ if (redisEnabled) {
       await job.updateProgress(5);
       const details = await generateEducationalVideo(job.data.topic, job.data.outputPath);
       await job.updateProgress(100);
+      scheduleGeneratedFileExpiry(job.data.outputPath);
       return { ...details, downloadUrl: "/api/generated/" + job.data.filename };
     } catch (error) {
       await fs.promises.unlink(job.data.outputPath).catch(() => {});
@@ -743,7 +764,8 @@ if (redisEnabled) {
   generationWorker.on("error", error => console.error("Video generation worker error:", error.message));
   console.log("YTAgent Redis queues enabled. Analysis concurrency:", concurrency, "Video generation concurrency: 1");
 } else {
-  console.warn("REDIS_URL is not set. Analysis will run synchronously. Add Redis to enable queued parallel processing.");
+  console.warn("REDIS_URL is not set. Background jobs are process-local and will be lost on restart. Configure Redis for durable queues.");
 }
 
+console.log("Generated videos use temporary local storage, are deleted after successful download, and expire after six hours.");
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

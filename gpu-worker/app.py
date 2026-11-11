@@ -68,6 +68,16 @@ def get_pipeline():
         raise RuntimeError("A CUDA GPU is required. Enable a GPU accelerator in Kaggle.")
     return PIPE
 
+def send_progress_to_server(remote_job_id, progress, message):
+    url = f"{SERVER_URL}/api/worker/jobs/{remote_job_id}/progress"
+    payload = json.dumps({"progress": int(progress), "message": str(message)[:180]}).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=payload, method="POST",
+        headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8") or "{}")
+
 def send_scene_to_server(remote_job_id, index, clip_path):
     url = f"{SERVER_URL}/api/worker/jobs/{remote_job_id}/scenes/{index}"
     data = Path(clip_path).read_bytes()
@@ -159,6 +169,7 @@ def poll_railway():
             local_id = "railway-" + remote_id
             JOBS[local_id] = {"status": "queued", "progress": 0, "message": "GPU job claimed from YTAgent."}
             print("Claimed YTAgent video job:", remote_id)
+            send_progress_to_server(remote_id, 3, "GPU worker connected. Loading Wan video model.")
             run_job(local_id, prompts, int(job.get("seed", 20261110)), remote_job_id=remote_id, narrations=narrations)
             result = JOBS.get(local_id, {})
             if result.get("status") == "failed":
@@ -205,6 +216,7 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
             clips.append(clip_path)
             if remote_job_id:
                 send_scene_to_server(remote_job_id, index, clip_path)
+                send_progress_to_server(remote_job_id, 5 + int((index + 1) * 6.0), f"Generated and uploaded video scene {index + 1} of 10.")
                 print(f"Uploaded scene {index + 1} of {len(prompts)} to YTAgent.")
             del result, frames, generator
             torch.cuda.empty_cache()
@@ -215,11 +227,13 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
             del pipe
             PIPE = None
             torch.cuda.empty_cache()
+            send_progress_to_server(remote_job_id, 67, "Video scenes complete. Loading Kokoro narrator.")
             for index, line in enumerate(narrations):
                 JOBS[job_id]["message"] = f"Generating natural Kokoro narration {index + 1} of 10."
                 audio_path = work / f"narration-{index:02d}.wav"
                 generate_kokoro_audio(line, audio_path)
                 send_audio_to_server(remote_job_id, index, audio_path)
+                send_progress_to_server(remote_job_id, 68 + int((index + 1) * 2.8), f"Generated narration track {index + 1} of 10.")
                 print(f"Uploaded Kokoro narration {index + 1} of 10 to YTAgent.")
         zip_path = None
         if not remote_job_id:

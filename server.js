@@ -105,7 +105,7 @@ function scheduleGeneratedFileExpiry(filePath, delayMs = GENERATED_FILE_TTL_MS) 
 function restoreGeneratedFileExpiries() {
   try {
     for (const filename of fs.readdirSync(uploadDir)) {
-      if (!/^generated-[a-f0-9]{24}\\.mp4$/.test(filename)) continue;
+      if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename)) continue;
       const filePath = path.join(uploadDir, filename);
       const stat = fs.statSync(filePath);
       if (!stat.isFile()) continue;

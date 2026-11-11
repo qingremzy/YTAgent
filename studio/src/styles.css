@@ -1,0 +1,72 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap");
+
+:root {
+  color-scheme: dark;
+  font-family: "DM Sans", Inter, system-ui, sans-serif;
+  background: #111315;
+  color: #f3f4f5;
+}
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; }
+body { overflow: hidden; background: #111315; }
+.studio-shell { height: 100dvh; display: flex; flex-direction: column; background: #111315; }
+.studio-header {
+  min-height: 62px; display: flex; align-items: center; gap: 18px;
+  padding: 0 20px; border-bottom: 1px solid #303438; background: #171a1d;
+}
+.back-link { color: #c5c9cc; text-decoration: none; font-size: 13px; white-space: nowrap; }
+.back-link:hover { color: #fff; }
+.project-heading { min-width: 0; display: flex; flex-direction: column; gap: 1px; flex: 1; }
+.project-heading strong { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eyebrow { color: #858d93; font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+.save-indicator { color: #c0a56c; font-size: 11px; white-space: nowrap; }
+.save-indicator.saved { color: #82b69a; }
+.editor-frame { flex: 1; min-height: 0; overflow: hidden; }
+.clipkit-editor { width: 100% !important; height: 100% !important; }
+.export-status {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 12px; padding: 10px 18px; border-top: 1px solid #303438;
+  background: #171a1d; font-size: 12px;
+}
+.progress-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; width: min(560px, 100%); color: #d6dadd; }
+.progress-row strong { font-variant-numeric: tabular-nums; }
+.progress-track { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: #343a3e; overflow: hidden; }
+.progress-track i { display: block; height: 100%; background: #8fb7a0; transition: width .2s ease; }
+.export-actions { display: flex; align-items: center; gap: 10px; }
+.action-button {
+  min-height: 38px; border: 1px solid #4b555b; border-radius: 6px; padding: 0 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.action-button.secondary { background: #23282c; color: #f0f2f3; }
+.action-button.primary { background: #dce6df; color: #1b2920; border-color: #dce6df; }
+.action-button:disabled { opacity: .55; cursor: wait; }
+.error-text { margin: 0; color: #e49a9a; }
+.success-text { margin: 0; color: #a8d3b5; }
+.success-text a { color: #c4e7ce; }
+.studio-state { min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 24px; text-align: center; background: #111315; }
+.studio-state h1 { margin: 0; font-size: 22px; }
+.studio-state p { max-width: 420px; margin: 0; color: #a9b0b4; }
+.studio-state a { color: #dce6df; }
+.loader { width: 28px; height: 28px; border: 2px solid #41494d; border-top-color: #dce6df; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 700px) {
+  .studio-header { min-height: 52px; gap: 10px; padding: 0 10px; }
+  .back-link { font-size: 11px; }
+  .project-heading strong { font-size: 12px; }
+  .eyebrow { font-size: 8px; }
+  .save-indicator { font-size: 9px; max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
+  .clipkit-editor > .flex.flex-1.min-h-0.min-w-0 { flex-direction: column !important; }
+  .clipkit-editor > .flex.flex-1.min-h-0.min-w-0 > div:last-child[style*="width"] {
+    width: 100% !important; height: 176px !important; flex: 0 0 176px !important;
+  }
+  .clipkit-editor > .flex.flex-1.min-h-0.min-w-0 > div:has(+ div:last-child[style*="width"]) {
+    display: none !important;
+  }
+  .clipkit-editor > .flex.flex-1.min-h-0.min-w-0 > div.flex-1.min-w-0.min-h-0 {
+    min-height: 190px;
+  }
+  .export-status { padding: 8px 10px; gap: 8px; }
+  .action-button { min-height: 36px; padding: 0 10px; font-size: 11px; }
+}

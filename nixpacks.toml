@@ -1,3 +1,6 @@
+[phases.build]
+cmds = ["npm run build"]
+
 [phases.setup]
 nixPkgs = ["fontconfig", "dejavu_fonts"]
 

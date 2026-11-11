@@ -308,13 +308,19 @@ function getMediaDuration(filePath) {
 }
 
 async function generateEducationalVideo(topic, outputPath, onProgress = () => {}) {
+  const reportProgress = (progress, message) => {
+    try {
+      const result = reportProgress(progress, message);
+      if (result && typeof result.catch === "function") result.catch(() => {});
+    } catch (_) {}
+  };
   if (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) {
     throw new Error("Add GEMINI_API_KEY or GROQ_API_KEY in Railway Variables before generating videos.");
   }
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable on this server.");
-  onProgress(2, "AI director is researching the topic and writing the story.");
+  reportProgress(2, "AI director is researching the topic and writing the story.");
   const storyboard = await requestStoryboard(topic);
-  onProgress(5, "Storyboard approved. Preparing ten matched scenes.");
+  reportProgress(5, "Storyboard approved. Preparing ten matched scenes.");
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 10) {
     throw new Error("The AI director must return exactly ten scenes. Please regenerate.");
   }
@@ -330,7 +336,7 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
   try {
     // Agnes supplies five 12-second cinematic clips, which are split into ten scene plates.
     const visualResult = await requestGeneratedScenes(storyboard.scenes, topic, workDir, onProgress);
-    onProgress(92, "All visuals and narration are ready. Mixing the film.");
+    reportProgress(92, "All visuals and narration are ready. Mixing the film.");
     const generatedClips = visualResult.clips;
     const voiceProviders = new Set();
     const voiceState = {};
@@ -352,12 +358,12 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
       }
       // The renderer applies only the small speed-up needed to fit the six-second slot.
       sceneAssets.push({ videoPath: generatedClips[i], narrationPath: speech.path, audioTempo });
-      if (!visualResult.narrationClips) onProgress(92 + Math.round((i + 1) * 0.25), "Creating narration track " + (i + 1) + " of 10.");
+      if (!visualResult.narrationClips) reportProgress(92 + Math.round((i + 1) * 0.25), "Creating narration track " + (i + 1) + " of 10.");
     }
 
-    onProgress(97, "Editing ten scenes, captions and narration into one film.");
+    reportProgress(97, "Editing ten scenes, captions and narration into one film.");
     const rendered = await renderFilm({ blueprint, sceneAssets, outputPath });
-    onProgress(99, "Running the final MP4 quality check.");
+    reportProgress(99, "Running the final MP4 quality check.");
     const totalDuration = await getMediaDuration(outputPath);
     if (Math.abs(totalDuration - 60) > 1.5) {
       throw new Error("The rendered film did not pass the 60-second duration check.");

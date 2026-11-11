@@ -81,6 +81,7 @@ test("uses outbound polling and Kokoro narration without VIDEO_WORKER_URL", asyn
     assert.ok(job);
     assert.equal(job.prompts.length, 10);
     assert.equal(job.narrations.length, 10);
+    assert.ok(job.seed > 0 && job.seed < 2147483647);
     for (let i = 0; i < 10; i++) {
       const mp4 = Buffer.alloc(24000);
       mp4.write("ftyp", 4, "ascii");

@@ -14,6 +14,7 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - run: npm run build
       - run: node --check server.js && node --check video-generator.js && node --check video-providers/agnes.js && node --check public/app.js && node --input-type=module --check < public/studio.js && node --check gpu-worker-bridge.js && node --check studio-project.js
       - run: python -m py_compile gpu-worker/app.py
       - run: python -c "import json; json.load(open('gpu-worker/YTAgent_Free_GPU_Worker.ipynb', encoding='utf-8'))"

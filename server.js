@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
+const { RedisStore } = require("connect-redis");
 const helmet = require("helmet");
 const multer = require("multer");
 const path = require("path");
@@ -12,7 +13,8 @@ const { google } = require("googleapis");
 const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const { createRateLimiter } = require("./middleware/rate-limit");
-const { readStudioProject, saveStudioProject, resolveStudioAsset } = require("./studio-project");
+const { readStudioProject, saveStudioProject, validateStudioSource, resolveStudioAsset } = require("./studio-project");
+const { createObjectStorage } = require("./object-storage");
 const { createKaggleWorkerSessionManager } = require("./kaggle-worker-session");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
 const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
@@ -102,6 +104,14 @@ function restoreGenerationJobs() {
 }
 const GENERATED_FILE_TTL_MS = 6 * 60 * 60 * 1000;
 fs.mkdirSync(uploadDir, { recursive: true });
+const objectStorage = createObjectStorage();
+const r2StudioProjectsUploaded = new Set();
+
+if (redisEnabled) {
+  redisConnection = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
+  redisConnection.on("error", error => console.error("Redis connection error:", error.message));
+  redisConnection.on("ready", () => console.log("YTAgent Redis connection ready."));
+}
 
 function scheduleGeneratedFileExpiry(filePath, delayMs = GENERATED_FILE_TTL_MS) {
   const timer = setTimeout(() => {
@@ -147,6 +157,32 @@ function restoreStudioProjectExpiries() {
   }
 }
 
+async function persistGenerationArtifacts(outputPath, details) {
+  if (!objectStorage.configured) return details;
+  const filename = path.basename(outputPath);
+  const persisted = { ...details };
+  let videoStored = false;
+  let projectStored = false;
+  try {
+    await objectStorage.putFile("generated/" + filename, outputPath, "video/mp4");
+    videoStored = true;
+    if (details.studioProjectId) {
+      const projectDir = path.join(studioProjectRoot, details.studioProjectId);
+      if (fs.existsSync(projectDir)) {
+        await objectStorage.uploadDirectory(projectDir, "studio-projects/" + details.studioProjectId);
+        await objectStorage.putBuffer("studio-projects/" + details.studioProjectId + "/_complete", Buffer.from("ok"), "text/plain");
+        r2StudioProjectsUploaded.add(details.studioProjectId);
+        projectStored = true;
+      }
+    }
+    persisted.storage = { provider: "cloudflare-r2", videoStored, projectStored };
+  } catch (error) {
+    console.warn("Could not persist generated artifacts to Cloudflare R2:", error.message);
+    persisted.storageWarning = "The film is ready locally, but durable R2 storage did not complete.";
+  }
+  return persisted;
+}
+
 function restoreGeneratedFileExpiries() {
   try {
     for (const filename of fs.readdirSync(uploadDir)) {
@@ -172,13 +208,18 @@ const sessionSecret = process.env.SESSION_SECRET || require("crypto").randomByte
 if (!process.env.SESSION_SECRET) {
   console.warn("SESSION_SECRET is not configured. Sessions will be invalidated whenever this process restarts.");
 }
-app.use(session({
+const sessionOptions = {
   name: "ytagent.sid",
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 24 * 60 * 60 * 1000 }
-}));
+};
+if (redisConnection) {
+  sessionOptions.store = new RedisStore({ client: redisConnection, prefix: "ytagent:sess:", ttl: 24 * 60 * 60 });
+  console.log("YTAgent sessions will persist in Redis.");
+}
+app.use(session(sessionOptions));
 app.use("/studio", (req, res, next) => {
   if (!req.session?.tokens) return res.redirect("/");
   next();
@@ -223,8 +264,14 @@ function requireAuth(req, res, next) {
 
 app.get("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
   try {
-    const project = await readStudioProject(studioProjectRoot, req.params.projectId);
-    if (!project) return res.status(404).json({ error: "This editable project has expired or could not be found." });
+    let project = await readStudioProject(studioProjectRoot, req.params.projectId);
+    if (!project && objectStorage.configured) {
+      const prefix = "studio-projects/" + String(req.params.projectId).toLowerCase();
+      if (await objectStorage.exists(prefix + "/_complete")) {
+        project = await objectStorage.getJson(prefix + "/project.json");
+      }
+    }
+    if (!project) return res.status(404).json({ error: "This editable project could not be found." });
     res.set("Cache-Control", "private, no-store");
     res.json(project);
   } catch (error) {
@@ -234,10 +281,55 @@ app.get("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
 
 app.put("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
   try {
-    const project = await saveStudioProject(studioProjectRoot, req.params.projectId, req.body?.source);
-    scheduleStudioProjectExpiry(project.id);
+    let project = await readStudioProject(studioProjectRoot, req.params.projectId);
+    if (project) {
+      project = await saveStudioProject(studioProjectRoot, req.params.projectId, req.body?.source);
+      scheduleStudioProjectExpiry(project.id);
+    } else if (objectStorage.configured) {
+      const id = String(req.params.projectId || "").toLowerCase();
+      const prefix = "studio-projects/" + id;
+      if (!await objectStorage.exists(prefix + "/_complete")) {
+        return res.status(404).json({ saved: false, error: "The durable scene assets for this project could not be found." });
+      }
+      project = await objectStorage.getJson(prefix + "/project.json");
+      if (!project) return res.status(404).json({ saved: false, error: "This editable project could not be found." });
+      project.source = validateStudioSource(req.body?.source, id);
+      project.updatedAt = new Date().toISOString();
+    } else {
+      return res.status(404).json({ saved: false, error: "This editable project has expired or could not be found." });
+    }
+
+    let durable = false;
+    let storageWarning = null;
+    if (objectStorage.configured) {
+      try {
+        const id = project.id;
+        const prefix = "studio-projects/" + id;
+        const markerKey = prefix + "/_complete";
+        if (!r2StudioProjectsUploaded.has(id)) {
+          const alreadyUploaded = await objectStorage.exists(markerKey);
+          if (alreadyUploaded) {
+            r2StudioProjectsUploaded.add(id);
+          } else {
+            const projectDir = path.join(studioProjectRoot, id);
+            if (fs.existsSync(projectDir)) {
+              await objectStorage.uploadDirectory(projectDir, prefix);
+              await objectStorage.putBuffer(markerKey, Buffer.from("ok"), "text/plain");
+              r2StudioProjectsUploaded.add(id);
+            } else {
+              storageWarning = "The project manifest was saved, but its original scene assets are not available in durable storage.";
+            }
+          }
+        }
+        await objectStorage.putJson(prefix + "/project.json", project);
+        durable = r2StudioProjectsUploaded.has(id);
+      } catch (error) {
+        storageWarning = "The edit was saved to temporary storage, but the durable copy could not be updated.";
+        console.warn("Could not update the studio project in R2:", error.message);
+      }
+    }
     res.set("Cache-Control", "private, no-store");
-    res.json({ saved: true, id: project.id, updatedAt: project.updatedAt });
+    res.json({ saved: true, durable, storageWarning, id: project.id, updatedAt: project.updatedAt });
   } catch (error) {
     const message = String(error.message || error);
     const status = /not found|expired/i.test(message) ? 404 : 400;
@@ -248,10 +340,22 @@ app.put("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
 app.get("/api/studio/projects/:projectId/assets/:filename", requireAuth, async (req, res) => {
   try {
     const assetPath = resolveStudioAsset(studioProjectRoot, req.params.projectId, req.params.filename);
-    const stat = await fs.promises.stat(assetPath);
-    if (!stat.isFile()) return res.status(404).send("Studio asset not found.");
+    try {
+      const stat = await fs.promises.stat(assetPath);
+      if (stat.isFile()) {
+        res.set("Cache-Control", "private, max-age=300");
+        return res.sendFile(assetPath);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    if (!objectStorage.configured) return res.status(404).send("Studio asset not found.");
+    const stored = await objectStorage.getObject("studio-projects/" + String(req.params.projectId).toLowerCase() + "/" + req.params.filename);
+    if (!stored?.Body) return res.status(404).send("Studio asset not found.");
     res.set("Cache-Control", "private, max-age=300");
-    res.sendFile(assetPath);
+    if (stored.ContentType) res.set("Content-Type", stored.ContentType);
+    if (stored.ContentLength) res.set("Content-Length", String(stored.ContentLength));
+    stored.Body.pipe(res);
   } catch (error) {
     if (error.code === "ENOENT") return res.status(404).send("Studio asset not found.");
     res.status(400).send(error.message || "Invalid studio asset.");
@@ -946,7 +1050,8 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
         if (message) job.message = String(message).slice(0, 180);
         persistGenerationJobs();
       }, { studioProjectRoot });
-      job.result = { ...details, downloadUrl: "/api/generated/" + filename };
+      const durableDetails = await persistGenerationArtifacts(outputPath, details);
+      job.result = { ...durableDetails, downloadUrl: "/api/generated/" + filename };
       job.progress = 100;
       job.message = "Your finished film is ready.";
       job.state = "completed";
@@ -1006,18 +1111,36 @@ app.get("/api/generate/:jobId", async (req, res) => {
   return res.json({ state: job.state, progress: Number(job.progress) || 0, message: job.message || "YTAgent is processing your film." });
 });
 
-app.get("/api/generated/:filename", (req, res) => {
+app.get("/api/generated/:filename", async (req, res) => {
   const filename = String(req.params.filename || "");
   if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename)) return res.status(404).send("Video not found.");
   const filePath = path.join(uploadDir, filename);
-  if (!fs.existsSync(filePath)) return res.status(404).send("This generated video has expired or is no longer available.");
-  res.download(filePath, "YTAgent-video.mp4", error => {
-    if (!error) {
-      fs.promises.unlink(filePath).catch(unlinkError => console.warn("Downloaded video cleanup failed:", unlinkError.message));
-    } else if (!res.headersSent) {
-      res.status(500).send("The video download failed. Please try again before the temporary file expires.");
-    }
-  });
+  if (fs.existsSync(filePath)) {
+    return res.download(filePath, "YTAgent-video.mp4", error => {
+      if (!error) {
+        fs.promises.unlink(filePath).catch(unlinkError => console.warn("Downloaded video cleanup failed:", unlinkError.message));
+      } else if (!res.headersSent) {
+        res.status(500).send("The video download failed. Please try again before the temporary file expires.");
+      }
+    });
+  }
+  if (!objectStorage.configured) return res.status(404).send("This generated video has expired or is no longer available.");
+  try {
+    const stored = await objectStorage.getObject("generated/" + filename);
+    if (!stored?.Body) return res.status(404).send("This generated video could not be found.");
+    res.set("Content-Type", stored.ContentType || "video/mp4");
+    if (stored.ContentLength) res.set("Content-Length", String(stored.ContentLength));
+    res.set("Content-Disposition", 'attachment; filename="YTAgent-video.mp4"');
+    stored.Body.on("error", error => {
+      console.error("R2 video stream failed:", error.message);
+      if (!res.headersSent) res.status(502).end("The stored video could not be streamed.");
+      else res.destroy(error);
+    });
+    stored.Body.pipe(res);
+  } catch (error) {
+    console.error("R2 video download failed:", error.message);
+    if (!res.headersSent) res.status(502).send("The stored video could not be downloaded.");
+  }
 });
 
 
@@ -1166,16 +1289,26 @@ app.post("/auth/logout", (req, res) => req.session.destroy(() => res.json({ succ
 app.get("/health", (_req, res) => res.json({
   ok: true,
   app: "YTAgent",
-  storage: { mode: "temporary", autoDeleteAfterDownload: true, expiryHours: 6 },
-  jobs: { redisQueueEnabled: redisEnabled, durableQueueConfigured: redisEnabled },
-  durabilityReady: false
+  storage: {
+    mode: objectStorage.configured ? "cloudflare-r2" : "temporary",
+    durable: objectStorage.configured,
+    r2Configured: objectStorage.configured,
+    localExpiryHours: 6
+  },
+  jobs: {
+    redisQueueEnabled: redisEnabled,
+    durableQueueConfigured: Boolean(redisConnection && redisConnection.status === "ready"),
+    redisConfigured: redisEnabled,
+    redisConnected: Boolean(redisConnection && redisConnection.status === "ready"),
+    sessionStore: redisConnection ? "redis" : "memory"
+  },
+  durabilityReady: Boolean(redisConnection && redisConnection.status === "ready" && objectStorage.configured)
 }));
 app.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Video is too large. Maximum size is 256 MB." });
   res.status(400).json({ error: err.message || "Something went wrong." });
 });
 if (redisEnabled) {
-  redisConnection = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
   analysisQueue = new Queue(taskQueueName, { connection: redisConnection });
   const configuredConcurrency = Number(process.env.ANALYSIS_CONCURRENCY || 4);
   const concurrency = Number.isInteger(configuredConcurrency) ? Math.min(50, Math.max(1, configuredConcurrency)) : 4;
@@ -1187,7 +1320,7 @@ if (redisEnabled) {
     } finally {
       await fs.promises.unlink(job.data.path).catch(() => {});
     }
-  }, { connection: redisConnection, concurrency });
+  }, { connection: redisConnection, concurrency, drainDelay: 30 });
   worker.on("failed", (job, error) => console.error("Analysis task failed:", job?.id, error.message));
   worker.on("error", error => console.error("Analysis worker error:", error.message));
 
@@ -1199,15 +1332,16 @@ if (redisEnabled) {
         await job.updateProgress(Math.max(0, Math.min(99, Number(progress) || 0)));
         await job.updateData({ ...job.data, message: String(message || "").slice(0, 180) });
       }, { studioProjectRoot });
+      const durableDetails = await persistGenerationArtifacts(job.data.outputPath, details);
       await job.updateProgress(100);
       scheduleGeneratedFileExpiry(job.data.outputPath);
-      if (details.studioProjectId) scheduleStudioProjectExpiry(details.studioProjectId);
-      return { ...details, downloadUrl: "/api/generated/" + job.data.filename };
+      if (durableDetails.studioProjectId) scheduleStudioProjectExpiry(durableDetails.studioProjectId);
+      return { ...durableDetails, downloadUrl: "/api/generated/" + job.data.filename };
     } catch (error) {
       await fs.promises.unlink(job.data.outputPath).catch(() => {});
       throw error;
     }
-  }, { connection: redisConnection, concurrency: 1 });
+  }, { connection: redisConnection, concurrency: 1, drainDelay: 30 });
   generationWorker.on("failed", (job, error) => console.error("Video generation task failed:", job?.id, error.message));
   generationWorker.on("error", error => console.error("Video generation worker error:", error.message));
   console.log("YTAgent Redis queues enabled. Analysis concurrency:", concurrency, "Video generation concurrency: 1");
@@ -1218,5 +1352,9 @@ if (redisEnabled) {
 restoreGenerationJobs();
 restoreGeneratedFileExpiries();
 restoreStudioProjectExpiries();
-console.log("Generated videos use temporary local storage, are deleted after successful download, and expire after six hours.");
+if (objectStorage.configured) {
+  console.log("Cloudflare R2 artifact storage is enabled. Local working copies expire after six hours.");
+} else {
+  console.warn("R2 is not configured. Generated videos and studio projects use temporary local storage and expire after six hours.");
+}
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

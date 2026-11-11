@@ -100,6 +100,23 @@ const generateButton = document.getElementById("generateVideo");
 const generatorStatus = document.getElementById("generatorStatus");
 const generatedDownload = document.getElementById("generatedDownload");
 const generatedEdit = document.getElementById("generatedEdit");
+const lastStudioProjectKey = "ytagent-last-studio-project";
+function restoreLastStudioProject() {
+  if (!generatedEdit) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem(lastStudioProjectKey) || "null");
+    if (!saved || !/^[a-f0-9]{24}$/i.test(String(saved.id || "")) || Number(saved.expiresAt) <= Date.now()) {
+      localStorage.removeItem(lastStudioProjectKey);
+      return;
+    }
+    generatedEdit.href = "/studio?project=" + encodeURIComponent(saved.id);
+    generatedEdit.textContent = "Reopen last editable studio ↗";
+    generatedEdit.classList.remove("hidden");
+  } catch (_) {
+    localStorage.removeItem(lastStudioProjectKey);
+  }
+}
+restoreLastStudioProject();
 const generationOrb = document.getElementById("generationOrb");
 const generationProgress = document.getElementById("generationProgress");
 const generationProgressFill = document.getElementById("generationProgressFill");
@@ -123,6 +140,9 @@ function showGeneratedVideo(data, topic) {
   generatedDownload.classList.remove("hidden");
   if (data.studioProjectId && generatedEdit) {
     generatedEdit.href = "/studio?project=" + encodeURIComponent(data.studioProjectId);
+    generatedEdit.textContent = "Open editable production studio ↗";
+    const keepMs = data.storage?.projectStored ? 30 * 24 * 60 * 60 * 1000 : 6 * 60 * 60 * 1000;
+    try { localStorage.setItem(lastStudioProjectKey, JSON.stringify({ id: data.studioProjectId, expiresAt: Date.now() + keepMs })); } catch (_) {}
     generatedEdit.classList.remove("hidden");
   } else if (generatedEdit) {
     generatedEdit.classList.add("hidden");

@@ -64,6 +64,25 @@ async function generateWanSceneClips(scenes, topic, workDir) {
     throw new Error("VIDEO_WORKER_URL must be a valid HTTPS URL: " + error.message);
   }
 
+  // Check the temporary Kaggle/Cloudflare endpoint before submitting a costly GPU job.
+  // Cloudflare trycloudflare URLs change when the tunnel or notebook session restarts.
+  try {
+    const health = await fetch(baseUrl + "/health", { signal: AbortSignal.timeout(12000) });
+    if (!health.ok) {
+      throw new Error("health check returned HTTP " + health.status);
+    }
+    const healthData = await health.json().catch(() => ({}));
+    if (healthData.ok !== true || healthData.service !== "ytagent-wan-worker") {
+      throw new Error("the endpoint did not identify itself as the YTAgent GPU worker");
+    }
+  } catch (error) {
+    throw new Error(
+      "The free Kaggle GPU worker cannot be reached at VIDEO_WORKER_URL. " +
+      "Its Cloudflare tunnel may have expired. Refresh the existing Kaggle notebook (run the code-update cell, restart the worker cell, then check the tunnel URL) and update VIDEO_WORKER_URL in Railway. " +
+      "Details: " + clean(error.message || error, 220)
+    );
+  }
+
   const submitted = await workerRequest(baseUrl, token, "/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

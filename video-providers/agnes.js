@@ -91,14 +91,23 @@ async function createVideoTask(apiKey, model, prompt, seed) {
 
 async function waitForVideo(apiKey, model, videoId, onProgress) {
   const deadline = Date.now() + 15 * 60 * 1000;
-  let waitMs = 8000;
+  let waitMs = 12000;
   while (Date.now() < deadline) {
     await delay(waitMs);
     const url = BASE_URL + "/agnesapi?video_id=" + encodeURIComponent(videoId) +
       "&model_name=" + encodeURIComponent(model);
-    const payload = await requestJson(url, {
-      headers: { Authorization: "Bearer " + apiKey }
-    }, "Agnes video status check", 30000);
+    let payload;
+    try {
+      payload = await requestJson(url, {
+        headers: { Authorization: "Bearer " + apiKey }
+      }, "Agnes video status check", 30000);
+    } catch (error) {
+      const retryable = error.status === 429 || error.status === 503 ||
+        /rate.?limit|too many|temporarily unavailable/i.test(error.message);
+      if (!retryable) throw error;
+      waitMs = Math.min(30000, Math.max(12000, waitMs * 2));
+      continue;
+    }
     const status = getTaskStatus(payload);
     const data = taskPayload(payload);
     if (typeof onProgress === "function") onProgress(status, Number(data.progress || 0));

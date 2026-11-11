@@ -24,7 +24,6 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, claimTi
         reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may have disconnected or run out of GPU quota."));
       }
     }, claimTimeoutMs);
-    if (job.timer.unref) job.timer.unref();
     jobs.set(id, job);
     pending.push(id);
   });

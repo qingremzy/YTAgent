@@ -229,6 +229,9 @@ async function generateEducationalVideo(topic, outputPath) {
   if (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) {
     throw new Error("Add GEMINI_API_KEY or GROQ_API_KEY in Railway Variables before generating videos.");
   }
+  if (!process.env.AGNES_API_KEY) {
+    throw new Error("Add AGNES_API_KEY in Railway Variables to enable hosted AI video generation. No temporary GPU worker is required.");
+  }
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable on this server.");
   const storyboard = await requestStoryboard(topic);
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 10) {
@@ -244,7 +247,7 @@ async function generateEducationalVideo(topic, outputPath) {
   const blueprint = compileBlueprint(storyboard, { language: "en", voiceId: process.env.EDGE_TTS_VOICE || "en-US-AriaNeural" });
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-film-"));
   try {
-    // The current visual provider still supplies ten moving scene plates.
+    // Agnes supplies five 12-second cinematic clips, which are split into ten scene plates.
     const generatedClips = await requestGeneratedScenes(storyboard.scenes, topic, workDir);
     const voiceProviders = new Set();
     const sceneAssets = [];

@@ -8,7 +8,7 @@ const EDITOR_CONFIGURATION = {
   views: {
     timeline: true,
     mixer: true,
-    layers: true,
+    layers: false,
     assets: false,
     json: false,
     keyframeLanes: true,

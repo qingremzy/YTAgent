@@ -89,15 +89,6 @@ async function listKaggleTools() {
 
 
 
-function toKaggleFieldNames(value) {
-  if (Array.isArray(value)) return value.map(toKaggleFieldNames);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
-    key.replace(/[A-Z]/g, letter => "_" + letter.toLowerCase()),
-    toKaggleFieldNames(item)
-  ]));
-}
-
 async function callKaggleTool(toolName, request = {}) {
   const token = String(process.env.KAGGLE_API_TOKEN || "").trim();
   if (!token) throw new Error("KAGGLE_API_TOKEN is not configured in Railway.");
@@ -119,7 +110,7 @@ async function callKaggleTool(toolName, request = {}) {
   }, sessionId);
   const called = await postMcp(token, {
     jsonrpc: "2.0", id: 3, method: "tools/call",
-    params: { name: toolName, arguments: { request: toKaggleFieldNames(request) } }
+    params: { name: toolName, arguments: { request } }
   }, sessionId);
   if (called.payload?.error) {
     throw new Error(called.payload.error.message || ("Kaggle tool failed: " + toolName));
@@ -133,5 +124,5 @@ async function callKaggleTool(toolName, request = {}) {
   return result;
 }
 
-module.exports = { listKaggleTools, callKaggleTool, toKaggleFieldNames };
+module.exports = { listKaggleTools, callKaggleTool };
 

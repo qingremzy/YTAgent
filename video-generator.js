@@ -74,12 +74,24 @@ function parseStoryboardJson(raw) {
   throw new Error("The AI response contained incomplete JSON.");
 }
 
+function countNarrationWords(value) {
+  return String(value || "").trim().split(/\\s+/).filter(Boolean).length;
+}
+
 function validateStoryboard(storyboard) {
   if (!storyboard || typeof storyboard !== "object" || Array.isArray(storyboard)) throw new Error("Storyboard must be a JSON object.");
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 10) throw new Error("Storyboard must contain exactly 10 scenes.");
+  var seenNarration = new Set();
   for (var i = 0; i < storyboard.scenes.length; i++) {
     var scene = storyboard.scenes[i];
     if (!scene || !scene.narration || !scene.visual_direction || !scene.caption) throw new Error("Scene " + (i + 1) + " is missing narration, visual_direction or caption.");
+    var narration = String(scene.narration).trim();
+    if (narration.length > 220) throw new Error("Scene " + (i + 1) + " narration is too long for its six-second slot.");
+    var wordCount = countNarrationWords(narration);
+    if (wordCount < 8 || wordCount > 16) throw new Error("Scene " + (i + 1) + " narration has " + wordCount + " words. Use 8 to 16 words so the spoken line can fit its six-second scene.");
+    var normalized = narration.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\\s+/g, " ");
+    if (seenNarration.has(normalized)) throw new Error("Scene " + (i + 1) + " repeats narration from another scene. Every scene needs a distinct spoken line.");
+    seenNarration.add(normalized);
   }
   ["tags", "hashtags", "keywords"].forEach(function(key) { if (!Array.isArray(storyboard[key])) storyboard[key] = []; });
   return storyboard;
@@ -303,4 +315,4 @@ async function generateEducationalVideo(topic, outputPath) {
     await fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
-module.exports = { generateEducationalVideo, isGroqTtsEnabled };
+module.exports = { generateEducationalVideo, isGroqTtsEnabled, validateStoryboard, countNarrationWords };

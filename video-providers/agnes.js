@@ -272,6 +272,7 @@ async function generateSceneClips(scenes, topic, workDir) {
 
 module.exports = {
   generateSceneClips,
+  requestJson,
   buildPairPrompt,
   getVideoId,
   getTaskStatus,

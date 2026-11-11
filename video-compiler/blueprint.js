@@ -1,9 +1,8 @@
 /**
  * YTAgent Video Compiler — blueprint layer.
  *
- * The AI director describes a film in constrained data. It never supplies
- * executable JavaScript, Python, shell commands, or raw renderer expressions.
- * A renderer can safely translate this blueprint into a complete MP4.
+ * AI supplies constrained film instructions, never executable code.
+ * The renderer must produce one complete film and a mandatory narrator track.
  */
 
 const TOTAL_DURATION_SECONDS = 60;
@@ -15,17 +14,14 @@ const CAMERA_MOVES = new Set([
   "pan_left", "pan_right", "tilt_up", "tilt_down",
   "track_forward", "track_backward", "locked"
 ]);
-
 const LIGHTING_PRESETS = new Set([
   "cinematic_soft", "dramatic_rim", "volumetric", "high_key",
   "low_key", "neon", "warm_natural", "cool_scientific"
 ]);
-
 const ENVIRONMENT_TYPES = new Set([
   "studio", "space", "underwater", "microscopic", "human_body",
   "nature", "city", "laboratory", "abstract"
 ]);
-
 const ACTION_TYPES = new Set([
   "reveal", "rotate", "move_forward", "move_backward", "expand",
   "contract", "pulse", "flow", "orbit", "split", "assemble",
@@ -42,18 +38,6 @@ function text(value, field, max = 220) {
   return result;
 }
 
-function enumValue(value, allowed, field, fallback) {
-  const candidate = typeof value === "string" ? value : fallback;
-  if (!allowed.has(candidate)) {
-    throw new Error("Video blueprint: unsupported " + field + " '" + candidate + "'.");
-  }
-  return candidate;
-}
-
-/**
- * Convert a validated AI storyboard into renderer-neutral scene instructions.
- * Ten six-second shots form one continuous sixty-second film timeline.
- */
 function compileBlueprint(storyboard, options = {}) {
   if (!storyboard || typeof storyboard !== "object" || Array.isArray(storyboard)) {
     throw new Error("Video blueprint: storyboard must be an object.");
@@ -72,13 +56,6 @@ function compileBlueprint(storyboard, options = {}) {
     const narration = text(scene.narration, "scene " + (index + 1) + " narration", 260);
     const caption = text(scene.caption || scene.title || narration, "scene " + (index + 1) + " caption", 120);
 
-    // AI output is mapped to a small, safe vocabulary. Unknown values receive
-    // sensible defaults rather than being interpreted as executable code.
-    const action = ACTION_TYPES.has(scene.action) ? scene.action : "demonstrate";
-    const environment = ENVIRONMENT_TYPES.has(scene.environment) ? scene.environment : "abstract";
-    const camera = CAMERA_MOVES.has(scene.camera) ? scene.camera : "push_in";
-    const lighting = LIGHTING_PRESETS.has(scene.lighting) ? scene.lighting : "cinematic_soft";
-
     return Object.freeze({
       id: "shot-" + String(index + 1).padStart(2, "0"),
       index,
@@ -87,14 +64,21 @@ function compileBlueprint(storyboard, options = {}) {
       end_seconds: (index + 1) * SCENE_DURATION_SECONDS,
       title: text(scene.title || "The next discovery", "scene " + (index + 1) + " title", 90),
       narration,
+      narration_segment: Object.freeze({
+        required: true,
+        text: narration,
+        timeline_start_seconds: index * SCENE_DURATION_SECONDS,
+        timeline_end_seconds: (index + 1) * SCENE_DURATION_SECONDS,
+        caption_sync: "word_level"
+      }),
       caption,
       visual_direction: direction,
       world: Object.freeze({
-        environment,
+        environment: ENVIRONMENT_TYPES.has(scene.environment) ? scene.environment : "abstract",
         subject: text(scene.subject || direction, "scene " + (index + 1) + " subject", 240),
-        action,
-        camera,
-        lighting,
+        action: ACTION_TYPES.has(scene.action) ? scene.action : "demonstrate",
+        camera: CAMERA_MOVES.has(scene.camera) ? scene.camera : "push_in",
+        lighting: LIGHTING_PRESETS.has(scene.lighting) ? scene.lighting : "cinematic_soft",
         atmosphere: typeof scene.atmosphere === "string"
           ? scene.atmosphere.replace(/[<>]/g, "").slice(0, 120)
           : "cinematic depth"
@@ -115,6 +99,36 @@ function compileBlueprint(storyboard, options = {}) {
     duration_seconds: TOTAL_DURATION_SECONDS,
     scene_count: SCENE_COUNT,
     timeline: "single_continuous_film",
+    audio: Object.freeze({
+      narrator: Object.freeze({
+        required: true,
+        style: "natural_cinematic_documentary",
+        language: options.language || "en",
+        voice_id: options.voiceId || "en-US-AriaNeural",
+        delivery: "expressive_clear_storytelling",
+        fail_if_unavailable: true
+      }),
+      captions: Object.freeze({
+        required: true,
+        synchronization: "word_level_from_narration_timestamps",
+        burn_into_video: true
+      }),
+      music: Object.freeze({
+        required: true,
+        style: "cinematic_adaptive",
+        duck_under_narration: true
+      }),
+      sound_effects: Object.freeze({
+        enabled: true,
+        synchronized_to_scene_actions: true
+      }),
+      mix: Object.freeze({
+        narrator_priority: "foreground",
+        prevent_clipping: true,
+        target_loudness_lufs: -14,
+        true_peak_db: -1
+      })
+    }),
     scenes: Object.freeze(scenes)
   });
 }

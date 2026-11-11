@@ -165,7 +165,7 @@ async function requestGeneratedScenes(scenes, topic, workDir) {
 async function generateNarration(text, outputPath) {
   const narration = cleanText(text, 220);
   if (!narration) throw new Error("One scene is missing its narration.");
-  if (process.env.GROQ_API_KEY) {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_TTS_ENABLED === "true") {
     try {
       const response = await fetch("https://api.groq.com/openai/v1/audio/speech", {
         method: "POST",

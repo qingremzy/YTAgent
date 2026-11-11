@@ -263,7 +263,7 @@ app.get("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
   try {
     let project = await readStudioProject(studioProjectRoot, req.params.projectId);
     if (!project && objectStorage.configured) {
-      project = await objectStorage.getJson("studio-projects/" + req.params.projectId + "/project.json");
+      project = await objectStorage.getJson("studio-projects/" + String(req.params.projectId).toLowerCase() + "/project.json");
     }
     if (!project) return res.status(404).json({ error: "This editable project could not be found." });
     res.set("Cache-Control", "private, no-store");
@@ -293,7 +293,9 @@ app.put("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
     let storageWarning = null;
     if (objectStorage.configured) {
       try {
-        await objectStorage.putJson("studio-projects/" + project.id + "/project.json", project);
+        const projectDir = path.join(studioProjectRoot, project.id);
+        if (fs.existsSync(projectDir)) await objectStorage.uploadDirectory(projectDir, "studio-projects/" + project.id);
+        else await objectStorage.putJson("studio-projects/" + project.id + "/project.json", project);
         durable = true;
       } catch (error) {
         storageWarning = "The edit was saved to temporary storage, but the durable copy could not be updated.";
@@ -322,7 +324,7 @@ app.get("/api/studio/projects/:projectId/assets/:filename", requireAuth, async (
       if (error.code !== "ENOENT") throw error;
     }
     if (!objectStorage.configured) return res.status(404).send("Studio asset not found.");
-    const stored = await objectStorage.getObject("studio-projects/" + req.params.projectId + "/" + req.params.filename);
+    const stored = await objectStorage.getObject("studio-projects/" + String(req.params.projectId).toLowerCase() + "/" + req.params.filename);
     if (!stored?.Body) return res.status(404).send("Studio asset not found.");
     res.set("Cache-Control", "private, max-age=300");
     if (stored.ContentType) res.set("Content-Type", stored.ContentType);
@@ -1083,18 +1085,36 @@ app.get("/api/generate/:jobId", async (req, res) => {
   return res.json({ state: job.state, progress: Number(job.progress) || 0, message: job.message || "YTAgent is processing your film." });
 });
 
-app.get("/api/generated/:filename", (req, res) => {
+app.get("/api/generated/:filename", async (req, res) => {
   const filename = String(req.params.filename || "");
   if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename)) return res.status(404).send("Video not found.");
   const filePath = path.join(uploadDir, filename);
-  if (!fs.existsSync(filePath)) return res.status(404).send("This generated video has expired or is no longer available.");
-  res.download(filePath, "YTAgent-video.mp4", error => {
-    if (!error) {
-      fs.promises.unlink(filePath).catch(unlinkError => console.warn("Downloaded video cleanup failed:", unlinkError.message));
-    } else if (!res.headersSent) {
-      res.status(500).send("The video download failed. Please try again before the temporary file expires.");
-    }
-  });
+  if (fs.existsSync(filePath)) {
+    return res.download(filePath, "YTAgent-video.mp4", error => {
+      if (!error) {
+        fs.promises.unlink(filePath).catch(unlinkError => console.warn("Downloaded video cleanup failed:", unlinkError.message));
+      } else if (!res.headersSent) {
+        res.status(500).send("The video download failed. Please try again before the temporary file expires.");
+      }
+    });
+  }
+  if (!objectStorage.configured) return res.status(404).send("This generated video has expired or is no longer available.");
+  try {
+    const stored = await objectStorage.getObject("generated/" + filename);
+    if (!stored?.Body) return res.status(404).send("This generated video could not be found.");
+    res.set("Content-Type", stored.ContentType || "video/mp4");
+    if (stored.ContentLength) res.set("Content-Length", String(stored.ContentLength));
+    res.set("Content-Disposition", 'attachment; filename="YTAgent-video.mp4"');
+    stored.Body.on("error", error => {
+      console.error("R2 video stream failed:", error.message);
+      if (!res.headersSent) res.status(502).end("The stored video could not be streamed.");
+      else res.destroy(error);
+    });
+    stored.Body.pipe(res);
+  } catch (error) {
+    console.error("R2 video download failed:", error.message);
+    if (!res.headersSent) res.status(502).send("The stored video could not be downloaded.");
+  }
 });
 
 

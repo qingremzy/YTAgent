@@ -48,7 +48,8 @@ function buildNotebookSaveRequest(slug, source, metadata = {}) {
     kernelDataSources: get("kernelDataSources", "kernel_data_sources", []),
     competitionDataSources: get("competitionDataSources", "competition_data_sources", []),
     modelDataSources: get("modelDataSources", "model_data_sources", []),
-    categoryIds: get("categoryIds", "category_ids", [])
+    categoryIds: get("categoryIds", "category_ids", []),
+    kernelExecutionType: "SaveAndRunAll"
   };
 }
 

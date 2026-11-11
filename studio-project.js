@@ -133,10 +133,16 @@ function validateStudioSource(source, projectId) {
       }
       ids.add(element.id);
     }
-    if (element.time !== undefined && (!Number.isFinite(element.time) || element.time < 0)) {
+    if (element.time !== undefined && !(
+      (typeof element.time === "number" && Number.isFinite(element.time) && element.time >= 0) ||
+      (typeof element.time === "string" && element.time.length > 0 && element.time.length <= 32)
+    )) {
       throw new Error("Studio timeline element " + (index + 1) + " has an invalid start time.");
     }
-    if (element.duration !== undefined && (!Number.isFinite(element.duration) || element.duration <= 0)) {
+    if (element.duration !== undefined && !(
+      (typeof element.duration === "number" && Number.isFinite(element.duration) && element.duration > 0) ||
+      (typeof element.duration === "string" && element.duration.length > 0 && element.duration.length <= 32)
+    )) {
       throw new Error("Studio timeline element " + (index + 1) + " has an invalid duration.");
     }
     if (["image", "video", "audio"].includes(element.type)) {

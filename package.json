@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test video-compiler/*.test.js video-providers/*.test.js middleware/*.test.js kaggle-mcp.test.js gpu-worker-bridge.test.js kaggle-notebook.test.js studio-project.test.js kaggle-worker-session.test.js",
+    "test": "node --test video-compiler/*.test.js video-providers/*.test.js middleware/*.test.js kaggle-mcp.test.js gpu-worker-bridge.test.js kaggle-notebook.test.js studio-project.test.js kaggle-worker-session.test.js object-storage.test.js",
     "build": "vite build --config studio/vite.config.mjs",
     "dev:studio": "vite --config studio/vite.config.mjs"
   },
@@ -29,7 +29,9 @@
     "@clipkit/editor": "1.1.0",
     "@clipkit/runtime": "1.4.0",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "@aws-sdk/client-s3": "^3.850.0",
+    "connect-redis": "8.0.2"
   },
   "devDependencies": {
     "vite": "^6.4.6",

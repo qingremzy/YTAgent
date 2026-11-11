@@ -8,11 +8,12 @@ test("builds a moving cinematic 3D prompt for each storyboard action", () => {
     "How cells communicate",
     2
   );
-  assert.match(prompt, /cinematic 3D animated documentary/);
-  assert.match(prompt, /continuous visible motion/);
+  assert.match(prompt, /stylized 3D animated explainer/);
+  assert.match(prompt, /continuous movement/);
   assert.match(prompt, /scientist carefully lifts/);
-  assert.match(prompt, /vertical mobile video/);
+  assert.match(prompt, /vertical mobile viewing/);
   assert.match(prompt, /orbit around the main subject/);
+  assert.match(prompt, /Avoid abstract swirls/);
 });
 
 test("refuses to contact an unconfigured GPU worker", async () => {

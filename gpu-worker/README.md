@@ -1,66 +1,32 @@
 # YTAgent free GPU video worker
 
-This worker runs the open Wan 2.1 T2V 1.3B Diffusers model on a temporary GPU notebook. Railway remains the YTAgent web app and calls this worker over a temporary Cloudflare Tunnel URL.
+This worker runs the open Wan 2.1 T2V 1.3B Diffusers model on a temporary Kaggle GPU notebook. Railway handles the YTAgent dashboard, storyboard, narration, editing and YouTube publishing. The notebook connects **outbound** to Railway and polls for work.
 
-## Important limits
+## Why this version is better
 
-- This is genuine text-to-video generation, not a photo slideshow.
-- The 1.3B model creates portrait 480p clips of about six seconds. YTAgent adds captions and narration, then assembles ten clips into one vertical 60-second Short.
-- Ten six-second scenes can take a long time on a free GPU. Free notebook sessions can disconnect or hit usage limits.
-- Keep the Kaggle notebook running while YTAgent generates a video.
-- No paid video API is used. GPU availability is not guaranteed.
-- This is a first real-video engine, not a promise of Zack D Films-level quality. The 1.3B model is a constrained free-compute starting point.
+- No Cloudflare Tunnel.
+- No temporary public worker URL.
+- No need to update `VIDEO_WORKER_URL` whenever a notebook restarts.
+- The worker claims a job from Railway, generates ten real video clips, and securely uploads each MP4 over HTTPS.
+- The Railway app validates every uploaded MP4 before assembling the final film.
 
-## Start on Kaggle
+## Requirements and limits
 
-1. Open Kaggle, create a new Notebook, turn **Internet on**, and select a **GPU** accelerator.
-2. Clone this repository and install the worker dependencies:
+- Kaggle Notebook with Internet enabled and a GPU accelerator selected.
+- Keep the notebook session running while generation is in progress.
+- The 1.3B model creates portrait 480p clips. Ten six-second scenes are assembled into one narrated, captioned 60-second Short.
+- Ten scenes can take a long time on a free GPU. Kaggle sessions and GPU quota are not guaranteed.
+- This is a free-compute starting point, not a promise of Zack D Films-level quality.
 
-```bash
-!git clone https://github.com/qingremzy/YTAgent.git
-%cd YTAgent/gpu-worker
-!pip install -r requirements.txt
-!wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
-!chmod +x /usr/local/bin/cloudflared
-```
+## Notebook setup
 
-3. Create a long random token and keep it private. Run this cell:
+Open `YTAgent_Free_GPU_Worker.ipynb` in Kaggle. Run the cells in order:
 
-```python
-import secrets, os
-token = secrets.token_urlsafe(36)
-os.environ["YT_AGENT_WORKER_TOKEN"] = token
-print("Copy this token into Railway as YT_AGENT_WORKER_TOKEN:", token)
-```
+1. Pull the latest repository code and install worker packages.
+2. Load the private `YT_AGENT_WORKER_TOKEN` from the existing notebook session or Kaggle Notebook Secrets, then verify the GPU.
+3. Start the worker. It will automatically poll YTAgent at `https://ytagent-production-1038.up.railway.app`.
 
-4. Start the worker and tunnel:
-
-```python
-import subprocess, time, re, os
-worker = subprocess.Popen(
-    ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"],
-    cwd="/kaggle/working/YTAgent/gpu-worker",
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.STDOUT
-)
-tunnel = subprocess.Popen(
-    ["cloudflared", "tunnel", "--url", "http://127.0.0.1:7860"],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.STDOUT,
-    text=True
-)
-for line in iter(tunnel.stdout.readline, ""):
-    match = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", line)
-    if match:
-        print("Set this in Railway as VIDEO_WORKER_URL:", match.group(0))
-        break
-```
-
-5. In Railway Variables, add:
-   - `VIDEO_WORKER_URL` = the Cloudflare URL printed above
-   - `YT_AGENT_WORKER_TOKEN` = the token printed in step 3
-
-6. Redeploy YTAgent if Railway does not automatically redeploy after code changes. Keep the Kaggle notebook session alive while generating.
+Do not print, commit, or share the worker token. If a fresh notebook session is needed, add `YT_AGENT_WORKER_TOKEN` as a Kaggle Notebook Secret before starting the worker. The same value must already exist as a private Railway variable.
 
 ## Model
 
@@ -68,11 +34,10 @@ Wan 2.1 T2V 1.3B Diffusers: `Wan-AI/Wan2.1-T2V-1.3B-Diffusers`.
 
 Official model code and hardware guidance: https://github.com/Wan-Video/Wan2.1
 
+## Troubleshooting
 
-## How YTAgent uses the worker
-
-When both `VIDEO_WORKER_URL` and `YT_AGENT_WORKER_TOKEN` are configured in Railway, YTAgent automatically tries this Wan worker first. It submits the ten storyboard prompts, waits for completion, downloads the ten individual MP4 scenes, then passes them to the existing low-memory FFmpeg compiler for narration, captions and final assembly.
-
-If the notebook is offline, the worker is busy, or generation fails, YTAgent falls back safely. Agnes is only attempted when `AGNES_FREE_QUOTA_CONFIRMED=true` and its key is present. Otherwise the local animated-art fallback is used. The fallback is not real AI video.
-
-The notebook is temporary. Its public Cloudflare Tunnel URL changes when the tunnel restarts, and the Kaggle session must remain active for the entire generation. No free GPU uptime is guaranteed.
+- If the notebook says the token is missing, load the existing Kaggle Secret named `YT_AGENT_WORKER_TOKEN`.
+- If no GPU is detected, select a GPU accelerator in Kaggle Notebook settings.
+- If the free GPU session disconnects, restart the notebook and run the setup cells again.
+- If the worker is running but no job starts, check that YTAgent's private `YT_AGENT_WORKER_TOKEN` matches the Kaggle secret.
+- The worker no longer needs `VIDEO_WORKER_URL`, a Cloudflare URL, or a tunnel process.

@@ -99,21 +99,38 @@ const generatorForm = document.getElementById("generatorForm");
 const generateButton = document.getElementById("generateVideo");
 const generatorStatus = document.getElementById("generatorStatus");
 const generatedDownload = document.getElementById("generatedDownload");
+const generationStorageKey = "ytagent-generation-job";
+function showGeneratedVideo(data, topic) {
+  generatedDownload.href = data.downloadUrl;
+  generatedDownload.classList.remove("hidden");
+  form.elements.title.value = data.title || topic;
+  form.elements.description.value = data.description || "";
+  form.elements.tags.value = (data.tags || []).join(", ");
+  form.elements.hashtags.value = (data.hashtags || []).join(" ");
+  form.elements.keywords.value = (data.keywords || []).join(", ");
+  generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated video is ready. Voice: " + (data.voice_provider || "AI voice") + ". Ten AI-generated moving 3D scenes, narration and captions are included. Download it, then select it in the publishing section below.";
+}
 async function waitForGeneration(jobId) {
   const deadline = Date.now() + 90 * 60 * 1000;
   while (Date.now() < deadline) {
     const response = await fetch("/api/generate/" + encodeURIComponent(jobId));
     const data = await readJsonResponse(response);
-    if (!response.ok) throw new Error(data.error || "Could not check video generation progress.");
+    if (!response.ok) {
+      if (response.status === 404) localStorage.removeItem(generationStorageKey);
+      throw new Error(data.error || "Could not check video generation progress.");
+    }
     if (data.state === "completed") return data;
-    if (data.state === "failed") throw new Error(data.error || "Video generation failed.");
+    if (data.state === "failed") {
+      localStorage.removeItem(generationStorageKey);
+      throw new Error(data.error || "Video generation failed.");
+    }
     const state = data.state || "waiting";
     generatorStatus.textContent = state === "active"
       ? "YTAgent is creating your film. The page can stay open while the narrator and scenes are prepared…"
       : "Your film is safely queued. Waiting for the video engine…";
     await wait(8000);
   }
-  throw new Error("This video is taking longer than expected. Check again later before starting another generation.");
+  throw new Error("This video is taking longer than expected. Reload this page to resume checking its progress.");
 }
 generatorForm.addEventListener("submit", async event => {
   event.preventDefault();
@@ -132,15 +149,10 @@ generatorForm.addEventListener("submit", async event => {
     const queued = await readJsonResponse(response);
     if (!response.ok) throw new Error(queued.error || "Video generation failed.");
     if (!queued.jobId) throw new Error("The server did not return a video task ID.");
+    localStorage.setItem(generationStorageKey, JSON.stringify({ jobId: queued.jobId, topic }));
     const data = await waitForGeneration(queued.jobId);
-    generatedDownload.href = data.downloadUrl;
-    generatedDownload.classList.remove("hidden");
-    form.elements.title.value = data.title || topic;
-    form.elements.description.value = data.description || "";
-    form.elements.tags.value = (data.tags || []).join(", ");
-    form.elements.hashtags.value = (data.hashtags || []).join(" ");
-    form.elements.keywords.value = (data.keywords || []).join(", ");
-    generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated video is ready. Voice: " + (data.voice_provider || "AI voice") + ". Ten AI-generated moving 3D scenes, narration and captions are included. Download it, then select it in the publishing section below.";
+    localStorage.removeItem(generationStorageKey);
+    showGeneratedVideo(data, topic);
   } catch (error) { generatorStatus.textContent = error.message; }
   finally {
     generateButton.disabled = false;
@@ -148,3 +160,23 @@ generatorForm.addEventListener("submit", async event => {
   }
 });
 refreshStatus();
+
+try {
+  const savedJob = JSON.parse(localStorage.getItem(generationStorageKey) || "null");
+  if (savedJob && savedJob.jobId) {
+    generateButton.disabled = true;
+    generateButton.textContent = "Resuming video generation…";
+    generatorStatus.textContent = "Resuming your previous video task. You can leave this page and return later.";
+    waitForGeneration(savedJob.jobId).then(data => {
+      localStorage.removeItem(generationStorageKey);
+      showGeneratedVideo(data, savedJob.topic || "Your video");
+    }).catch(error => {
+      generatorStatus.textContent = error.message;
+    }).finally(() => {
+      generateButton.disabled = false;
+      generateButton.textContent = "✦ Generate 60-second video";
+    });
+  }
+} catch (_) {
+  localStorage.removeItem(generationStorageKey);
+}

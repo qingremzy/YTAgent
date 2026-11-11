@@ -5,6 +5,8 @@ const { spawn } = require("child_process");
 const sharp = require("sharp");
 const AdmZip = require("adm-zip");
 const ffmpegPath = require("ffmpeg-static");
+const { compileBlueprint } = require("./video-compiler/blueprint");
+const { renderFilm } = require("./video-compiler/renderer");
 
 function cleanText(value, max = 240) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -298,53 +300,41 @@ async function generateEducationalVideo(topic, outputPath) {
     }
   }
 
-  const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-wan-cinema-"));
+  // Convert the director's storyboard into the compiler's constrained film plan.
+  const blueprint = compileBlueprint(storyboard, { language: "en", voiceId: process.env.EDGE_TTS_VOICE || "en-US-AriaNeural" });
+  const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-film-"));
   try {
+    // The current visual provider still supplies ten moving scene plates.
     const generatedClips = await requestGeneratedScenes(storyboard.scenes, topic, workDir);
-    const clips = [];
     const voiceProviders = new Set();
+    const sceneAssets = [];
     for (let i = 0; i < storyboard.scenes.length; i++) {
-      const scene = storyboard.scenes[i];
-      const audioPath = path.join(workDir, "voice-" + i + ".wav");
-      const speech = await generateNarration(scene.narration, audioPath);
+      const audioPath = path.join(workDir, "narration-" + String(i + 1).padStart(2, "0") + ".wav");
+      const speech = await generateNarration(storyboard.scenes[i].narration, audioPath);
       voiceProviders.add(speech.provider);
-      const duration = Math.max(4, Math.min(12, await getMediaDuration(speech.path)));
-      const overlayPath = path.join(workDir, "overlay-" + i + ".png");
-      await sharp(sceneArtwork(scene, i, storyboard.scenes.length)).png().toFile(overlayPath);
-      const clipPath = path.join(workDir, "final-scene-" + i + ".mp4");
-      await run(ffmpegPath, [
-        "-y", "-hide_banner", "-loglevel", "error",
-        "-stream_loop", "-1", "-i", generatedClips[i],
-        "-i", overlayPath, "-i", speech.path,
-        "-filter_complex", "[0:v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1[bg];[bg][1:v]overlay=0:0,format=yuv420p[v]",
-        "-map", "[v]", "-map", "2:a", "-t", String(duration),
-        "-r", "24", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
-        "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart", clipPath
-      ]);
-      clips.push(clipPath);
+      // The renderer checks that every voice file exists and refuses silent scenes.
+      sceneAssets.push({ videoPath: generatedClips[i], narrationPath: speech.path });
     }
-    const concatPath = path.join(workDir, "clips.txt");
-    await fs.promises.writeFile(concatPath, clips.map(file => "file '" + file.replace(/'/g, "'\\''") + "'").join("\n"));
-    await run(ffmpegPath, [
-      "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", concatPath,
-      "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-c:a", "aac", "-b:a", "128k",
-      "-movflags", "+faststart", outputPath
-    ]);
 
+    const rendered = await renderFilm({ blueprint, sceneAssets, outputPath });
     const totalDuration = await getMediaDuration(outputPath);
+    if (Math.abs(totalDuration - 60) > 1.5) {
+      throw new Error("The rendered film did not pass the 60-second duration check.");
+    }
     return {
       title: cleanText(storyboard.title || topic, 100),
-      description: cleanText(storyboard.description || "", 1000) + "\n\nCreated with YTAgent using the open Wan 2.1 text-to-video model.",
+      description: cleanText(storyboard.description || "", 1000) + "\n\nCreated with YTAgent's video compiler.",
       keywords: Array.isArray(storyboard.keywords) ? storyboard.keywords.map(String).slice(0, 12) : [],
       tags: Array.isArray(storyboard.tags) ? storyboard.tags.map(String).slice(0, 15) : [],
       hashtags: Array.isArray(storyboard.hashtags) ? storyboard.hashtags.map(String).slice(0, 5) : [],
       duration_seconds: Math.round(totalDuration),
       scenes: storyboard.scenes.length,
       format: "720x1280 vertical MP4",
-      captions: "Burned into the video",
-      narration: "Included",
+      captions: "Burned into the video (scene-level)",
+      narration: "Included in every scene",
       voice_provider: Array.from(voiceProviders).join(" + "),
-      visuals: "Ten AI-generated moving 3D scenes using Wan 2.1 T2V 1.3B"
+      visuals: "Ten AI-generated moving scenes assembled by the YTAgent video compiler",
+      compiler: rendered
     };
   } finally {
     await fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => {});

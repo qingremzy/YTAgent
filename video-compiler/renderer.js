@@ -60,7 +60,7 @@ function wrap(value, maxChars, maxLines) {
 }
 async function makeOverlay(scene, index, total, output) {
   const title = wrap(scene.title || "The next discovery", 23, 2);
-  const caption = wrap(scene.caption || scene.narration, 31, 3);
+  const caption = wrap(scene.narration || scene.caption, 31, 3);
   const titleText = title.map((line, i) => '<tspan x="36" dy="' + (i ? 42 : 0) + '">' + xml(line) + "</tspan>").join("");
   const captionText = caption.map((line, i) => '<tspan x="36" dy="' + (i ? 31 : 0) + '">' + xml(line) + "</tspan>").join("");
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + WIDTH + '" height="' + HEIGHT + '">' +

@@ -8,6 +8,7 @@ const { compileBlueprint } = require("./video-compiler/blueprint");
 const { renderFilm } = require("./video-compiler/renderer");
 const { generateSceneClips } = require("./video-providers/agnes");
 const { generateWanSceneClips } = require("./video-providers/wan-worker");
+const { generateRewindSceneClips } = require("./video-providers/rewind");
 const { generateFallbackSceneClips } = require("./video-providers/free-visual-fallback");
 
 function cleanText(value, max = 240) {
@@ -163,7 +164,16 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir) {
-  // Never silently substitute abstract artwork for the requested 3D film.
+  // Rewind is opt-in so a newly added API key cannot spend tokens unexpectedly.
+  if (process.env.REWIND_VIDEO_ENABLED === "true" && process.env.REWIND_API_KEY) {
+    try {
+      const clips = await generateRewindSceneClips(scenes, topic, workDir);
+      return { clips, provider: "Rewind AI" };
+    } catch (error) {
+      console.warn("Rewind video generation failed. Checking the free GPU worker:", error.message || error);
+    }
+  }
+
   // Agnes is attempted only when the user has explicitly confirmed a no-charge quota.
   if (process.env.AGNES_API_KEY && process.env.AGNES_FREE_QUOTA_CONFIRMED === "true") {
     try {
@@ -175,7 +185,7 @@ async function requestGeneratedScenes(scenes, topic, workDir) {
   }
 
   if (!process.env.VIDEO_WORKER_URL || !process.env.YT_AGENT_WORKER_TOKEN) {
-    throw new Error("Real 3D video generation is unavailable. Start the free Kaggle GPU worker and connect its current HTTPS tunnel. YTAgent stopped instead of returning abstract artwork.");
+    throw new Error("Real 3D video generation is unavailable. Enable Rewind after confirming its token cost, or start the free Kaggle GPU worker. YTAgent stopped instead of returning abstract artwork.");
   }
 
   try {

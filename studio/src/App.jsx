@@ -127,10 +127,12 @@ export default function App() {
       if (!ready) throw new Error("This browser could not start a supported graphics engine. Update Chrome and try again.");
       runtime.load(source);
       await runtime.preload();
-      const blob = await runtime.export({
+      const exportOptions = {
         renderResolution: request.resolution || "source",
         onProgress: (progress) => setRenderProgress(Math.max(0, Math.min(100, Math.round(progress * 100))))
-      });
+      };
+      if (request.quality === "high") exportOptions.bitrate = 8_000_000;
+      const blob = await runtime.export(exportOptions);
       if (!(blob instanceof Blob) || blob.size < 10000) throw new Error("The editor did not produce a valid MP4.");
       const url = URL.createObjectURL(blob);
       exportUrl.current = url;

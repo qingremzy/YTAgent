@@ -17,8 +17,11 @@ app.set("trust proxy", 1);
 const PORT = Number(process.env.PORT || 3000);
 const redisEnabled = Boolean(process.env.REDIS_URL);
 const taskQueueName = "ytagent-video-analysis";
+const generationQueueName = "ytagent-video-generation";
 let analysisQueue = null;
+let generationQueue = null;
 let redisConnection = null;
+const localGenerationJobs = new Map();
 const uploadDir = path.join(__dirname, "uploads");
 fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -620,17 +623,77 @@ app.post("/api/generate", async (req, res) => {
   const topic = String(req.body?.topic || "").trim();
   if (topic.length < 8) return res.status(400).json({ error: "Enter a video topic with at least 8 characters." });
   if (topic.length > 180) return res.status(400).json({ error: "Keep the topic under 180 characters." });
+  if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: "The hosted video engine is not configured yet. Add AGNES_API_KEY in Railway Variables." });
+  if (generationQueue) {
+    try {
+      const counts = await generationQueue.getJobCounts("waiting", "active", "delayed");
+      if (counts.waiting + counts.active + counts.delayed > 0) {
+        return res.status(409).json({ error: "YTAgent is already generating a film. Wait for it to finish before starting another." });
+      }
+    } catch (error) {
+      console.error("Could not check the video queue:", error.message);
+      return res.status(503).json({ error: "The video task queue is temporarily unavailable." });
+    }
+  } else if (Array.from(localGenerationJobs.values()).some(job => job.state === "waiting" || job.state === "active")) {
+    return res.status(409).json({ error: "YTAgent is already generating a film. Wait for it to finish before starting another." });
+  }
+
   const id = require("crypto").randomBytes(12).toString("hex");
   const filename = "generated-" + id + ".mp4";
   const outputPath = path.join(uploadDir, filename);
-  try {
-    const details = await generateEducationalVideo(topic, outputPath);
-    res.json({ success: true, ...details, downloadUrl: "/api/generated/" + filename });
-  } catch (error) {
-    await fs.promises.unlink(outputPath).catch(() => {});
-    console.error("AI video generation failed:", error.message);
-    res.status(502).json({ error: error.message || "Video generation failed. Please try again." });
+
+  if (generationQueue) {
+    try {
+      const job = await generationQueue.add("generate-film", { topic, outputPath, filename }, {
+        attempts: 1,
+        removeOnComplete: { age: 86400, count: 200 },
+        removeOnFail: { age: 86400, count: 200 }
+      });
+      return res.status(202).json({ success: true, queued: true, jobId: String(job.id) });
+    } catch (error) {
+      console.error("Could not queue AI video generation:", error.message);
+      return res.status(503).json({ error: "The video task queue is unavailable. Please try again later." });
+    }
   }
+
+  const job = { state: "waiting", createdAt: Date.now(), result: null, error: null };
+  localGenerationJobs.set(id, job);
+  setImmediate(async () => {
+    job.state = "active";
+    try {
+      const details = await generateEducationalVideo(topic, outputPath);
+      job.result = { ...details, downloadUrl: "/api/generated/" + filename };
+      job.state = "completed";
+    } catch (error) {
+      await fs.promises.unlink(outputPath).catch(() => {});
+      job.error = error.message || "Video generation failed.";
+      job.state = "failed";
+      console.error("AI video generation failed:", job.error);
+    }
+    setTimeout(() => localGenerationJobs.delete(id), 24 * 60 * 60 * 1000).unref();
+  });
+  return res.status(202).json({ success: true, queued: true, jobId: id });
+});
+
+app.get("/api/generate/:jobId", async (req, res) => {
+  if (generationQueue) {
+    try {
+      const job = await generationQueue.getJob(req.params.jobId);
+      if (!job) return res.status(404).json({ error: "Video generation task not found." });
+      const state = await job.getState();
+      if (state === "completed") return res.json({ state, ...job.returnvalue });
+      if (state === "failed") return res.json({ state, error: job.failedReason || "Video generation failed." });
+      return res.json({ state, progress: typeof job.progress === "number" ? job.progress : 0 });
+    } catch (error) {
+      console.error("Video generation status check failed:", error.message);
+      return res.status(503).json({ error: "Could not check video generation progress." });
+    }
+  }
+  const job = localGenerationJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Video generation task not found. It may have expired after a server restart." });
+  if (job.state === "completed") return res.json({ state: job.state, ...job.result });
+  if (job.state === "failed") return res.json({ state: job.state, error: job.error });
+  return res.json({ state: job.state, progress: 0 });
 });
 
 app.get("/api/generated/:filename", (req, res) => {
@@ -663,7 +726,22 @@ if (redisEnabled) {
   }, { connection: redisConnection, concurrency });
   worker.on("failed", (job, error) => console.error("Analysis task failed:", job?.id, error.message));
   worker.on("error", error => console.error("Analysis worker error:", error.message));
-  console.log("YTAgent task queue enabled. Worker concurrency:", concurrency);
+
+  generationQueue = new Queue(generationQueueName, { connection: redisConnection });
+  const generationWorker = new Worker(generationQueueName, async job => {
+    try {
+      await job.updateProgress(5);
+      const details = await generateEducationalVideo(job.data.topic, job.data.outputPath);
+      await job.updateProgress(100);
+      return { ...details, downloadUrl: "/api/generated/" + job.data.filename };
+    } catch (error) {
+      await fs.promises.unlink(job.data.outputPath).catch(() => {});
+      throw error;
+    }
+  }, { connection: redisConnection, concurrency: 1 });
+  generationWorker.on("failed", (job, error) => console.error("Video generation task failed:", job?.id, error.message));
+  generationWorker.on("error", error => console.error("Video generation worker error:", error.message));
+  console.log("YTAgent Redis queues enabled. Analysis concurrency:", concurrency, "Video generation concurrency: 1");
 } else {
   console.warn("REDIS_URL is not set. Analysis will run synchronously. Add Redis to enable queued parallel processing.");
 }

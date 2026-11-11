@@ -3,10 +3,10 @@ const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 const sharp = require("sharp");
-const AdmZip = require("adm-zip");
 const ffmpegPath = require("ffmpeg-static");
 const { compileBlueprint } = require("./video-compiler/blueprint");
 const { renderFilm } = require("./video-compiler/renderer");
+const { generateSceneClips } = require("./video-providers/agnes");
 
 function cleanText(value, max = 240) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -147,68 +147,8 @@ async function requestStoryboard(topic) {
   throw new Error("Storyboard generation failed. " + failures.join(" | "));
 }
 
-function buildVideoPrompt(scene, topic, index) {
-  return cleanText(
-    "Premium cinematic 3D science documentary animation. Topic: " + topic + ". " +
-    "Shot " + (index + 1) + ". " + scene.visual_direction + ". " +
-    "Photorealistic high-end CGI, detailed physically based materials, realistic scale and physics, believable motion, cinematic volumetric lighting, atmospheric depth, macro lens detail, shallow depth of field, dramatic camera push-in and smooth tracking movement. " +
-    "One continuous coherent action, no cuts, no text, no labels, no logos, no watermarks. Main subject large and centered, composed safely for a vertical 9:16 crop.",
-    1750
-  );
-}
-
 async function requestGeneratedScenes(scenes, topic, workDir) {
-  const baseUrl = String(process.env.VIDEO_WORKER_URL || "").replace(/\/+$/, "");
-  const token = process.env.YT_AGENT_WORKER_TOKEN;
-  if (!baseUrl || !token) {
-    throw new Error("The cinematic AI engine is not connected yet. Start the free Kaggle GPU worker and add VIDEO_WORKER_URL plus YT_AGENT_WORKER_TOKEN in Railway Variables. YTAgent will not fall back to the old photo slideshow.");
-  }
-  const headers = { "Authorization": "Bearer " + token, "Content-Type": "application/json" };
-  const startResponse = await fetch(baseUrl + "/generate", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      seed: Math.floor(Math.random() * 2000000000),
-      scenes: scenes.map((scene, index) => ({ prompt: buildVideoPrompt(scene, topic, index) }))
-    }),
-    signal: AbortSignal.timeout(60000)
-  });
-  const started = await startResponse.json().catch(() => ({}));
-  if (!startResponse.ok || !started.job_id) {
-    throw new Error("Free GPU worker could not start: " + (started.detail || started.error || "HTTP " + startResponse.status));
-  }
-  const jobId = started.job_id;
-  const deadline = Date.now() + 90 * 60 * 1000;
-  let lastMessage = "Free GPU worker accepted the video.";
-  while (Date.now() < deadline) {
-    await new Promise(resolve => setTimeout(resolve, 10000));
-    const statusResponse = await fetch(baseUrl + "/jobs/" + encodeURIComponent(jobId), {
-      headers: { "Authorization": "Bearer " + token },
-      signal: AbortSignal.timeout(30000)
-    });
-    const status = await statusResponse.json().catch(() => ({}));
-    if (!statusResponse.ok) throw new Error("Could not check the GPU generation job: " + (status.detail || "HTTP " + statusResponse.status));
-    lastMessage = status.message || lastMessage;
-    if (status.status === "failed") throw new Error("Wan video generation failed: " + lastMessage);
-    if (status.status === "completed") {
-      const download = await fetch(baseUrl + "/jobs/" + encodeURIComponent(jobId) + "/download", {
-        headers: { "Authorization": "Bearer " + token },
-        signal: AbortSignal.timeout(120000)
-      });
-      if (!download.ok) throw new Error("The GPU worker finished but its scene archive could not be downloaded.");
-      const zip = new AdmZip(Buffer.from(await download.arrayBuffer()));
-      const entries = zip.getEntries().filter(entry => /^scene-\d{2}\.mp4$/.test(entry.entryName)).sort((a, b) => a.entryName.localeCompare(b.entryName));
-      if (entries.length !== scenes.length) throw new Error("The GPU worker returned " + entries.length + " scenes. Expected " + scenes.length + ".");
-      const clips = [];
-      for (let i = 0; i < entries.length; i++) {
-        const destination = path.join(workDir, "generated-scene-" + i + ".mp4");
-        await fs.promises.writeFile(destination, entries[i].getData());
-        clips.push(destination);
-      }
-      return clips;
-    }
-  }
-  throw new Error("The free GPU worker took longer than 90 minutes. Last status: " + lastMessage + ". Check whether the Kaggle session is still running.");
+  return generateSceneClips(scenes, topic, workDir);
 }
 
 async function generateNarration(text, outputPath) {
@@ -289,6 +229,9 @@ async function generateEducationalVideo(topic, outputPath) {
   if (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) {
     throw new Error("Add GEMINI_API_KEY or GROQ_API_KEY in Railway Variables before generating videos.");
   }
+  if (!process.env.AGNES_API_KEY) {
+    throw new Error("Add AGNES_API_KEY in Railway Variables to enable hosted AI video generation. No temporary GPU worker is required.");
+  }
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable on this server.");
   const storyboard = await requestStoryboard(topic);
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 10) {
@@ -304,7 +247,7 @@ async function generateEducationalVideo(topic, outputPath) {
   const blueprint = compileBlueprint(storyboard, { language: "en", voiceId: process.env.EDGE_TTS_VOICE || "en-US-AriaNeural" });
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-film-"));
   try {
-    // The current visual provider still supplies ten moving scene plates.
+    // Agnes supplies five 12-second cinematic clips, which are split into ten scene plates.
     const generatedClips = await requestGeneratedScenes(storyboard.scenes, topic, workDir);
     const voiceProviders = new Set();
     const sceneAssets = [];

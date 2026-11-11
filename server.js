@@ -77,8 +77,6 @@ function restoreGenerationJobs() {
             job.state = "failed";
             job.error = "This temporary MP4 has expired. Please generate the film again.";
             job.completedAt = now;
-          } else {
-            scheduleGeneratedFileExpiry(filePath, remainingMs);
           }
         }
       }
@@ -102,6 +100,25 @@ function scheduleGeneratedFileExpiry(filePath, delayMs = GENERATED_FILE_TTL_MS) 
     fs.promises.unlink(filePath).catch(() => {});
   }, Math.max(1, delayMs));
   timer.unref();
+}
+
+function restoreGeneratedFileExpiries() {
+  try {
+    for (const filename of fs.readdirSync(uploadDir)) {
+      if (!/^generated-[a-f0-9]{24}\\.mp4$/.test(filename)) continue;
+      const filePath = path.join(uploadDir, filename);
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile()) continue;
+      const remainingMs = GENERATED_FILE_TTL_MS - (Date.now() - stat.mtimeMs);
+      if (remainingMs <= 0) {
+        fs.unlinkSync(filePath);
+      } else {
+        scheduleGeneratedFileExpiry(filePath, remainingMs);
+      }
+    }
+  } catch (error) {
+    console.warn("Could not restore generated video expiry timers:", error.message);
+  }
 }
 
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -866,5 +883,6 @@ if (redisEnabled) {
 }
 
 restoreGenerationJobs();
+restoreGeneratedFileExpiries();
 console.log("Generated videos use temporary local storage, are deleted after successful download, and expire after six hours.");
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

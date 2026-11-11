@@ -5,7 +5,7 @@ const path = require("path");
 const jobs = new Map();
 const pending = [];
 const JOB_TIMEOUT_MS = 90 * 60 * 1000;
-const CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
+const CLAIM_TIMEOUT_MS = 20 * 60 * 1000;
 let lastWorkerPollAt = 0;
 
 function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueued, claimTimeoutMs = CLAIM_TIMEOUT_MS }) {

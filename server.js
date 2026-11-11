@@ -23,6 +23,44 @@ let generationQueue = null;
 let redisConnection = null;
 const localGenerationJobs = new Map();
 const uploadDir = path.join(__dirname, "uploads");
+const generationJobsFile = path.join(uploadDir, "generation-jobs.json");
+
+function persistGenerationJobs() {
+  if (generationQueue) return;
+  const snapshot = Array.from(localGenerationJobs.entries()).map(([id, job]) => [id, job]);
+  const temporaryFile = generationJobsFile + ".tmp";
+  try {
+    fs.writeFileSync(temporaryFile, JSON.stringify(snapshot));
+    fs.renameSync(temporaryFile, generationJobsFile);
+  } catch (error) {
+    console.warn("Could not persist generation job state:", error.message);
+    try { fs.unlinkSync(temporaryFile); } catch (_) {}
+  }
+}
+
+function restoreGenerationJobs() {
+  if (generationQueue || !fs.existsSync(generationJobsFile)) return;
+  try {
+    const saved = JSON.parse(fs.readFileSync(generationJobsFile, "utf8"));
+    if (!Array.isArray(saved)) return;
+    for (const entry of saved) {
+      if (!Array.isArray(entry) || entry.length !== 2) continue;
+      const [id, job] = entry;
+      if (!/^[a-f0-9]{24}$/.test(id) || !job || typeof job !== "object") continue;
+      if (job.state === "active" || job.state === "waiting") {
+        job.state = "failed";
+        job.error = "The server restarted before this film finished. Please submit the generation again.";
+      } else if (job.state === "completed" && (!job.result || !job.result.downloadUrl || !fs.existsSync(path.join(uploadDir, path.basename(job.result.downloadUrl))))) {
+        job.state = "failed";
+        job.error = "The server restarted and the temporary MP4 is no longer available. Please generate the film again.";
+      }
+      localGenerationJobs.set(id, job);
+    }
+    persistGenerationJobs();
+  } catch (error) {
+    console.warn("Could not restore generation jobs:", error.message);
+  }
+}
 const GENERATED_FILE_TTL_MS = 6 * 60 * 60 * 1000;
 fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -665,20 +703,27 @@ app.post("/api/generate", async (req, res) => {
 
   const job = { state: "waiting", createdAt: Date.now(), result: null, error: null };
   localGenerationJobs.set(id, job);
+  persistGenerationJobs();
   setImmediate(async () => {
     job.state = "active";
+    persistGenerationJobs();
     try {
       const details = await generateEducationalVideo(topic, outputPath);
       job.result = { ...details, downloadUrl: "/api/generated/" + filename };
       job.state = "completed";
       scheduleGeneratedFileExpiry(outputPath);
+      persistGenerationJobs();
     } catch (error) {
       await fs.promises.unlink(outputPath).catch(() => {});
       job.error = error.message || "Video generation failed.";
       job.state = "failed";
+      persistGenerationJobs();
       console.error("AI video generation failed:", job.error);
     }
-    setTimeout(() => localGenerationJobs.delete(id), 24 * 60 * 60 * 1000).unref();
+    setTimeout(() => {
+      localGenerationJobs.delete(id);
+      persistGenerationJobs();
+    }, 24 * 60 * 60 * 1000).unref();
   });
   return res.status(202).json({ success: true, queued: true, jobId: id });
 });
@@ -767,5 +812,6 @@ if (redisEnabled) {
   console.warn("REDIS_URL is not set. Background jobs are process-local and will be lost on restart. Configure Redis for durable queues.");
 }
 
+restoreGenerationJobs();
 console.log("Generated videos use temporary local storage, are deleted after successful download, and expire after six hours.");
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

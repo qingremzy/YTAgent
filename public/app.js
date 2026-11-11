@@ -99,13 +99,29 @@ const generatorForm = document.getElementById("generatorForm");
 const generateButton = document.getElementById("generateVideo");
 const generatorStatus = document.getElementById("generatorStatus");
 const generatedDownload = document.getElementById("generatedDownload");
+async function waitForGeneration(jobId) {
+  const deadline = Date.now() + 90 * 60 * 1000;
+  while (Date.now() < deadline) {
+    const response = await fetch("/api/generate/" + encodeURIComponent(jobId));
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "Could not check video generation progress.");
+    if (data.state === "completed") return data;
+    if (data.state === "failed") throw new Error(data.error || "Video generation failed.");
+    const state = data.state || "waiting";
+    generatorStatus.textContent = state === "active"
+      ? "YTAgent is creating your film. The page can stay open while the narrator and scenes are prepared…"
+      : "Your film is safely queued. Waiting for the video engine…";
+    await wait(8000);
+  }
+  throw new Error("This video is taking longer than expected. Check again later before starting another generation.");
+}
 generatorForm.addEventListener("submit", async event => {
   event.preventDefault();
   const topic = document.getElementById("videoTopic").value.trim();
   if (!topic) return;
   generateButton.disabled = true;
   generateButton.textContent = "Generating video… keep this page open";
-  generatorStatus.textContent = "AI director is planning ten scenes. The hosted video engine is generating five cinematic clips. YTAgent will split and assemble them, then add the required narrator. This may take several minutes.";
+  generatorStatus.textContent = "AI director is planning ten scenes. The hosted video engine is creating five cinematic clips. YTAgent will assemble the complete film and add its required narrator. This may take several minutes."
   generatedDownload.classList.add("hidden");
   try {
     const response = await fetch("/api/generate", {
@@ -113,8 +129,10 @@ generatorForm.addEventListener("submit", async event => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ topic })
     });
-    const data = await readJsonResponse(response);
-    if (!response.ok) throw new Error(data.error || "Video generation failed.");
+    const queued = await readJsonResponse(response);
+    if (!response.ok) throw new Error(queued.error || "Video generation failed.");
+    if (!queued.jobId) throw new Error("The server did not return a video task ID.");
+    const data = await waitForGeneration(queued.jobId);
     generatedDownload.href = data.downloadUrl;
     generatedDownload.classList.remove("hidden");
     form.elements.title.value = data.title || topic;

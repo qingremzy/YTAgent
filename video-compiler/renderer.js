@@ -25,7 +25,7 @@ function run(args) {
   });
 }
 function wrap(value, maxChars, maxLines) {
-  const words = clean(value, 220).split(/\\s+/), lines = [];
+  const words = clean(value, 220).split(/\s+/), lines = [];
   let line = "";
   for (const word of words) {
     if (line && (line + " " + word).length > maxChars) {

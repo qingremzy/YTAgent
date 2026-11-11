@@ -1297,10 +1297,12 @@ app.get("/health", (_req, res) => res.json({
   },
   jobs: {
     redisQueueEnabled: redisEnabled,
-    durableQueueConfigured: redisEnabled,
+    durableQueueConfigured: Boolean(redisConnection && redisConnection.status === "ready"),
+    redisConfigured: redisEnabled,
+    redisConnected: Boolean(redisConnection && redisConnection.status === "ready"),
     sessionStore: redisConnection ? "redis" : "memory"
   },
-  durabilityReady: Boolean(redisEnabled && objectStorage.configured)
+  durabilityReady: Boolean(redisConnection && redisConnection.status === "ready" && objectStorage.configured)
 }));
 app.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Video is too large. Maximum size is 256 MB." });

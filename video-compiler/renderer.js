@@ -8,6 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const sharp = require("sharp");
+const { verifyRenderedVideo } = require("./quality-check");
 const ffmpegPath = require("ffmpeg-static");
 const WIDTH = 540, HEIGHT = 960, FPS = 24, SCENE_SECONDS = 6, SCENE_COUNT = 10;
 const DURATION = SCENE_SECONDS * SCENE_COUNT;
@@ -117,7 +118,7 @@ async function renderScene(asset, scene, index, temp) {
   if (stat.size < 10000) throw new Error("Scene " + (index + 1) + " render produced an incomplete segment.");
   return segmentPath;
 }
-async function renderFilm(input) {
+async function renderFilmUnlocked(input) {
   const blueprint = input && input.blueprint;
   const sceneAssets = input && input.sceneAssets;
   const outputPath = input && input.outputPath;
@@ -164,9 +165,17 @@ async function renderFilm(input) {
     }
     const stat = await fs.promises.stat(outputPath);
     if (stat.size < 100000) throw new Error("MP4 output failed the basic file-size quality check.");
-    return { outputPath, duration_seconds: DURATION, resolution: WIDTH + "x" + HEIGHT, fps: FPS, narrator_required: true, music_added: Boolean(musicPath), sound_effect_scenes: sceneAssets.filter(asset => asset.soundEffectPath).length, render_strategy: "sequential-scene-render-and-concat" };
+    const quality = await verifyRenderedVideo(outputPath);
+    return { outputPath, duration_seconds: quality.duration_seconds, resolution: WIDTH + "x" + HEIGHT, fps: FPS, narrator_required: true, music_added: Boolean(musicPath), sound_effect_scenes: sceneAssets.filter(asset => asset.soundEffectPath).length, render_strategy: "sequential-scene-render-and-concat", quality_check: quality };
   } finally {
     await fs.promises.rm(temp, { recursive: true, force: true }).catch(() => {});
   }
+}
+// Serialize renders in-process so two user jobs cannot multiply FFmpeg peak memory.
+let renderQueue = Promise.resolve();
+function renderFilm(input) {
+  const task = renderQueue.then(() => renderFilmUnlocked(input));
+  renderQueue = task.catch(() => {});
+  return task;
 }
 module.exports = { renderFilm };

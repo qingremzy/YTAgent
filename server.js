@@ -1263,9 +1263,18 @@ app.post("/auth/logout", (req, res) => req.session.destroy(() => res.json({ succ
 app.get("/health", (_req, res) => res.json({
   ok: true,
   app: "YTAgent",
-  storage: { mode: "temporary", autoDeleteAfterDownload: true, expiryHours: 6 },
-  jobs: { redisQueueEnabled: redisEnabled, durableQueueConfigured: redisEnabled },
-  durabilityReady: false
+  storage: {
+    mode: objectStorage.configured ? "cloudflare-r2" : "temporary",
+    durable: objectStorage.configured,
+    r2Configured: objectStorage.configured,
+    localExpiryHours: 6
+  },
+  jobs: {
+    redisQueueEnabled: redisEnabled,
+    durableQueueConfigured: redisEnabled,
+    sessionStore: redisConnection ? "redis" : "memory"
+  },
+  durabilityReady: Boolean(redisEnabled && objectStorage.configured)
 }));
 app.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Video is too large. Maximum size is 256 MB." });

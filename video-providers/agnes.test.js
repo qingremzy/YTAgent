@@ -27,6 +27,9 @@ test("builds one vertical paired-scene prompt with a midpoint transition", () =>
   assert.match(prompt, /red blood cell/);
   assert.match(prompt, /releases oxygen/);
   assert.match(prompt, /Camera and lens direction/);
+  assert.match(prompt, /LIVE-ACTION/);
+  assert.match(prompt, /real human beings/);
+  assert.match(prompt, /Avoid plastic CGI people/);
   assert.match(prompt, /85mm cinema prime/);
   assert.match(buildPairPrompt(
     { visual_direction: "A cell moves" },

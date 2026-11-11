@@ -984,7 +984,8 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
         if (message) job.message = String(message).slice(0, 180);
         persistGenerationJobs();
       }, { studioProjectRoot });
-      job.result = { ...details, downloadUrl: "/api/generated/" + filename };
+      const durableDetails = await persistGenerationArtifacts(outputPath, details);
+      job.result = { ...durableDetails, downloadUrl: "/api/generated/" + filename };
       job.progress = 100;
       job.message = "Your finished film is ready.";
       job.state = "completed";
@@ -1237,10 +1238,11 @@ if (redisEnabled) {
         await job.updateProgress(Math.max(0, Math.min(99, Number(progress) || 0)));
         await job.updateData({ ...job.data, message: String(message || "").slice(0, 180) });
       }, { studioProjectRoot });
+      const durableDetails = await persistGenerationArtifacts(job.data.outputPath, details);
       await job.updateProgress(100);
       scheduleGeneratedFileExpiry(job.data.outputPath);
-      if (details.studioProjectId) scheduleStudioProjectExpiry(details.studioProjectId);
-      return { ...details, downloadUrl: "/api/generated/" + job.data.filename };
+      if (durableDetails.studioProjectId) scheduleStudioProjectExpiry(durableDetails.studioProjectId);
+      return { ...durableDetails, downloadUrl: "/api/generated/" + job.data.filename };
     } catch (error) {
       await fs.promises.unlink(job.data.outputPath).catch(() => {});
       throw error;

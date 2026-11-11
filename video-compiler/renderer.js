@@ -17,11 +17,35 @@ function xml(value) {
 }
 function run(args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(ffmpegPath, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let settled = false;
     let stderr = "";
-    child.stderr.on("data", chunk => { stderr += chunk.toString(); });
-    child.once("error", reject);
-    child.once("close", code => code === 0 ? resolve() : reject(new Error("FFmpeg render failed: " + stderr.slice(-1600))));
+    let spawnError = "";
+    let child;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      if (error) reject(error);
+      else resolve();
+    };
+    try {
+      child = spawn(ffmpegPath, args, { stdio: ["ignore", "ignore", "pipe"] });
+    } catch (error) {
+      finish(new Error("FFmpeg could not start: " + (error.message || String(error))));
+      return;
+    }
+    if (child.stderr) child.stderr.on("data", chunk => {
+      stderr = (stderr + chunk.toString()).slice(-8000);
+    });
+    child.once("error", error => {
+      spawnError = error.message || String(error);
+      finish(new Error("FFmpeg process could not start: " + spawnError));
+    });
+    child.once("close", (code, signal) => {
+      if (code === 0) return finish();
+      const reason = signal ? "terminated by signal " + signal : "exited with code " + String(code);
+      const detail = stderr.trim() || spawnError || "FFmpeg produced no diagnostic output. The hosting service may have stopped the process, for example due to memory limits.";
+      finish(new Error("FFmpeg render failed (" + reason + "): " + detail.slice(-5000)));
+    });
   });
 }
 function wrap(value, maxChars, maxLines) {
@@ -79,7 +103,7 @@ async function renderFilm(input) {
   await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
   const temp = await fs.promises.mkdtemp(path.join(path.dirname(outputPath), "ytagent-render-"));
   try {
-    const args = ["-y", "-hide_banner", "-loglevel", "error"];
+    const args = ["-y", "-hide_banner", "-loglevel", "warning"];
     const filters = [], videoLabels = [], voiceLabels = [], sfxLabels = [];
     let inputIndex = 0;
     for (let i = 0; i < 10; i++) {

@@ -107,6 +107,38 @@ function scheduleGeneratedFileExpiry(filePath, delayMs = GENERATED_FILE_TTL_MS) 
   timer.unref();
 }
 
+function scheduleStudioProjectExpiry(projectId, delayMs = GENERATED_FILE_TTL_MS) {
+  if (!/^[a-f0-9]{24}$/i.test(String(projectId || ""))) return;
+  const projectDir = path.join(studioProjectRoot, String(projectId).toLowerCase());
+  const timer = setTimeout(() => {
+    fs.promises.rm(projectDir, { recursive: true, force: true }).catch(() => {});
+  }, Math.max(1, delayMs));
+  timer.unref();
+}
+
+function restoreStudioProjectExpiries() {
+  try {
+    if (!fs.existsSync(studioProjectRoot)) return;
+    for (const id of fs.readdirSync(studioProjectRoot)) {
+      if (!/^[a-f0-9]{24}$/i.test(id)) continue;
+      const manifest = path.join(studioProjectRoot, id, "project.json");
+      if (!fs.existsSync(manifest)) {
+        fs.promises.rm(path.join(studioProjectRoot, id), { recursive: true, force: true }).catch(() => {});
+        continue;
+      }
+      const stat = fs.statSync(manifest);
+      const remainingMs = GENERATED_FILE_TTL_MS - (Date.now() - stat.mtimeMs);
+      if (remainingMs <= 0) {
+        fs.promises.rm(path.join(studioProjectRoot, id), { recursive: true, force: true }).catch(() => {});
+      } else {
+        scheduleStudioProjectExpiry(id, remainingMs);
+      }
+    }
+  } catch (error) {
+    console.warn("Could not restore studio project expiry timers:", error.message);
+  }
+}
+
 function restoreGeneratedFileExpiries() {
   try {
     for (const filename of fs.readdirSync(uploadDir)) {
@@ -899,6 +931,7 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
       job.state = "completed";
       job.completedAt = Date.now();
       scheduleGeneratedFileExpiry(outputPath);
+      if (details.studioProjectId) scheduleStudioProjectExpiry(details.studioProjectId);
       persistGenerationJobs();
       scheduleGenerationJobCleanup(id);
     } catch (error) {
@@ -1132,6 +1165,7 @@ if (redisEnabled) {
       }, { studioProjectRoot });
       await job.updateProgress(100);
       scheduleGeneratedFileExpiry(job.data.outputPath);
+      if (details.studioProjectId) scheduleStudioProjectExpiry(details.studioProjectId);
       return { ...details, downloadUrl: "/api/generated/" + job.data.filename };
     } catch (error) {
       await fs.promises.unlink(job.data.outputPath).catch(() => {});
@@ -1147,5 +1181,6 @@ if (redisEnabled) {
 
 restoreGenerationJobs();
 restoreGeneratedFileExpiries();
+restoreStudioProjectExpiries();
 console.log("Generated videos use temporary local storage, are deleted after successful download, and expire after six hours.");
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

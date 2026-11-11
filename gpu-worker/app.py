@@ -6,6 +6,7 @@ import re
 import uuid
 import zipfile
 import shutil
+import subprocess
 import threading
 import time
 import json
@@ -92,15 +93,56 @@ def send_progress_to_server(remote_job_id, progress, message):
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read().decode("utf-8") or "{}")
 
-def remote_progress_heartbeat(remote_job_id, progress, message, stop_event):
-    # Send immediately, then keep the dashboard alive during long model downloads/inference.
-    while not stop_event.is_set():
+def start_remote_progress_heartbeat(remote_job_id, progress, message):
+    """Run heartbeats in a child process so long native model loads cannot block Python threads."""
+    if not SERVER_URL or not TOKEN:
+        return None
+    script = r"""
+import json, os, sys, time, urllib.request
+server = os.environ["YT_AGENT_SERVER_URL"].rstrip("/")
+token = os.environ["YT_AGENT_WORKER_TOKEN"]
+job_id = sys.argv[1]
+progress = int(sys.argv[2])
+message = sys.argv[3]
+while True:
+    try:
+        body = json.dumps({"progress": progress, "message": message[:180]}).encode("utf-8")
+        request = urllib.request.Request(
+            f"{server}/api/worker/jobs/{job_id}/progress",
+            data=body,
+            method="POST",
+            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(request, timeout=20) as response:
+            response.read()
+    except Exception as exc:
+        print("YTAgent heartbeat subprocess failed:", str(exc)[:160], flush=True)
+    time.sleep(12)
+"""
+    try:
+        return subprocess.Popen(
+            [sys.executable, "-u", "-c", script, str(remote_job_id), str(int(progress)), str(message)[:180]],
+            env=os.environ.copy(),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except Exception as exc:
+        print("Could not start independent progress heartbeat:", str(exc)[:180], flush=True)
+        return None
+
+
+def stop_remote_progress_heartbeat(process):
+    if process is None:
+        return
+    try:
+        process.terminate()
+        process.wait(timeout=3)
+    except Exception:
         try:
-            send_progress_to_server(remote_job_id, progress, message)
-        except Exception as exc:
-            print("YTAgent progress heartbeat failed:", str(exc)[:180], flush=True)
-        if stop_event.wait(12):
-            break
+            process.kill()
+        except Exception:
+            pass
 
 
 def send_scene_to_server(remote_job_id, index, clip_path):
@@ -250,21 +292,15 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
         ACTIVE_JOB = job_id
         JOBS[job_id]["status"] = "loading"
         JOBS[job_id]["message"] = "Loading Wan video model into GPU memory."
-        load_stop = threading.Event()
         load_heartbeat = None
         if remote_job_id:
-            load_heartbeat = threading.Thread(
-                target=remote_progress_heartbeat,
-                args=(remote_job_id, 3, "Loading Wan 2.1 into GPU memory. First startup can take a few minutes.", load_stop),
-                daemon=True
+            load_heartbeat = start_remote_progress_heartbeat(
+                remote_job_id, 5, "Loading Wan 2.1 into GPU memory. First startup can take several minutes."
             )
-            load_heartbeat.start()
         try:
             pipe = get_pipeline()
         finally:
-            load_stop.set()
-            if load_heartbeat:
-                load_heartbeat.join(timeout=2)
+            stop_remote_progress_heartbeat(load_heartbeat)
         import torch
         from diffusers.utils import export_to_video
         clips = []
@@ -277,15 +313,9 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
             if remote_job_id:
                 send_progress_to_server(remote_job_id, scene_progress, scene_message)
             generator = torch.Generator(device="cuda").manual_seed(seed + index)
-            scene_stop = threading.Event()
             scene_heartbeat = None
             if remote_job_id:
-                scene_heartbeat = threading.Thread(
-                    target=remote_progress_heartbeat,
-                    args=(remote_job_id, scene_progress, scene_message, scene_stop),
-                    daemon=True
-                )
-                scene_heartbeat.start()
+                scene_heartbeat = start_remote_progress_heartbeat(remote_job_id, scene_progress, scene_message)
             try:
                 result = pipe(
                     prompt=prompt,
@@ -297,9 +327,7 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
                     generator=generator
                 )
             finally:
-                scene_stop.set()
-                if scene_heartbeat:
-                    scene_heartbeat.join(timeout=2)
+                stop_remote_progress_heartbeat(scene_heartbeat)
             frames = result.frames[0]
             clip_path = work / f"scene-{index:02d}.mp4"
             export_to_video(frames, str(clip_path), fps=16)

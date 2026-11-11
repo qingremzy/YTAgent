@@ -22,8 +22,17 @@ let analysisQueue = null;
 let generationQueue = null;
 let redisConnection = null;
 const localGenerationJobs = new Map();
-const uploadDir = path.join(__dirname, "uploads");
+const persistentDataDirConfigured = Boolean(process.env.YT_AGENT_DATA_DIR);
+const uploadDir = path.resolve(process.env.YT_AGENT_DATA_DIR || path.join(__dirname, "uploads"));
 fs.mkdirSync(uploadDir, { recursive: true });
+const storageProbe = path.join(uploadDir, ".ytagent-storage-check");
+try {
+  fs.writeFileSync(storageProbe, "ok");
+  fs.unlinkSync(storageProbe);
+} catch (error) {
+  console.error("YTAgent data directory is not writable:", error.message);
+  throw new Error("YT_AGENT_DATA_DIR is not writable. Check the mounted storage directory.");
+}
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "1mb" }));
@@ -623,7 +632,6 @@ app.post("/api/generate", async (req, res) => {
   const topic = String(req.body?.topic || "").trim();
   if (topic.length < 8) return res.status(400).json({ error: "Enter a video topic with at least 8 characters." });
   if (topic.length > 180) return res.status(400).json({ error: "Keep the topic under 180 characters." });
-  if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: "The hosted video engine is not configured yet. Add AGNES_API_KEY in Railway Variables." });
   if (generationQueue) {
     try {
       const counts = await generationQueue.getJobCounts("waiting", "active", "delayed");
@@ -705,7 +713,13 @@ app.get("/api/generated/:filename", (req, res) => {
 });
 
 app.post("/auth/logout", (req, res) => req.session.destroy(() => res.json({ success: true })));
-app.get("/health", (_req, res) => res.json({ ok: true, app: "YTAgent" }));
+app.get("/health", (_req, res) => res.json({
+  ok: true,
+  app: "YTAgent",
+  storage: { directory: uploadDir, persistentVolumeConfigured: persistentDataDirConfigured },
+  jobs: { redisQueueEnabled: redisEnabled, durableQueueConfigured: redisEnabled },
+  durabilityReady: persistentDataDirConfigured && redisEnabled
+}));
 app.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Video is too large. Maximum size is 256 MB." });
   res.status(400).json({ error: err.message || "Something went wrong." });
@@ -743,7 +757,8 @@ if (redisEnabled) {
   generationWorker.on("error", error => console.error("Video generation worker error:", error.message));
   console.log("YTAgent Redis queues enabled. Analysis concurrency:", concurrency, "Video generation concurrency: 1");
 } else {
-  console.warn("REDIS_URL is not set. Analysis will run synchronously. Add Redis to enable queued parallel processing.");
+  console.warn("REDIS_URL is not set. Background jobs are process-local and will be lost on restart. Configure Redis for durable queues.");
 }
 
+if (!persistentDataDirConfigured) console.warn("YT_AGENT_DATA_DIR is not set. Generated MP4 files may be lost when the hosting instance restarts.");
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

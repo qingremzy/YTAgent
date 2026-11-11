@@ -8,7 +8,6 @@ const { compileBlueprint } = require("./video-compiler/blueprint");
 const { renderFilm } = require("./video-compiler/renderer");
 const { generateSceneClips } = require("./video-providers/agnes");
 const { generateWanSceneClips } = require("./video-providers/wan-worker");
-const { generateRewindSceneClips } = require("./video-providers/rewind");
 const { generateFallbackSceneClips } = require("./video-providers/free-visual-fallback");
 const { createStudioProject } = require("./studio-project");
 
@@ -118,7 +117,7 @@ async function requestStoryboard(topic) {
   var failures = [];
   if (process.env.GEMINI_API_KEY) {
     try {
-      var model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+      var model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
       var response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
         method: "POST",
         headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "Content-Type": "application/json" },
@@ -172,18 +171,6 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress) {
-  // Rewind is opt-in so a newly added API key cannot spend tokens unexpectedly.
-  if (process.env.REWIND_VIDEO_ENABLED === "true" && process.env.REWIND_API_KEY) {
-    try {
-      if (onProgress) onProgress(10, "Generating cinematic scenes with Rewind AI.");
-      const clips = await generateRewindSceneClips(scenes, topic, workDir);
-      if (onProgress) onProgress(86, "Rewind scenes are ready. Preparing narration.");
-      return { clips, provider: "Rewind AI" };
-    } catch (error) {
-      console.warn("Rewind video generation failed. Checking the free GPU worker:", error.message || error);
-    }
-  }
-
   // Agnes is attempted only when the user has explicitly confirmed a no-charge quota.
   if (process.env.AGNES_API_KEY && process.env.AGNES_FREE_QUOTA_CONFIRMED === "true") {
     try {

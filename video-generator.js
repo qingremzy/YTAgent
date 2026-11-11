@@ -84,6 +84,7 @@ function validateStoryboard(storyboard) {
   if (!storyboard || typeof storyboard !== "object" || Array.isArray(storyboard)) throw new Error("Storyboard must be a JSON object.");
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 10) throw new Error("Storyboard must contain exactly 10 scenes.");
   var seenNarration = new Set();
+  var seenVisualDirections = new Set();
   for (var i = 0; i < storyboard.scenes.length; i++) {
     var scene = storyboard.scenes[i];
     if (!scene || !scene.narration || !scene.visual_direction || !scene.caption) throw new Error("Scene " + (i + 1) + " is missing narration, visual_direction or caption.");
@@ -94,6 +95,12 @@ function validateStoryboard(storyboard) {
     var normalized = narration.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ");
     if (seenNarration.has(normalized)) throw new Error("Scene " + (i + 1) + " repeats narration from another scene. Every scene needs a distinct spoken line.");
     seenNarration.add(normalized);
+    var visualDirection = String(scene.visual_direction).trim();
+    var visualWords = visualDirection.split(/\\s+/).filter(Boolean).length;
+    if (visualWords < 12 || visualWords > 45) throw new Error("Scene " + (i + 1) + " visual_direction must contain 12 to 45 specific words describing a physical action and setting.");
+    var normalizedVisual = visualDirection.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\\s+/g, " ");
+    if (seenVisualDirections.has(normalizedVisual)) throw new Error("Scene " + (i + 1) + " repeats a visual direction. Every scene needs a distinct action or composition.");
+    seenVisualDirections.add(normalizedVisual);
   }
   ["tags", "hashtags", "keywords"].forEach(function(key) { if (!Array.isArray(storyboard[key])) storyboard[key] = []; });
   return storyboard;
@@ -104,8 +111,8 @@ async function requestStoryboard(topic) {
     "Return ONE valid JSON object only. Required keys: title, description, tags, hashtags, keywords, scenes. Exactly 10 scenes. Every scene must contain title, narration, caption and visual_direction. " +
     "NARRATION IS THE PRIORITY: write a connected spoken explanation, not ten disconnected facts or poetic fragments. Each scene line must contain 12 to 16 natural spoken words. Across the ten lines, explain what is happening, why it happens, how it works, what changes next, and the surprising result. Use plain conversational English, specific nouns, active verbs, short transitions and useful facts. No filler, vague hype, repeated hooks, rhetorical padding or unexplained jargon. The narrator should sound like an engaging documentary presenter teaching one curious viewer. " +
     "STORY STRUCTURE: scene 1 opens with a surprising consequence or question; scenes 2-3 establish the subject; scenes 4-7 explain the mechanism step by step; scenes 8-9 reveal the consequence or twist; scene 10 delivers a memorable, accurate takeaway. Each scene must logically continue the previous one. " +
-    "VISUAL DIRECTIONS: describe one specific visible action with a clear subject, physical object, setting and camera framing. Show the exact thing being explained at that moment. Prefer expressive 3D animated human characters, practical props, recognizable environments, close-ups, demonstrations and cause-and-effect actions. Keep recurring characters and key objects visually consistent across scenes. " +
-    "Do not use abstract swirling lines, orbiting dots, atom-like patterns, floating particles, generic glowing shapes, decorative science backgrounds, random stock imagery, text cards or static illustrations unless the topic specifically requires that exact phenomenon. No repeated compositions. Keep the main action large and readable in vertical 9:16. " +
+    "VISUAL DIRECTIONS: each visual_direction must contain 18 to 30 specific words describing one physical action, a clear subject, a real object, a recognizable setting and camera framing. Show the exact thing being explained at that moment. Prefer expressive 3D animated human characters, practical props, recognizable environments, close-ups, demonstrations and cause-and-effect actions. Keep recurring characters and key objects visually consistent, but give every scene a distinct action, setting or composition. " +
+    "Do not use abstract swirling lines, orbiting dots, atom-like patterns, floating particles, generic glowing shapes, decorative science backgrounds, random stock imagery, text cards or static illustrations unless the topic specifically requires that exact phenomenon. No repeated compositions, locations or camera framing across adjacent scenes. Keep the main action large and readable in vertical 9:16. " +
     "Be scientifically accurate. Make every visual directly illustrate its narration line. Do not imitate any creator's characters, scripts, scenes or branding.";
   var failures = [];
   if (process.env.GEMINI_API_KEY) {

@@ -17,7 +17,7 @@ jobs:
       - run: npm audit --json > /tmp/npm-audit.json || true
       - run: node -e "const a=require('/tmp/npm-audit.json'); console.log(JSON.stringify({summary:a.metadata?.vulnerabilities, packages:Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,range:v.range,fixAvailable:v.fixAvailable,effects:v.effects,via:(v.via||[]).map(x=>typeof x === 'string'?x:{name:x.name,title:x.title,url:x.url,range:x.range,severity:x.severity})}))},null,2))"
       - run: npm run build
-      - run: node --check server.js && node --check video-generator.js && node --check video-providers/agnes.js && node --check public/app.js && node --input-type=module --check < public/studio.js && node --check gpu-worker-bridge.js && node --check kaggle-notebook.js && node --check kaggle-worker-session.js && node --check studio-project.js && node --check object-storage.js
+      - run: node --check server.js && node --check video-generator.js && node --check video-providers/agnes.js && node --check public/app.js && node --input-type=module --check < public/studio.js && node --check gpu-worker-bridge.js && node --check kaggle-notebook.js && node --check kaggle-worker-session.js && node --check studio-project.js && node --check object-storage.js && node --check redis-session-store.test.js
       - run: python -m py_compile gpu-worker/app.py
       - run: python -c "import json; json.load(open('gpu-worker/YTAgent_Free_GPU_Worker.ipynb', encoding='utf-8'))"
       - run: npm test

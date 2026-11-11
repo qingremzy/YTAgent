@@ -49,7 +49,19 @@ function buildNotebookSaveRequest(slug, source, metadata = {}) {
     competitionDataSources: get("competitionDataSources", "competition_data_sources", []),
     modelDataSources: get("modelDataSources", "model_data_sources", []),
     categoryIds: get("categoryIds", "category_ids", []),
-    kernelExecutionType: "SaveAndRunAll"
+    kernelExecutionType: "SaveAndRunAll",
+    hasKernelExecutionType: true,
+    sessionTimeoutSeconds: 43200,
+    hasSessionTimeoutSeconds: true,
+    hasEnableGpu: true,
+    hasEnableInternet: true,
+    hasMachineShape: true,
+    hasIsPrivate: true,
+    hasSlug: true,
+    hasText: true,
+    hasLanguage: true,
+    hasKernelType: true,
+    hasNewTitle: true
   };
 }
 

@@ -2,28 +2,42 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101114"><title>YTAgent</title>
+  <meta name="theme-color" content="#080b16"><title>YTAgent // Cybernetic Studio</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <div class="cyber-backdrop" aria-hidden="true">
+    <div class="glass-shard shard-1"></div><div class="glass-shard shard-2"></div>
+    <div class="glass-shard shard-3"></div><div class="glass-shard shard-4"></div>
+    <div class="glass-shard shard-5"></div><div class="glass-shard shard-6"></div>
+    <div class="glass-shard shard-7"></div><div class="glass-shard shard-8"></div>
+    <div class="glass-shard shard-9"></div><div class="glass-shard shard-10"></div>
+    <div class="glass-shard shard-11"></div><div class="glass-shard shard-12"></div>
+    <div class="liquid-halo halo-one"></div><div class="liquid-halo halo-two"></div>
+  </div>
   <main class="shell">
-    <header><div class="brand"><span class="mark">▶</span><div><h1>YTAgent</h1><p>Your AI-powered YouTube publishing assistant</p></div></div><span class="badge">BETA</span></header>
+    <header><div class="brand"><span class="mark">▶</span><div><h1>YTAgent<span class="brand-dot">_</span></h1><p>Autonomous media intelligence // Qing Remzy</p></div></div><span class="badge"><i></i> SYSTEM ONLINE</span></header>
     <section class="card connect">
       <div><h2>YouTube connection</h2><p id="status">Checking connection…</p><small class="muted">Connect only when you are ready to publish. AI analysis works without connecting.</small></div>
       <a class="button" id="connect" href="/auth/google">Connect YouTube</a>
       <button class="button secondary hidden" id="disconnect">Disconnect</button>
     </section>
-    <section class="card">
+    <section class="card generator-card">
+      <div class="eyebrow">01 // CREATION ENGINE</div>
       <h2>AI video generator</h2>
       <p class="muted">Create a complete 60-second science Short with generated visuals, narration and captions. If the hosted video engine is unavailable, YTAgent uses its free animated visual fallback.</p>
       <form id="generatorForm">
         <label>What should the video be about?<input id="videoTopic" maxlength="180" placeholder="e.g. What if the Sun disappeared for 5 seconds?" required></label>
-        <button class="button primary full" id="generateVideo" type="submit">✦ Generate 60-second video</button>
+        <button class="button primary full" id="generateVideo" type="submit"><span class="button-glyph">✦</span> Generate 60-second video</button>
       </form>
-      <p id="generatorStatus" class="muted" aria-live="polite"></p>
+      <div class="generation-status-wrap">
+        <div class="orb-loader hidden" id="generationOrb" aria-hidden="true"><span></span><i></i></div>
+        <p id="generatorStatus" class="muted" aria-live="polite"></p>
+      </div>
       <a id="generatedDownload" class="button secondary full hidden" href="#" download>⬇ Download the actual MP4 video</a>
     </section>
     <section class="card">
+      <div class="eyebrow">02 // VIDEO INTELLIGENCE</div>
       <h2>Create your video post</h2>
       <p class="muted">Choose a video, let AI analyse what is actually shown and heard, review the generated details, then publish.</p>
       <form id="uploadForm">
@@ -42,8 +56,8 @@
       </form>
       <div id="result" class="result hidden" role="status"></div>
     </section>
-    <section class="card"><h2>Quick command</h2><p class="muted">Type a command to open the video workflow.</p><div class="command"><input id="command" placeholder="e.g. analyse and publish this video"><button class="button secondary" id="runCommand">Run</button></div><p id="commandReply" class="muted"></p></section>
-    <footer>YTAgent is an independent tool built by Qing Remzy.</footer>
+    <section class="card"><div class="eyebrow">03 // COMMAND INTERFACE</div><h2>Quick command</h2><p class="muted">Type a command to open the video workflow.</p><div class="command"><input id="command" placeholder="e.g. analyse and publish this video"><button class="button secondary" id="runCommand">Run</button></div><p id="commandReply" class="muted"></p></section>
+    <footer>YTAgent // An independent creation system by Qing Remzy</footer>
   </main>
   <script src="/app.js"></script>
 </body></html>

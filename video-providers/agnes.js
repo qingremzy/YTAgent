@@ -68,13 +68,19 @@ async function requestJson(url, options, label, timeoutMs) {
   const raw = await response.text();
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch (_) {
-    throw new Error(label + " returned an invalid response (HTTP " + response.status + ").");
+    const detail = raw.trim().slice(0, 300) || "The provider returned an empty response.";
+    const error = new Error(response.ok
+      ? label + " returned an invalid response (HTTP " + response.status + "): " + detail
+      : label + " failed: " + detail);
+    error.status = response.status;
+    error.providerCode = detail;
+    throw error;
   }
   if (!response.ok) {
-    const detail = data.error?.message || data.error?.detail || data.message || data.detail || "HTTP " + response.status;
+    const detail = data.error?.message || data.error?.detail || data.message || data.detail || raw.trim().slice(0, 300) || "HTTP " + response.status;
     const error = new Error(label + " failed: " + String(detail).slice(0, 300));
     error.status = response.status;
-    error.providerCode = data.error?.code || data.code || "";
+    error.providerCode = data.error?.code || data.code || detail;
     throw error;
   }
   return data;
@@ -112,8 +118,9 @@ async function waitForVideo(apiKey, model, videoId, onProgress) {
         headers: { Authorization: "Bearer " + apiKey }
       }, "Agnes video status check", 30000);
     } catch (error) {
-      const retryable = error.status === 429 || error.status === 503 ||
-        /rate.?limit|too many|temporarily unavailable/i.test(error.message);
+      const retryable = [408, 429, 500, 502, 503, 504].includes(error.status) ||
+        isQueueFullError(error) ||
+        /rate.?limit|too many|temporarily unavailable|network request failed|fetch failed|timeout/i.test(error.message);
       if (!retryable) throw error;
       waitMs = Math.min(30000, Math.max(12000, waitMs * 2));
       continue;
@@ -226,8 +233,8 @@ async function generateSceneClips(scenes, topic, workDir) {
         break;
       } catch (error) {
         const queueFull = isQueueFullError(error);
-        const retryable = queueFull || error.status === 429 || error.status === 503 ||
-          /temporarily unavailable|rate.?limit|too many requests/i.test(error.message);
+        const retryable = queueFull || [408, 429, 500, 502, 503, 504].includes(error.status) ||
+          /temporarily unavailable|rate.?limit|too many requests|network request failed|fetch failed|timeout/i.test(error.message);
         // Queue-full responses are transient. Wait with exponential backoff for up to
         // six retries rather than failing the entire film after two short waits.
         const maxRetries = 6;

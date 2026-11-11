@@ -49,25 +49,37 @@ def get_pipeline():
     import torch
     from diffusers import AutoencoderKLWan, WanPipeline
     from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
+    if not torch.cuda.is_available():
+        raise RuntimeError("A CUDA GPU is required. Enable a GPU accelerator in Kaggle.")
+    torch.set_grad_enabled(False)
+    torch.backends.cuda.matmul.allow_tf32 = True
     model_id = os.environ.get("WAN_MODEL_ID", "Wan-AI/Wan2.1-T2V-1.3B-Diffusers")
-    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+    dtype = torch.float16
+    print("Loading Wan 2.1 VAE weights...", flush=True)
     vae = AutoencoderKLWan.from_pretrained(model_id, subfolder="vae", torch_dtype=torch.float32)
-    PIPE = WanPipeline.from_pretrained(model_id, vae=vae, torch_dtype=dtype)
+    print("Loading Wan 2.1 video pipeline...", flush=True)
+    PIPE = WanPipeline.from_pretrained(
+        model_id,
+        vae=vae,
+        torch_dtype=dtype,
+        low_cpu_mem_usage=True
+    )
     PIPE.scheduler = UniPCMultistepScheduler(
         prediction_type="flow_prediction",
         use_flow_sigmas=True,
         num_train_timesteps=1000,
         flow_shift=3.0
     )
-    if torch.cuda.is_available():
-        PIPE.enable_model_cpu_offload()
-        try:
-            PIPE.enable_vae_slicing()
-            PIPE.enable_vae_tiling()
-        except Exception:
-            pass
-    else:
-        raise RuntimeError("A CUDA GPU is required. Enable a GPU accelerator in Kaggle.")
+    # Sequential offload is slower, but safer on Kaggle's 16 GB T4 during first load and rendering.
+    print("Enabling sequential CPU offload for the Tesla T4...", flush=True)
+    PIPE.enable_sequential_cpu_offload()
+    try:
+        PIPE.enable_vae_slicing()
+        PIPE.enable_vae_tiling()
+    except Exception as exc:
+        print("Optional VAE memory optimizations unavailable:", str(exc)[:160], flush=True)
+    print("Wan pipeline ready. CUDA memory allocated:",
+          round(torch.cuda.memory_allocated() / (1024 ** 3), 2), "GiB", flush=True)
     return PIPE
 
 def send_progress_to_server(remote_job_id, progress, message):
@@ -81,12 +93,14 @@ def send_progress_to_server(remote_job_id, progress, message):
         return json.loads(response.read().decode("utf-8") or "{}")
 
 def remote_progress_heartbeat(remote_job_id, progress, message, stop_event):
-    # Keep the dashboard's status message alive while a single GPU inference takes minutes.
-    while not stop_event.wait(25):
+    # Send immediately, then keep the dashboard alive during long model downloads/inference.
+    while not stop_event.is_set():
         try:
             send_progress_to_server(remote_job_id, progress, message)
         except Exception as exc:
-            print("YTAgent progress heartbeat failed:", str(exc)[:180])
+            print("YTAgent progress heartbeat failed:", str(exc)[:180], flush=True)
+        if stop_event.wait(12):
+            break
 
 
 def send_scene_to_server(remote_job_id, index, clip_path):
@@ -161,7 +175,7 @@ def poll_railway_once(wait_seconds=600):
     if not SERVER_URL.startswith("https://"):
         raise RuntimeError("YT_AGENT_SERVER_URL must use HTTPS.")
     deadline = time.time() + max(0, int(wait_seconds))
-    print("YTAgent one-job GPU runner is waiting for a queued job.")
+    print("YTAgent one-job GPU runner is waiting for a queued job.", flush=True)
     while time.time() <= deadline:
         try:
             request = urllib.request.Request(
@@ -198,18 +212,18 @@ def poll_railway_once(wait_seconds=600):
 
             local_id = "railway-" + remote_id
             JOBS[local_id] = {"status": "queued", "progress": 0, "message": "GPU job claimed from YTAgent."}
-            print("Claimed YTAgent video job:", remote_id)
+            print("Claimed YTAgent video job:", remote_id, flush=True)
             send_progress_to_server(remote_id, 3, "GPU worker connected. Loading Wan video model.")
             run_job(local_id, prompts, int(job.get("seed", 20261110)), remote_job_id=remote_id, narrations=narrations)
             result = JOBS.get(local_id, {})
             if result.get("status") == "failed":
                 report_remote_failure(remote_id, result.get("message", "GPU generation failed."))
-                print("YTAgent GPU job failed:", result.get("message", "unknown error"))
+                print("YTAgent GPU job failed:", result.get("message", "unknown error"), flush=True)
             else:
-                print("Finished sending all scenes to YTAgent:", remote_id)
+                print("Finished sending all scenes to YTAgent:", remote_id, flush=True)
             return True
         except Exception as exc:
-            print("YTAgent one-job runner connection failed:", str(exc)[:250])
+            print("YTAgent one-job runner connection failed:", str(exc)[:250], flush=True)
             if time.time() >= deadline:
                 break
             time.sleep(min(20, max(1, deadline - time.time())))
@@ -278,7 +292,7 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
                     height=832,
                     width=480,
                     num_frames=97,
-                    num_inference_steps=int(os.environ.get("WAN_STEPS", "20")),
+                    num_inference_steps=int(os.environ.get("WAN_STEPS", "12")),
                     guidance_scale=5.0,
                     generator=generator
                 )

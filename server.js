@@ -29,6 +29,7 @@ let redisConnection = null;
 const localGenerationJobs = new Map();
 const uploadDir = path.join(__dirname, "uploads");
 const studioProjectRoot = path.join(uploadDir, "studio-projects");
+const studioProjectExpiryTimers = new Map();
 const generationJobsFile = path.join(uploadDir, "generation-jobs.json");
 
 function persistGenerationJobs() {
@@ -110,11 +111,16 @@ function scheduleGeneratedFileExpiry(filePath, delayMs = GENERATED_FILE_TTL_MS) 
 
 function scheduleStudioProjectExpiry(projectId, delayMs = GENERATED_FILE_TTL_MS) {
   if (!/^[a-f0-9]{24}$/i.test(String(projectId || ""))) return;
-  const projectDir = path.join(studioProjectRoot, String(projectId).toLowerCase());
+  const id = String(projectId).toLowerCase();
+  const previous = studioProjectExpiryTimers.get(id);
+  if (previous) clearTimeout(previous);
+  const projectDir = path.join(studioProjectRoot, id);
   const timer = setTimeout(() => {
+    studioProjectExpiryTimers.delete(id);
     fs.promises.rm(projectDir, { recursive: true, force: true }).catch(() => {});
   }, Math.max(1, delayMs));
   timer.unref();
+  studioProjectExpiryTimers.set(id, timer);
 }
 
 function restoreStudioProjectExpiries() {
@@ -228,6 +234,7 @@ app.get("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
 app.put("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
   try {
     const project = await saveStudioProject(studioProjectRoot, req.params.projectId, req.body?.source);
+    scheduleStudioProjectExpiry(project.id);
     res.set("Cache-Control", "private, no-store");
     res.json({ saved: true, id: project.id, updatedAt: project.updatedAt });
   } catch (error) {

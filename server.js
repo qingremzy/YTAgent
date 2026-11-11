@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
+const { RedisStore } = require("connect-redis");
 const helmet = require("helmet");
 const multer = require("multer");
 const path = require("path");
@@ -12,7 +13,8 @@ const { google } = require("googleapis");
 const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const { createRateLimiter } = require("./middleware/rate-limit");
-const { readStudioProject, saveStudioProject, resolveStudioAsset } = require("./studio-project");
+const { readStudioProject, saveStudioProject, validateStudioSource, resolveStudioAsset } = require("./studio-project");
+const { createObjectStorage } = require("./object-storage");
 const { createKaggleWorkerSessionManager } = require("./kaggle-worker-session");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
 const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
@@ -102,6 +104,13 @@ function restoreGenerationJobs() {
 }
 const GENERATED_FILE_TTL_MS = 6 * 60 * 60 * 1000;
 fs.mkdirSync(uploadDir, { recursive: true });
+const objectStorage = createObjectStorage();
+
+if (redisEnabled) {
+  redisConnection = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
+  redisConnection.on("error", error => console.error("Redis connection error:", error.message));
+  redisConnection.on("ready", () => console.log("YTAgent Redis connection ready."));
+}
 
 function scheduleGeneratedFileExpiry(filePath, delayMs = GENERATED_FILE_TTL_MS) {
   const timer = setTimeout(() => {
@@ -172,13 +181,18 @@ const sessionSecret = process.env.SESSION_SECRET || require("crypto").randomByte
 if (!process.env.SESSION_SECRET) {
   console.warn("SESSION_SECRET is not configured. Sessions will be invalidated whenever this process restarts.");
 }
-app.use(session({
+const sessionOptions = {
   name: "ytagent.sid",
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 24 * 60 * 60 * 1000 }
-}));
+};
+if (redisConnection) {
+  sessionOptions.store = new RedisStore({ client: redisConnection, prefix: "ytagent:sess:", ttl: 24 * 60 * 60 });
+  console.log("YTAgent sessions will persist in Redis.");
+}
+app.use(session(sessionOptions));
 app.use("/studio", (req, res, next) => {
   if (!req.session?.tokens) return res.redirect("/");
   next();

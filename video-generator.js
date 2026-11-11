@@ -102,7 +102,7 @@ async function requestStoryboard(topic) {
     "Return ONE valid JSON object only. No markdown, commentary or extra text. Required keys: title, description, tags, hashtags, keywords, scenes. " +
     "Exactly 10 scenes. Every scene must contain title, narration, caption and visual_direction. Each narration should be 9 to 14 spoken words. " +
     "Each visual_direction must describe one concrete, animatable action. Keep the subject large and centered for vertical 9:16. " +
-    "Use premium cinematic realistic 3D educational CGI, physically based materials, believable anatomy and physics, dramatic lighting, volumetric atmosphere, macro detail and smooth camera movement. " +
+    "Use photorealistic live-action documentary footage with real-looking human subjects, expressive faces, natural skin texture, authentic locations and believable human movement. Show people actively demonstrating the subject whenever relevant. Use cinematic camera movement, practical lighting and varied shot sizes. Avoid cartoons, static illustrations, slideshows, plastic CGI humans and repetitive visuals. Use scientific CGI only for phenomena that cannot be filmed, and keep human presenters or demonstrations as the visual anchor. " +
     "Be scientifically accurate. Build a strong hook, clear cause and effect, escalating visual interest and memorable ending. Do not imitate any creator's characters, scenes or branding.";
   var failures = [];
   if (process.env.GEMINI_API_KEY) {

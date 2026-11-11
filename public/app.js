@@ -99,6 +99,7 @@ const generatorForm = document.getElementById("generatorForm");
 const generateButton = document.getElementById("generateVideo");
 const generatorStatus = document.getElementById("generatorStatus");
 const generatedDownload = document.getElementById("generatedDownload");
+const generatedEdit = document.getElementById("generatedEdit");
 const generationOrb = document.getElementById("generationOrb");
 const generationProgress = document.getElementById("generationProgress");
 const generationProgressFill = document.getElementById("generationProgressFill");
@@ -120,12 +121,18 @@ function showGeneratedVideo(data, topic) {
   setGenerationLoading(false);
   generatedDownload.href = data.downloadUrl;
   generatedDownload.classList.remove("hidden");
+  if (data.studioProjectId && generatedEdit) {
+    generatedEdit.href = "/studio?project=" + encodeURIComponent(data.studioProjectId);
+    generatedEdit.classList.remove("hidden");
+  } else if (generatedEdit) {
+    generatedEdit.classList.add("hidden");
+  }
   form.elements.title.value = data.title || topic;
   form.elements.description.value = data.description || "";
   form.elements.tags.value = (data.tags || []).join(", ");
   form.elements.hashtags.value = (data.hashtags || []).join(" ");
   form.elements.keywords.value = (data.keywords || []).join(", ");
-  generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated MP4 is ready. Voice: " + (data.voice_provider || "AI voice") + ". Visuals: " + (data.visual_provider || "YTAgent video engine") + ". Narration and captions are included. Download the actual video file below, then select it in the publishing section.";
+  generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated MP4 is ready. Voice: " + (data.voice_provider || "AI voice") + ". Visuals: " + (data.visual_provider || "YTAgent video engine") + ". Open the editable studio to refine the timeline, export a final MP4, or publish to YouTube.";
   window.dispatchEvent(new CustomEvent("ytagent:generation", { detail: { state: "completed", progress: 100, message: "Your finished film is ready." } }));;
 }
 async function fetchGenerationStatus(jobId, deadline) {
@@ -197,6 +204,7 @@ generatorForm.addEventListener("submit", async event => {
   generateButton.textContent = "Generating video…";
   generatorStatus.textContent = "AI director is planning ten scenes. YTAgent is creating the visuals, generating narration, and assembling one complete MP4. This may take several minutes. You can leave and return later."
   generatedDownload.classList.add("hidden");
+  if (generatedEdit) generatedEdit.classList.add("hidden");
   try {
     const response = await fetch("/api/generate", {
       method: "POST",

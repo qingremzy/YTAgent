@@ -75,7 +75,7 @@ function parseStoryboardJson(raw) {
 }
 
 function countNarrationWords(value) {
-  return String(value || "").trim().split(/\\s+/).filter(Boolean).length;
+  return String(value || "").trim().split(/\s+/).filter(Boolean).length;
 }
 
 function validateStoryboard(storyboard) {
@@ -89,7 +89,7 @@ function validateStoryboard(storyboard) {
     if (narration.length > 220) throw new Error("Scene " + (i + 1) + " narration is too long for its six-second slot.");
     var wordCount = countNarrationWords(narration);
     if (wordCount < 8 || wordCount > 16) throw new Error("Scene " + (i + 1) + " narration has " + wordCount + " words. Use 8 to 16 words so the spoken line can fit its six-second scene.");
-    var normalized = narration.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\\s+/g, " ");
+    var normalized = narration.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ");
     if (seenNarration.has(normalized)) throw new Error("Scene " + (i + 1) + " repeats narration from another scene. Every scene needs a distinct spoken line.");
     seenNarration.add(normalized);
   }

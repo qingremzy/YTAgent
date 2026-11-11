@@ -1272,7 +1272,6 @@ app.use((err, _req, res, _next) => {
   res.status(400).json({ error: err.message || "Something went wrong." });
 });
 if (redisEnabled) {
-  redisConnection = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
   analysisQueue = new Queue(taskQueueName, { connection: redisConnection });
   const configuredConcurrency = Number(process.env.ANALYSIS_CONCURRENCY || 4);
   const concurrency = Number.isInteger(configuredConcurrency) ? Math.min(50, Math.max(1, configuredConcurrency)) : 4;
@@ -1284,7 +1283,7 @@ if (redisEnabled) {
     } finally {
       await fs.promises.unlink(job.data.path).catch(() => {});
     }
-  }, { connection: redisConnection, concurrency });
+  }, { connection: redisConnection, concurrency, drainDelay: 30 });
   worker.on("failed", (job, error) => console.error("Analysis task failed:", job?.id, error.message));
   worker.on("error", error => console.error("Analysis worker error:", error.message));
 
@@ -1305,7 +1304,7 @@ if (redisEnabled) {
       await fs.promises.unlink(job.data.outputPath).catch(() => {});
       throw error;
     }
-  }, { connection: redisConnection, concurrency: 1 });
+  }, { connection: redisConnection, concurrency: 1, drainDelay: 30 });
   generationWorker.on("failed", (job, error) => console.error("Video generation task failed:", job?.id, error.message));
   generationWorker.on("error", error => console.error("Video generation worker error:", error.message));
   console.log("YTAgent Redis queues enabled. Analysis concurrency:", concurrency, "Video generation concurrency: 1");

@@ -24,6 +24,7 @@ GPU_LOCK = threading.Lock()
 ACTIVE_JOB = None
 PIPE = None
 POLL_THREAD = None
+KOKORO_PIPE = None
 SERVER_URL = os.environ.get("YT_AGENT_SERVER_URL", "").rstrip("/")
 
 class Scene(BaseModel):
@@ -77,6 +78,46 @@ def send_scene_to_server(remote_job_id, index, clip_path):
     with urllib.request.urlopen(request, timeout=180) as response:
         return json.loads(response.read().decode("utf-8") or "{}")
 
+def send_audio_to_server(remote_job_id, index, audio_path):
+    url = f"{SERVER_URL}/api/worker/jobs/{remote_job_id}/audio/{index}"
+    data = Path(audio_path).read_bytes()
+    request = urllib.request.Request(
+        url, data=data, method="POST",
+        headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/octet-stream"}
+    )
+    with urllib.request.urlopen(request, timeout=90) as response:
+        return json.loads(response.read().decode("utf-8") or "{}")
+
+def get_kokoro_pipeline():
+    global KOKORO_PIPE
+    if KOKORO_PIPE is None:
+        from kokoro import KPipeline
+        # CPU inference keeps GPU memory available for Wan and avoids a second model competing for VRAM.
+        KOKORO_PIPE = KPipeline(lang_code="a", device="cpu")
+    return KOKORO_PIPE
+
+def generate_kokoro_audio(text, output_path):
+    import numpy as np
+    import soundfile as sf
+    pipeline = get_kokoro_pipeline()
+    voice = os.environ.get("KOKORO_VOICE", "am_fenrir")
+    speed = float(os.environ.get("KOKORO_SPEED", "1.0"))
+    speed = min(1.2, max(0.8, speed))
+    chunks = []
+    for _graphemes, _phonemes, audio in pipeline(str(text), voice=voice, speed=speed):
+        if audio is None:
+            continue
+        if hasattr(audio, "detach"):
+            audio = audio.detach().cpu().numpy()
+        chunks.append(np.asarray(audio, dtype=np.float32).reshape(-1))
+    if not chunks:
+        raise RuntimeError("Kokoro did not produce narration audio.")
+    waveform = np.concatenate(chunks)
+    sf.write(str(output_path), waveform, 24000, subtype="PCM_16")
+    if not Path(output_path).is_file() or Path(output_path).stat().st_size < 1000:
+        raise RuntimeError("Kokoro produced an empty narration file.")
+    return str(output_path)
+
 def report_remote_failure(remote_job_id, message):
     if not SERVER_URL or not TOKEN:
         return
@@ -110,14 +151,15 @@ def poll_railway():
                 raise
             remote_id = str(job.get("job_id", ""))
             prompts = job.get("prompts", [])
-            if not re.fullmatch(r"[a-f0-9]{32}", remote_id) or len(prompts) != 10:
+            narrations = job.get("narrations", [])
+            if not re.fullmatch(r"[a-f0-9]{32}", remote_id) or len(prompts) != 10 or len(narrations) != 10:
                 print("YTAgent returned an invalid GPU job. Skipping it.")
                 time.sleep(5)
                 continue
             local_id = "railway-" + remote_id
             JOBS[local_id] = {"status": "queued", "progress": 0, "message": "GPU job claimed from YTAgent."}
             print("Claimed YTAgent video job:", remote_id)
-            run_job(local_id, prompts, int(job.get("seed", 20261110)), remote_job_id=remote_id)
+            run_job(local_id, prompts, int(job.get("seed", 20261110)), remote_job_id=remote_id, narrations=narrations)
             result = JOBS.get(local_id, {})
             if result.get("status") == "failed":
                 report_remote_failure(remote_id, result.get("message", "GPU generation failed."))
@@ -127,8 +169,8 @@ def poll_railway():
             print("YTAgent polling connection failed:", str(exc)[:250])
             time.sleep(20)
 
-def run_job(job_id, prompts, seed, remote_job_id=None):
-    global ACTIVE_JOB
+def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
+    global ACTIVE_JOB, PIPE
     work = ROOT / job_id
     work.mkdir(parents=True, exist_ok=True)
     lock_acquired = False
@@ -166,6 +208,19 @@ def run_job(job_id, prompts, seed, remote_job_id=None):
                 print(f"Uploaded scene {index + 1} of {len(prompts)} to YTAgent.")
             del result, frames, generator
             torch.cuda.empty_cache()
+        if remote_job_id:
+            if not isinstance(narrations, list) or len(narrations) != 10:
+                raise RuntimeError("YTAgent did not provide ten narration lines for Kokoro.")
+            # Release the large video model before loading the small local TTS model.
+            del pipe
+            PIPE = None
+            torch.cuda.empty_cache()
+            for index, line in enumerate(narrations):
+                JOBS[job_id]["message"] = f"Generating natural Kokoro narration {index + 1} of 10."
+                audio_path = work / f"narration-{index:02d}.wav"
+                generate_kokoro_audio(line, audio_path)
+                send_audio_to_server(remote_job_id, index, audio_path)
+                print(f"Uploaded Kokoro narration {index + 1} of 10 to YTAgent.")
         zip_path = None
         if not remote_job_id:
             zip_path = work / "scenes.zip"

@@ -95,7 +95,7 @@ async function requestStoryboard(topic) {
   var failures = [];
   if (process.env.GEMINI_API_KEY) {
     try {
-      var model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+      var model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
       var response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
         method: "POST",
         headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "Content-Type": "application/json" },

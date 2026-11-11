@@ -13,6 +13,7 @@ const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const { createRateLimiter } = require("./middleware/rate-limit");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
+const { claimNextGpuJob, receiveGpuScene, failGpuJob } = require("./gpu-worker-bridge");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -736,6 +737,45 @@ app.post("/api/upload", requireAuth, videoUpload.single("video"), async (req, re
     console.error("Upload failed:", err.message);
     res.status(500).json({ error: err.message.includes("quota") ? "YouTube API quota reached. Try again after quota resets." : "Upload failed. Check your Google API setup and try again." });
   }
+});
+
+
+function requireGpuWorker(req, res, next) {
+  const expected = String(process.env.YT_AGENT_WORKER_TOKEN || "");
+  const supplied = String(req.headers.authorization || "");
+  const expectedHeader = "Bearer " + expected;
+  if (!expected || Buffer.byteLength(supplied) !== Buffer.byteLength(expectedHeader) ||
+      !require("crypto").timingSafeEqual(Buffer.from(supplied), Buffer.from(expectedHeader))) {
+    return res.status(401).json({ error: "Invalid GPU worker credentials." });
+  }
+  next();
+}
+
+// The GPU notebook polls this app over outbound HTTPS. No temporary tunnel is needed.
+app.get("/api/worker/next", requireGpuWorker, (_req, res) => {
+  const job = claimNextGpuJob();
+  if (!job) return res.status(204).end();
+  res.json(job);
+});
+
+app.post("/api/worker/jobs/:jobId/scenes/:index", requireGpuWorker,
+  express.raw({ type: ["application/octet-stream", "video/mp4"], limit: "100mb" }),
+  async (req, res) => {
+    if (!/^[a-f0-9]{32}$/i.test(req.params.jobId)) return res.status(400).json({ error: "Invalid GPU job ID." });
+    const index = Number(req.params.index);
+    try {
+      const result = await receiveGpuScene(req.params.jobId, index, req.body);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ error: error.message || "Could not receive GPU scene." });
+    }
+  }
+);
+
+app.post("/api/worker/jobs/:jobId/fail", requireGpuWorker, (req, res) => {
+  if (!/^[a-f0-9]{32}$/i.test(req.params.jobId)) return res.status(400).json({ error: "Invalid GPU job ID." });
+  const accepted = failGpuJob(req.params.jobId, req.body?.error || "The GPU worker failed.");
+  res.json({ accepted });
 });
 
 const { generateEducationalVideo } = require("./video-generator");

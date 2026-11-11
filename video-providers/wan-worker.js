@@ -50,6 +50,16 @@ async function workerRequest(baseUrl, token, route, options = {}, timeoutMs = 60
 async function generateWanSceneClips(scenes, topic, workDir) {
   const configuredUrl = process.env.VIDEO_WORKER_URL;
   const token = process.env.YT_AGENT_WORKER_TOKEN;
+  if (!Array.isArray(scenes) || scenes.length !== 10) {
+    throw new Error("Wan GPU worker requires exactly ten storyboard scenes.");
+  }
+
+  // Prefer the outbound polling bridge: Kaggle calls Railway, so no expiring public tunnel is needed.
+  if (token && process.env.VIDEO_WORKER_MODE !== "tunnel") {
+    const { enqueueGpuJob } = require("../gpu-worker-bridge");
+    const prompts = scenes.map((scene, index) => buildWanScenePrompt(scene, topic, index));
+    return enqueueGpuJob({ prompts, seed: 20261110, workDir });
+  }
   if (!configuredUrl || !token) {
     throw new Error("Wan GPU worker is not configured. Set VIDEO_WORKER_URL and YT_AGENT_WORKER_TOKEN while the free GPU notebook is running.");
   }

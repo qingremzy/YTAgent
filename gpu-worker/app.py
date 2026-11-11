@@ -5,6 +5,10 @@ import uuid
 import zipfile
 import shutil
 import threading
+import time
+import json
+import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import List
 from fastapi import FastAPI, BackgroundTasks, Header, HTTPException
@@ -19,6 +23,8 @@ JOBS = {}
 GPU_LOCK = threading.Lock()
 ACTIVE_JOB = None
 PIPE = None
+POLL_THREAD = None
+SERVER_URL = os.environ.get("YT_AGENT_SERVER_URL", "").rstrip("/")
 
 class Scene(BaseModel):
     prompt: str = Field(min_length=30, max_length=1800)
@@ -61,7 +67,67 @@ def get_pipeline():
         raise RuntimeError("A CUDA GPU is required. Enable a GPU accelerator in Kaggle.")
     return PIPE
 
-def run_job(job_id, prompts, seed):
+def send_scene_to_server(remote_job_id, index, clip_path):
+    url = f"{SERVER_URL}/api/worker/jobs/{remote_job_id}/scenes/{index}"
+    data = Path(clip_path).read_bytes()
+    request = urllib.request.Request(
+        url, data=data, method="POST",
+        headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/octet-stream"}
+    )
+    with urllib.request.urlopen(request, timeout=180) as response:
+        return json.loads(response.read().decode("utf-8") or "{}")
+
+def report_remote_failure(remote_job_id, message):
+    if not SERVER_URL or not TOKEN:
+        return
+    try:
+        payload = json.dumps({"error": str(message)[:500]}).encode("utf-8")
+        request = urllib.request.Request(
+            f"{SERVER_URL}/api/worker/jobs/{remote_job_id}/fail",
+            data=payload, method="POST",
+            headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response.read()
+    except Exception as exc:
+        print("Could not report GPU worker failure to YTAgent:", str(exc)[:200])
+
+def poll_railway():
+    print("YTAgent outbound GPU polling is active. No Cloudflare tunnel is required.")
+    while True:
+        try:
+            request = urllib.request.Request(
+                SERVER_URL + "/api/worker/next",
+                headers={"Authorization": "Bearer " + TOKEN}
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    job = json.loads(response.read().decode("utf-8") or "{}")
+            except urllib.error.HTTPError as exc:
+                if exc.code == 204:
+                    time.sleep(12)
+                    continue
+                raise
+            remote_id = str(job.get("job_id", ""))
+            prompts = job.get("prompts", [])
+            if not re.fullmatch(r"[a-f0-9]{32}", remote_id) or len(prompts) != 10:
+                print("YTAgent returned an invalid GPU job. Skipping it.")
+                time.sleep(5)
+                continue
+            local_id = "railway-" + remote_id
+            JOBS[local_id] = {"status": "queued", "progress": 0, "message": "GPU job claimed from YTAgent."}
+            print("Claimed YTAgent video job:", remote_id)
+            run_job(local_id, prompts, int(job.get("seed", 20261110)), remote_job_id=remote_id)
+            result = JOBS.get(local_id, {})
+            if result.get("status") == "failed":
+                report_remote_failure(remote_id, result.get("message", "GPU generation failed."))
+            else:
+                print("Finished sending all scenes to YTAgent:", remote_id)
+        except Exception as exc:
+            print("YTAgent polling connection failed:", str(exc)[:250])
+            time.sleep(20)
+
+def run_job(job_id, prompts, seed, remote_job_id=None):
     global ACTIVE_JOB
     work = ROOT / job_id
     work.mkdir(parents=True, exist_ok=True)
@@ -95,17 +161,22 @@ def run_job(job_id, prompts, seed):
             clip_path = work / f"scene-{index:02d}.mp4"
             export_to_video(frames, str(clip_path), fps=16)
             clips.append(clip_path)
+            if remote_job_id:
+                send_scene_to_server(remote_job_id, index, clip_path)
+                print(f"Uploaded scene {index + 1} of {len(prompts)} to YTAgent.")
             del result, frames, generator
             torch.cuda.empty_cache()
-        zip_path = work / "scenes.zip"
-        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            for clip in clips:
-                archive.write(clip, clip.name)
+        zip_path = None
+        if not remote_job_id:
+            zip_path = work / "scenes.zip"
+            with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                for clip in clips:
+                    archive.write(clip, clip.name)
         JOBS[job_id].update({
             "status": "completed",
             "progress": 100,
             "message": "All AI-generated video scenes are ready.",
-            "result": str(zip_path)
+            "result": str(zip_path) if zip_path else None
         })
     except Exception as exc:
         JOBS[job_id].update({"status": "failed", "message": str(exc)[:700]})
@@ -113,6 +184,8 @@ def run_job(job_id, prompts, seed):
         if lock_acquired:
             GPU_LOCK.release()
         ACTIVE_JOB = None
+        if remote_job_id:
+            shutil.rmtree(work, ignore_errors=True)
 
 @app.get("/health")
 def health():
@@ -164,3 +237,17 @@ def download_scene(job_id: str, scene_index: int, authorization: str = Header(de
         raise HTTPException(status_code=404, detail="Generated scene file has expired or is missing.")
     return FileResponse(str(file_path), media_type="video/mp4",
                         filename="scene-" + str(scene_index + 1).zfill(2) + ".mp4")
+
+
+@app.on_event("startup")
+def start_railway_polling():
+    global POLL_THREAD
+    if SERVER_URL and TOKEN:
+        if not SERVER_URL.startswith("https://"):
+            print("YT_AGENT_SERVER_URL must use HTTPS. Outbound polling was not started.")
+            return
+        if POLL_THREAD is None or not POLL_THREAD.is_alive():
+            POLL_THREAD = threading.Thread(target=poll_railway, daemon=True, name="ytagent-railway-poller")
+            POLL_THREAD.start()
+    else:
+        print("YTAgent outbound polling is disabled. Set YT_AGENT_SERVER_URL and YT_AGENT_WORKER_TOKEN.")

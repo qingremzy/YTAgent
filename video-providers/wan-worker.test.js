@@ -19,6 +19,7 @@ test("builds a moving cinematic 3D prompt for each storyboard action", () => {
 test("refuses to contact an unconfigured GPU worker", async () => {
   const oldUrl = process.env.VIDEO_WORKER_URL;
   const oldToken = process.env.YT_AGENT_WORKER_TOKEN;
+  const oldMode = process.env.VIDEO_WORKER_MODE;
   delete process.env.VIDEO_WORKER_URL;
   delete process.env.YT_AGENT_WORKER_TOKEN;
   try {
@@ -31,12 +32,16 @@ test("refuses to contact an unconfigured GPU worker", async () => {
     else process.env.VIDEO_WORKER_URL = oldUrl;
     if (oldToken === undefined) delete process.env.YT_AGENT_WORKER_TOKEN;
     else process.env.YT_AGENT_WORKER_TOKEN = oldToken;
+    if (oldMode === undefined) delete process.env.VIDEO_WORKER_MODE;
+    else process.env.VIDEO_WORKER_MODE = oldMode;
   }
 });
 
 test("rejects malformed worker URLs before making network requests", async () => {
   const oldUrl = process.env.VIDEO_WORKER_URL;
   const oldToken = process.env.YT_AGENT_WORKER_TOKEN;
+  const oldMode = process.env.VIDEO_WORKER_MODE;
+  process.env.VIDEO_WORKER_MODE = "tunnel";
   process.env.VIDEO_WORKER_URL = "http://not-secure.example";
   process.env.YT_AGENT_WORKER_TOKEN = "test-token";
   try {
@@ -49,5 +54,7 @@ test("rejects malformed worker URLs before making network requests", async () =>
     else process.env.VIDEO_WORKER_URL = oldUrl;
     if (oldToken === undefined) delete process.env.YT_AGENT_WORKER_TOKEN;
     else process.env.YT_AGENT_WORKER_TOKEN = oldToken;
+    if (oldMode === undefined) delete process.env.VIDEO_WORKER_MODE;
+    else process.env.VIDEO_WORKER_MODE = oldMode;
   }
 });

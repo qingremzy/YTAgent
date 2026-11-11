@@ -10,7 +10,7 @@ const ffmpegPath = require("ffmpeg-static");
 const WIDTH = 720, HEIGHT = 1280, FPS = 30, DURATION = 60;
 
 function clean(value, max) {
-  return String(value || "").replace(/[<>]/g, "").replace(/\\s+/g, " ").trim().slice(0, max || 200);
+  return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max || 200);
 }
 function xml(value) {
   return clean(value, 220).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");

@@ -29,6 +29,6 @@ test("uses the monochrome graphite palette without blue or purple accents", () =
   }, 0, 10);
   assert.match(svg, /#08090b/);
   assert.match(svg, /#d7dbe0/);
-  assert.doesNotMatch(svg, /hsl\(/i);
+  assert.equal(svg.includes("hsl("), false);
   assert.doesNotMatch(svg, /#67e8f9|#071426|#102b48/i);
 });

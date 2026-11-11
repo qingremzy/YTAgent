@@ -16,6 +16,7 @@ const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
 const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
 const { claimNextGpuJob, noteGpuWorkerPoll, getGpuWorkerStatus, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
 const { readStudioProject, saveStudioProject, resolveStudioAsset } = require("./studio-project");
+const { createKaggleWorkerSessionManager } = require("./kaggle-worker-session");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -894,6 +895,14 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
     return res.status(409).json({ error: "YTAgent is already generating a film. Wait for it to finish before starting another." });
   }
 
+  if (req.session?.tokens && process.env.KAGGLE_API_TOKEN) {
+    kaggleWorkerSessionManager.ensure().then(result => {
+      if (result.started) console.log("YTAgent requested a free Kaggle GPU session:", result.notebookRef, result.machineShape);
+    }).catch(error => {
+      console.warn("YTAgent could not auto-start the Kaggle GPU worker:", error.message);
+    });
+  }
+
   const id = require("crypto").randomBytes(12).toString("hex");
   const filename = "generated-" + id + ".mp4";
   const outputPath = path.join(uploadDir, filename);
@@ -1040,6 +1049,13 @@ function kaggleToolData(result) {
   return result;
 }
 
+const kaggleWorkerSessionManager = createKaggleWorkerSessionManager({
+  callKaggleTool,
+  getGpuWorkerStatus,
+  getNotebookIdentity: kaggleNotebookIdentity,
+  kaggleToolData
+});
+
 app.get("/api/kaggle/notebook", requireAuth, async (_req, res) => {
   const identity = kaggleNotebookIdentity();
   const [infoResult, statusResult] = await Promise.allSettled([
@@ -1112,52 +1128,12 @@ app.post("/api/kaggle/notebook/save", requireAuth, async (req, res) => {
 
 app.post("/api/kaggle/notebook/start", requireAuth, async (_req, res) => {
   try {
-    const identity = kaggleNotebookIdentity();
-    const statusResult = await callKaggleTool("get_notebook_session_status", {
-      userName: identity.userName, kernelSlug: identity.kernelSlug
-    }).then(kaggleToolData).catch(error => ({ lookupError: error.message }));
-    const statusText = String(statusResult?.status || statusResult?.state || statusResult?.message || "").toUpperCase();
-    if (["RUNNING", "QUEUED", "CANCEL_REQUESTED"].includes(statusText)) {
-      return res.json({
-        started: false,
-        alreadyRunning: true,
-        notebookRef: identity.slug,
-        session: statusResult,
-        message: "Kaggle already has an active session. YTAgent will not create a duplicate."
-      });
-    }
-
-    const info = kaggleToolData(await callKaggleTool("get_notebook_info", {
-      userName: identity.userName, kernelSlug: identity.kernelSlug
-    }));
-    const metadata = info?.metadata || info?.kernel?.metadata || {};
-    const machineShape = metadata.machineShape || metadata.machine_shape || "";
-    if (!machineShape) {
-      return res.status(409).json({
-        started: false,
-        error: "Kaggle did not report a GPU machine shape for this notebook. Confirm that the notebook has a saved version and a GPU accelerator."
-      });
-    }
-    const result = await callKaggleTool("create_notebook_session", {
-      slug: identity.slug,
-      language: metadata.language || "python",
-      kernelType: metadata.kernelType || metadata.kernel_type || "notebook",
-      machineShape,
-      enableInternet: metadata.enableInternet ?? metadata.enable_internet ?? true
-    }).then(kaggleToolData);
-    res.json({ started: true, notebookRef: identity.slug, machineShape, operation: result });
+    const result = await kaggleWorkerSessionManager.ensure();
+    res.json(result);
   } catch (error) {
     const message = String(error.message || error);
     console.error("Kaggle notebook start failed:", message);
-    if (/already running|session already exists|already has.*session/i.test(message)) {
-      return res.json({
-        started: false,
-        alreadyRunning: true,
-        notebookRef: process.env.KAGGLE_NOTEBOOK_REF || null,
-        message: "Kaggle reports an existing session. Check its status instead of starting another."
-      });
-    }
-    res.status(502).json({ started: false, error: message });
+    res.status(502).json({ started: false, error: message.slice(0, 500) });
   }
 });
 

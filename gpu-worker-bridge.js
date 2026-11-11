@@ -8,7 +8,7 @@ const JOB_TIMEOUT_MS = 90 * 60 * 1000;
 const CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
 let lastWorkerPollAt = 0;
 
-function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, claimTimeoutMs = CLAIM_TIMEOUT_MS }) {
+function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueued, claimTimeoutMs = CLAIM_TIMEOUT_MS }) {
   if (!Array.isArray(prompts) || prompts.length !== 10 || !Array.isArray(narrations) || narrations.length !== 10) {
     return Promise.reject(new Error("The free GPU worker requires exactly ten scene prompts."));
   }
@@ -26,6 +26,11 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, claimTi
     }, claimTimeoutMs);
     jobs.set(id, job);
     pending.push(id);
+    if (typeof onQueued === "function") {
+      Promise.resolve().then(() => onQueued({ jobId: id })).catch(error => {
+        failGpuJob(id, "Could not start the Kaggle GPU worker: " + (error.message || error));
+      });
+    }
   });
 }
 

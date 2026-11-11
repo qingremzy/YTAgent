@@ -30,7 +30,10 @@ function updateGpuJobProgress(id, progress, message) {
   job.progress = Math.max(job.progress, value);
   const detail = String(message || "").replace(/[<>]/g, "").slice(0, 180);
   if (typeof job.onProgress === "function") {
-    try { job.onProgress(job.progress, detail); } catch (_) {}
+    try {
+      const pending = job.onProgress(job.progress, detail);
+      if (pending && typeof pending.catch === "function") pending.catch(() => {});
+    } catch (_) {}
   }
   return true;
 }

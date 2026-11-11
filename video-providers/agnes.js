@@ -15,7 +15,7 @@ function delay(ms) {
 function isQueueFullError(error) {
   const message = String(error && error.message || "");
   const code = String(error && error.providerCode || "");
-  return /queue[ _-]*full|full[ _-]*queue|queue.{0,30}capacity|capacity.{0,30}queue/i.test(message + " " + code);
+  return /queue\\s+is\\s+full|queue[ _-]*full|full[ _-]*queue|queue.{0,30}capacity|capacity.{0,30}queue/i.test(message + " " + code);
 }
 
 function submissionRetryDelay(attempt) {

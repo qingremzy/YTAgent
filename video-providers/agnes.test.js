@@ -4,7 +4,9 @@ const {
   buildPairPrompt,
   getVideoId,
   getTaskStatus,
-  getVideoUrl
+  getVideoUrl,
+  isQueueFullError,
+  submissionRetryDelay
 } = require("./agnes");
 
 test("builds one vertical paired-scene prompt with a midpoint transition", () => {
@@ -29,4 +31,17 @@ test("reads Agnes task IDs from supported response shapes", () => {
 test("normalizes task status and generated video URL", () => {
   assert.equal(getTaskStatus({ data: { status: "COMPLETED" } }), "completed");
   assert.equal(getVideoUrl({ metadata: { url: "https://cdn.example/video.mp4" } }), "https://cdn.example/video.mp4");
+});
+
+test("recognizes Agnes queue-full messages", () => {
+  assert.equal(isQueueFullError({ message: "video queue is full, please retry later" }), true);
+  assert.equal(isQueueFullError({ message: "QUEUE_FULL" }), true);
+  assert.equal(isQueueFullError({ message: "invalid API key" }), false);
+});
+
+test("uses increasing capped delays for queue retries", () => {
+  assert.equal(submissionRetryDelay(1), 60000);
+  assert.equal(submissionRetryDelay(2), 120000);
+  assert.equal(submissionRetryDelay(3), 240000);
+  assert.equal(submissionRetryDelay(6), 300000);
 });

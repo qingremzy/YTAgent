@@ -12,6 +12,16 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function isQueueFullError(error) {
+  const message = String(error && error.message || "");
+  const code = String(error && error.providerCode || "");
+  return /queue\s+is\s+full|queue[ _-]*full|full[ _-]*queue|queue.{0,30}capacity|capacity.{0,30}queue/i.test(message + " " + code);
+}
+
+function submissionRetryDelay(attempt) {
+  return Math.min(5 * 60 * 1000, 60 * 1000 * Math.pow(2, Math.max(0, attempt - 1)));
+}
+
 function safeText(value, max = 700) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
 }
@@ -122,7 +132,7 @@ async function waitForVideo(apiKey, model, videoId, onProgress) {
     }
     if (data.error || data.code) {
       const detail = data.error?.message || data.message || data.code;
-      if (/queue_full|rate.?limit|too many/i.test(String(detail))) {
+      if (isQueueFullError({ message: String(detail), providerCode: data.code }) || /rate.?limit|too many/i.test(String(detail))) {
         waitMs = Math.min(30000, waitMs * 2);
       } else {
         throw new Error("Agnes video status error: " + String(detail).slice(0, 260));
@@ -215,10 +225,24 @@ async function generateSceneClips(scenes, topic, workDir) {
         started = await createVideoTask(apiKey, model, prompt, Math.floor(Math.random() * 2000000000));
         break;
       } catch (error) {
-        const retryable = error.status === 429 || error.status === 503 || /queue_full|temporarily unavailable/i.test(error.message);
-        if (!retryable || attempts >= 2) throw error;
+        const queueFull = isQueueFullError(error);
+        const retryable = queueFull || error.status === 429 || error.status === 503 ||
+          /temporarily unavailable|rate.?limit|too many requests/i.test(error.message);
+        // Queue-full responses are transient. Wait with exponential backoff for up to
+        // six retries rather than failing the entire film after two short waits.
+        const maxRetries = 6;
+        if (!retryable || attempts >= maxRetries) {
+          if (queueFull) {
+            throw new Error("Agnes video queue remained full after " + (attempts + 1) +
+              " submission attempts. YTAgent waited and retried automatically. Please try again later.");
+          }
+          throw error;
+        }
         attempts++;
-        await delay(60000);
+        const waitMs = submissionRetryDelay(attempts);
+        console.warn("Agnes queue/rate limit on scene pair " + (pairIndex + 1) +
+          "/5. Retry " + attempts + "/" + maxRetries + " in " + Math.round(waitMs / 1000) + " seconds.");
+        await delay(waitMs);
       }
     }
     lastSubmissionAt = Date.now();
@@ -244,5 +268,7 @@ module.exports = {
   buildPairPrompt,
   getVideoId,
   getTaskStatus,
-  getVideoUrl
+  getVideoUrl,
+  isQueueFullError,
+  submissionRetryDelay
 };

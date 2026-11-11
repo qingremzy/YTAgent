@@ -383,13 +383,17 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
     if (options.studioProjectRoot) {
       const match = path.basename(outputPath).match(/^generated-([a-f0-9]{24})\.mp4$/i);
       if (!match) throw new Error("Could not associate the finished film with its editable studio project.");
-      studioProject = await createStudioProject({
-        projectId: match[1],
-        title: storyboard.title || topic,
-        storyboard,
-        sceneAssets,
-        rootDir: options.studioProjectRoot
-      });
+      try {
+        studioProject = await createStudioProject({
+          projectId: match[1],
+          title: storyboard.title || topic,
+          storyboard,
+          sceneAssets,
+          rootDir: options.studioProjectRoot
+        });
+      } catch (error) {
+        console.warn("The film rendered, but its editable studio copy could not be saved:", error.message);
+      }
     }
     return {
       title: cleanText(storyboard.title || topic, 100),

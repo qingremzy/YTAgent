@@ -149,8 +149,8 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir) {
-  if (!process.env.AGNES_API_KEY) {
-    console.warn("Agnes API key is missing. Switching to the free animated visual fallback.");
+  if (!process.env.AGNES_API_KEY || process.env.AGNES_FREE_QUOTA_CONFIRMED !== "true") {
+    console.warn("Agnes is disabled unless its no-charge free quota is explicitly confirmed. Switching to the free animated visual fallback.");
     return { clips: await generateFallbackSceneClips(scenes, workDir), provider: "YTAgent Free Visual Fallback" };
   }
   try {

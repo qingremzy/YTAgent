@@ -35,7 +35,7 @@ Set these in the hosting provider. Never commit keys or OAuth secrets.
 - `GEMINI_API_KEY` and/or `GROQ_API_KEY` — storyboard generation.
 - `YT_AGENT_WORKER_TOKEN` — private shared secret configured in Railway and stored as a Kaggle Notebook Secret. The worker polls Railway outbound over HTTPS. No `VIDEO_WORKER_URL` or Cloudflare Tunnel is required.
 - `AGNES_API_KEY` — optional. Agnes is disabled by default to prevent unexpected charges.
-- `AGNES_FREE_QUOTA_CONFIRMED=true` — only enable after verifying in your Agnes account that video generation is currently free and will not charge you. Otherwise YTAgent uses its free FFmpeg visual fallback.
+- `AGNES_FREE_QUOTA_CONFIRMED=true` — only enable after verifying in your Agnes account that video generation is currently free and will not charge you. If no real-video provider is available, YTAgent stops and reports the error rather than returning abstract artwork.
 - `AGNES_VIDEO_MODEL` — the zero-cost mode only permits `agnes-video-2.5-flash`. Paid models are blocked.
 - `REDIS_URL` — optional. Enables BullMQ background queues. Without it, job records are saved to the app's temporary filesystem and restored after a process restart when that filesystem survives. An interrupted film is marked failed and must be resubmitted.
 - `ANALYSIS_CONCURRENCY` — optional analysis worker concurrency.

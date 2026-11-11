@@ -13,6 +13,7 @@ const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const { createRateLimiter } = require("./middleware/rate-limit");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
+const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
 const { claimNextGpuJob, noteGpuWorkerPoll, getGpuWorkerStatus, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
 
 const app = express();
@@ -988,6 +989,54 @@ app.get("/api/kaggle/notebook", requireAuth, async (_req, res) => {
     session,
     errors
   });
+});
+
+
+app.get("/api/kaggle/notebook/source", requireAuth, async (_req, res) => {
+  try {
+    const identity = kaggleNotebookIdentity();
+    const info = kaggleToolData(await callKaggleTool("get_notebook_info", {
+      userName: identity.userName, kernelSlug: identity.kernelSlug
+    }));
+    const source = info?.blob?.source || info?.kernel?.blob?.source || "";
+    if (!source) return res.status(404).json({ error: "Kaggle did not return a saved notebook source. Open the notebook in Kaggle and save a version first." });
+    res.json({
+      notebookRef: identity.slug,
+      source,
+      versionNumber: info?.metadata?.currentVersionNumber || info?.metadata?.current_version_number || null,
+      title: info?.metadata?.title || null
+    });
+  } catch (error) {
+    console.error("Kaggle notebook source fetch failed:", error.message);
+    res.status(502).json({ error: error.message || "Could not retrieve notebook source." });
+  }
+});
+
+app.post("/api/kaggle/notebook/save", requireAuth, async (req, res) => {
+  try {
+    const identity = kaggleNotebookIdentity();
+    const source = validateNotebookSource(req.body?.source);
+    const info = kaggleToolData(await callKaggleTool("get_notebook_info", {
+      userName: identity.userName, kernelSlug: identity.kernelSlug
+    }));
+    const metadata = info?.metadata || {};
+    const request = buildNotebookSaveRequest(identity.slug, source, metadata);
+    const result = kaggleToolData(await callKaggleTool("save_notebook", request));
+    if (result?.error) return res.status(502).json({ saved: false, error: String(result.error).slice(0, 500) });
+    res.json({
+      saved: true,
+      executed: true,
+      notebookRef: identity.slug,
+      versionNumber: result?.versionNumber || result?.version_number || null,
+      url: result?.url || ("https://www.kaggle.com/code/" + identity.slug),
+      message: "Kaggle saved a new notebook version and started its top-to-bottom execution."
+    });
+  } catch (error) {
+    const message = String(error.message || error);
+    console.error("Kaggle notebook save failed:", message);
+    const status = /notebook source|JSON|cells|secret|too large|must be/i.test(message) ? 400 : 502;
+    res.status(status).json({ saved: false, error: message.slice(0, 500) });
+  }
 });
 
 app.post("/api/kaggle/notebook/start", requireAuth, async (_req, res) => {

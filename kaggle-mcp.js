@@ -63,8 +63,6 @@ async function listKaggleTools() {
     throw new Error(initialized.payload.error.message || "Kaggle MCP initialization failed.");
   }
   const sessionId = initialized.sessionId;
-  if (!sessionId) throw new Error("Kaggle did not create an MCP session. Please retry.");
-
   await postMcp(token, {
     jsonrpc: "2.0",
     method: "notifications/initialized",

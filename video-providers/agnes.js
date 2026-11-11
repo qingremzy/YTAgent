@@ -9,6 +9,13 @@ const CLIP_SECONDS = 12;
 const HALF_SECONDS = 6;
 const SUCCESS_STATUSES = new Set(["completed", "succeeded", "success"]);
 const FAILURE_STATUSES = new Set(["failed", "error", "cancelled", "canceled", "rejected"]);
+const CINEMATIC_SHOT_DIRECTIONS = Object.freeze([
+  "Open with an extreme macro push-in, then rack focus from the foreground detail to the main subject. Use an 85mm cinema prime and shallow depth of field.",
+  "Use a smooth lateral tracking move that follows the subject through its environment. Use a 35mm anamorphic lens and layered depth.",
+  "Make a controlled orbital move around the subject, revealing its shape and scale. Use a 50mm cinema prime with balanced depth of field.",
+  "Begin close, then slowly dolly out to reveal the wider environment and context. Use a 24mm wide-angle cinema lens and deep spatial perspective.",
+  "Use a gentle descending crane move that settles into a strong hero composition. Use a 70mm cinema lens with crisp subject separation."
+]);
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -28,13 +35,19 @@ function safeText(value, max = 700) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
-function buildPairPrompt(first, second, topic) {
+function buildCinematicShotDirection(pairIndex = 0) {
+  const index = Math.abs(Number(pairIndex) || 0) % CINEMATIC_SHOT_DIRECTIONS.length;
+  return CINEMATIC_SHOT_DIRECTIONS[index];
+}
+
+function buildPairPrompt(first, second, topic, pairIndex = 0) {
   return [
     "Create one continuous 12-second vertical 9:16 cinematic science documentary CGI shot.",
     "Topic: " + safeText(topic, 180) + ".",
     "FIRST HALF, seconds 0-6: " + safeText(first.visual_direction, 420) + ".",
     "SECOND HALF, seconds 6-12: transition naturally into this new visual action: " + safeText(second.visual_direction, 420) + ".",
     "Make the midpoint transition visually clear through continuous camera movement, not a hard cut.",
+    "Camera and lens direction: " + buildCinematicShotDirection(pairIndex),
     "Premium photorealistic 3D CGI, physically plausible materials and motion, scientifically believable anatomy and scale, dramatic volumetric lighting, atmospheric depth, rich macro detail, smooth deliberate camera movement.",
     "Keep the main subject large and centered for a 9:16 frame. No text, captions, labels, logos, watermarks, borders or split screens."
   ].join(" ");
@@ -251,7 +264,7 @@ async function generateSceneClips(scenes, topic, workDir) {
     const elapsed = Date.now() - lastSubmissionAt;
     if (lastSubmissionAt && elapsed < 65000) await delay(65000 - elapsed);
 
-    const prompt = buildPairPrompt(firstScene, secondScene, topic);
+    const prompt = buildPairPrompt(firstScene, secondScene, topic, pairIndex);
     let started;
     let attempts = 0;
     while (true) {
@@ -301,6 +314,7 @@ module.exports = {
   generateSceneClips,
   requestJson,
   buildPairPrompt,
+  buildCinematicShotDirection,
   getVideoId,
   getTaskStatus,
   getVideoUrl,

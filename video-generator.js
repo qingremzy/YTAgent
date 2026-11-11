@@ -179,7 +179,7 @@ function isGroqTtsEnabled(env = process.env) {
 }
 
 function isRateLimitError(error) {
-  return /\\b429\\b|too many requests|rate.?limit/i.test(String(error && error.message || error || ""));
+  return /\b429\b|too many requests|rate.?limit/i.test(String(error && error.message || error || ""));
 }
 
 function edgeTtsRetryDelayMs(attempt) {

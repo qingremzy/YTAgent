@@ -314,18 +314,48 @@ if (canvas && viewport) {
       }
     };
 
+    let currentStudioView = "studio";
+    async function refreshRenderEngineStatus() {
+      try {
+        const response = await fetch("/api/worker/status", { cache: "no-store" });
+        if (!response.ok) throw new Error(response.status === 401 ? "Sign in to view render engine status." : "Render engine status is temporarily unavailable.");
+        const status = await response.json();
+        const mode = document.querySelector("#hudMode");
+        const title = document.querySelector("#hudTitle");
+        const subtitle = document.querySelector("#hudDetail");
+        if (status.online) {
+          mode.textContent = "RENDER ENGINE";
+          title.textContent = "Free GPU worker online.";
+          subtitle.textContent = "Secure connection active. Ready for the next film."; 
+        } else {
+          mode.textContent = "RENDER ENGINE";
+          title.textContent = "GPU worker is waiting.";
+          subtitle.textContent = "The studio will report when the free render engine reconnects.";
+        }
+      } catch (error) {
+        document.querySelector("#hudMode").textContent = "SYSTEM STATUS";
+        document.querySelector("#hudTitle").textContent = "Status unavailable.";
+        document.querySelector("#hudDetail").textContent = error.message || "Could not read the render engine status.";
+      }
+    }
+
     document.querySelectorAll(".studio-tab").forEach(button => {
       button.addEventListener("click", () => {
         document.querySelectorAll(".studio-tab").forEach(tab => tab.classList.toggle("active", tab === button));
-        const view = views[button.dataset.view] || views.studio;
+        currentStudioView = button.dataset.view || "studio";
+        const view = views[currentStudioView] || views.studio;
         document.querySelector("#hudMode").textContent = view.mode;
         document.querySelector("#hudTitle").textContent = view.title;
         document.querySelector("#hudDetail").textContent = view.detail;
         desiredCamera = view.camera.clone();
         desiredLook = view.look.clone();
         zoom = desiredCamera.z;
+        if (currentStudioView === "system") refreshRenderEngineStatus();
       });
     });
+    window.setInterval(() => {
+      if (currentStudioView === "system") refreshRenderEngineStatus();
+    }, 20000);
 
     document.querySelector("#enterStudio").addEventListener("click", () => {
       document.querySelector("#generatorForm").scrollIntoView({ behavior: "smooth", block: "center" });

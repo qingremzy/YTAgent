@@ -5,8 +5,10 @@ const path = require("path");
 const jobs = new Map();
 const pending = [];
 const JOB_TIMEOUT_MS = 90 * 60 * 1000;
+const CLAIM_TIMEOUT_MS = 2 * 60 * 1000;
+let lastWorkerPollAt = 0;
 
-function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress }) {
+function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, claimTimeoutMs = CLAIM_TIMEOUT_MS }) {
   if (!Array.isArray(prompts) || prompts.length !== 10 || !Array.isArray(narrations) || narrations.length !== 10) {
     return Promise.reject(new Error("The free GPU worker requires exactly ten scene prompts."));
   }
@@ -14,10 +16,14 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress }) {
   return new Promise((resolve, reject) => {
     const job = { id, prompts, narrations, seed, workDir, onProgress, progress: 0, state: "queued", clips: new Array(10), audios: new Array(10), received: new Set(), audioReceived: new Set(), resolve, reject };
     job.timer = setTimeout(() => {
-      jobs.delete(id);
-      reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may be offline or out of GPU quota."));
-    }, JOB_TIMEOUT_MS);
-    if (job.timer.unref) job.timer.unref();
+      if (job.state === "queued") {
+        jobs.delete(id);
+        reject(new Error("The free Kaggle GPU worker did not connect within two minutes. The notebook may be stopped or its private worker token may not be configured."));
+      } else {
+        jobs.delete(id);
+        reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may have disconnected or run out of GPU quota."));
+      }
+    }, claimTimeoutMs);
     jobs.set(id, job);
     pending.push(id);
   });
@@ -38,12 +44,27 @@ function updateGpuJobProgress(id, progress, message) {
   return true;
 }
 
+function noteGpuWorkerPoll() {
+  lastWorkerPollAt = Date.now();
+}
+
+function getGpuWorkerStatus() {
+  const ageMs = lastWorkerPollAt ? Date.now() - lastWorkerPollAt : null;
+  return { online: ageMs !== null && ageMs < 45000, lastSeenSecondsAgo: ageMs === null ? null : Math.floor(ageMs / 1000) };
+}
+
 function claimNextGpuJob() {
   while (pending.length) {
     const id = pending.shift();
     const job = jobs.get(id);
     if (!job || job.state !== "queued") continue;
+    clearTimeout(job.timer);
     job.state = "active";
+    job.timer = setTimeout(() => {
+      jobs.delete(id);
+      job.reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may have disconnected or run out of GPU quota."));
+    }, JOB_TIMEOUT_MS);
+    if (job.timer.unref) job.timer.unref();
     return { job_id: id, prompts: job.prompts, narrations: job.narrations, seed: job.seed };
   }
   return null;
@@ -104,4 +125,4 @@ function failGpuJob(id, message) {
   return true;
 }
 
-module.exports = { enqueueGpuJob, claimNextGpuJob, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob };
+module.exports = { enqueueGpuJob, claimNextGpuJob, noteGpuWorkerPoll, getGpuWorkerStatus, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob };

@@ -13,7 +13,7 @@ const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const { createRateLimiter } = require("./middleware/rate-limit");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
-const { claimNextGpuJob, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
+const { claimNextGpuJob, noteGpuWorkerPoll, getGpuWorkerStatus, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -753,9 +753,14 @@ function requireGpuWorker(req, res, next) {
 
 // The GPU notebook polls this app over outbound HTTPS. No temporary tunnel is needed.
 app.get("/api/worker/next", requireGpuWorker, (_req, res) => {
+  noteGpuWorkerPoll();
   const job = claimNextGpuJob();
   if (!job) return res.status(204).end();
   res.json(job);
+});
+
+app.get("/api/worker/status", requireAuth, (_req, res) => {
+  res.json(getGpuWorkerStatus());
 });
 
 app.post("/api/worker/jobs/:jobId/progress", requireGpuWorker, (req, res) => {

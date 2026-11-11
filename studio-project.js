@@ -98,6 +98,63 @@ async function createStudioProject({ projectId, title, storyboard, sceneAssets, 
   }
 }
 
+function validateStudioSource(source, projectId) {
+  const id = safeProjectId(projectId);
+  if (!source || typeof source !== "object" || Array.isArray(source) || source.clipkit_version !== "1.0") {
+    throw new Error("Studio source must be a Clipkit 1.0 project.");
+  }
+  if (!Number.isInteger(source.width) || source.width < 1 || source.width > 4096 ||
+      !Number.isInteger(source.height) || source.height < 1 || source.height > 4096 ||
+      !Number.isFinite(source.duration) || source.duration <= 0 || source.duration > 1800) {
+    throw new Error("Studio project dimensions or duration are outside the allowed limits.");
+  }
+  if (!Array.isArray(source.elements) || source.elements.length < 1 || source.elements.length > 500) {
+    throw new Error("Studio project must contain between 1 and 500 timeline elements.");
+  }
+  const layers = new Set();
+  const ids = new Set();
+  for (const [index, element] of source.elements.entries()) {
+    if (!element || typeof element !== "object" || typeof element.type !== "string" ||
+        !Number.isInteger(element.layer) || element.layer < 1 || element.layer > 1000 ||
+        layers.has(element.layer)) {
+      throw new Error("Studio timeline element " + (index + 1) + " has an invalid or duplicate layer.");
+    }
+    layers.add(element.layer);
+    if (element.id !== undefined) {
+      if (typeof element.id !== "string" || !element.id || ids.has(element.id)) {
+        throw new Error("Studio timeline element IDs must be unique non-empty strings.");
+      }
+      ids.add(element.id);
+    }
+    if (element.time !== undefined && (!Number.isFinite(element.time) || element.time < 0)) {
+      throw new Error("Studio timeline element " + (index + 1) + " has an invalid start time.");
+    }
+    if (element.duration !== undefined && (!Number.isFinite(element.duration) || element.duration <= 0)) {
+      throw new Error("Studio timeline element " + (index + 1) + " has an invalid duration.");
+    }
+    if (["image", "video", "audio"].includes(element.type)) {
+      const sourcePath = String(element.source || "");
+      const prefix = "/api/studio/projects/" + id + "/assets/";
+      const filename = sourcePath.startsWith(prefix) ? sourcePath.slice(prefix.length) : "";
+      if (!ASSET_RE.test(filename) || filename.includes("/")) {
+        throw new Error("Studio media must reference an asset owned by this project.");
+      }
+    }
+  }
+  return source;
+}
+
+async function saveStudioProject(rootDir, projectId, source) {
+  const id = safeProjectId(projectId);
+  const validSource = validateStudioSource(source, id);
+  const project = await readStudioProject(rootDir, id);
+  if (!project) throw new Error("Studio project not found or expired.");
+  project.source = validSource;
+  project.updatedAt = new Date().toISOString();
+  await fs.promises.writeFile(path.join(rootDir, id, "project.json"), JSON.stringify(project, null, 2), { mode: 0o600 });
+  return project;
+}
+
 async function readStudioProject(rootDir, projectId) {
   const id = safeProjectId(projectId);
   try {
@@ -123,6 +180,8 @@ module.exports = {
   buildClipkitSource,
   createStudioProject,
   readStudioProject,
+  saveStudioProject,
+  validateStudioSource,
   resolveStudioAsset,
   ASSET_RE
 };

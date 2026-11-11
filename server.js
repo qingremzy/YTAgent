@@ -266,7 +266,10 @@ app.get("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
   try {
     let project = await readStudioProject(studioProjectRoot, req.params.projectId);
     if (!project && objectStorage.configured) {
-      project = await objectStorage.getJson("studio-projects/" + String(req.params.projectId).toLowerCase() + "/project.json");
+      const prefix = "studio-projects/" + String(req.params.projectId).toLowerCase();
+      if (await objectStorage.exists(prefix + "/_complete")) {
+        project = await objectStorage.getJson(prefix + "/project.json");
+      }
     }
     if (!project) return res.status(404).json({ error: "This editable project could not be found." });
     res.set("Cache-Control", "private, no-store");
@@ -284,7 +287,11 @@ app.put("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
       scheduleStudioProjectExpiry(project.id);
     } else if (objectStorage.configured) {
       const id = String(req.params.projectId || "").toLowerCase();
-      project = await objectStorage.getJson("studio-projects/" + id + "/project.json");
+      const prefix = "studio-projects/" + id;
+      if (!await objectStorage.exists(prefix + "/_complete")) {
+        return res.status(404).json({ saved: false, error: "The durable scene assets for this project could not be found." });
+      }
+      project = await objectStorage.getJson(prefix + "/project.json");
       if (!project) return res.status(404).json({ saved: false, error: "This editable project could not be found." });
       project.source = validateStudioSource(req.body?.source, id);
       project.updatedAt = new Date().toISOString();

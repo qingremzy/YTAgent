@@ -17,14 +17,15 @@ function buildWanScenePrompt(scene, topic, index) {
     "steady close-up that racks focus to the background"
   ];
   return [
-    "A premium cinematic 3D animated documentary scene, portrait 9:16 composition.",
-    "Topic: " + clean(topic, 180) + ".",
-    "Scene " + (index + 1) + ": " + clean(scene.visual_direction, 500) + ".",
-    "Visual style: high-end feature-film 3D animation, believable human character design, expressive faces, natural body movement, detailed environments, realistic materials, physically based lighting, cinematic depth, subtle atmospheric effects.",
-    "The scene must show continuous visible motion from beginning to end. Animate the people, objects, environment and camera. Make the action clear and visually specific.",
-    "Camera: " + cameraMoves[index % cameraMoves.length] + ".",
-    "Keep the main subject large and centered for a vertical mobile video. No text, subtitles, logos, watermarks, borders, still frames, slideshows or split screens.",
-    "Create a coherent shot with stable anatomy, consistent characters and natural movement. Do not imitate any existing creator or copyrighted character."
+    "An original high-quality stylized 3D animated explainer film shot, portrait 9:16. This must look like a real animated scene from a 3D movie, not a diagram or abstract motion graphic.",
+    "Overall subject: " + clean(topic, 180) + ".",
+    "Shot " + (index + 1) + " of a continuous ten-shot explainer: " + clean(scene.visual_direction, 500) + ".",
+    "Show the named physical subject clearly performing the described action in a recognizable location. Favor expressive 3D human characters, believable anatomy, tactile props, detailed sets, facial expression and readable cause-and-effect. Preserve the same character appearance and important object design between shots whenever described.",
+    "Use solid geometry, physically plausible contact and weight, natural body mechanics, rich but realistic materials, cinematic key and rim lighting, detailed backgrounds and film-quality depth of field.",
+    "Animate a clear action throughout the entire shot. The subject must move or interact with an object. Camera: " + cameraMoves[index % cameraMoves.length] + ".",
+    "Avoid abstract swirls, atom diagrams, orbiting dots, glowing rings, floating particles, fractal patterns, generic science wallpaper, empty backgrounds, frozen poses and unrelated imagery. Do not show symbols as a substitute for the real subject.",
+    "Keep one main subject large and centered for vertical mobile viewing. No text, subtitles, logos, watermarks, borders, slideshows or split screens.",
+    "Stable anatomy, coherent object shapes, continuous natural movement. Original characters and visual identity only. Do not imitate an existing creator or copyrighted character."
   ].join(" ");
 }
 

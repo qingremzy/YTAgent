@@ -8,7 +8,8 @@ This worker runs the open Wan 2.1 T2V 1.3B Diffusers model on a temporary Kaggle
 - No temporary public worker URL.
 - No need to update `VIDEO_WORKER_URL` whenever a notebook restarts.
 - The worker claims a job from Railway, generates ten real video clips, and securely uploads each MP4 over HTTPS.
-- The Railway app validates every uploaded MP4 before assembling the final film.
+- It then creates ten natural male documentary narration tracks locally with Kokoro 82M, without a paid TTS API or Groq rate limits.
+- The Railway app validates every MP4 and WAV before assembling the final film.
 
 ## Requirements and limits
 
@@ -16,6 +17,7 @@ This worker runs the open Wan 2.1 T2V 1.3B Diffusers model on a temporary Kaggle
 - Keep the notebook session running while generation is in progress.
 - The 1.3B model creates portrait 480p clips. Ten six-second scenes are assembled into one narrated, captioned 60-second Short.
 - Ten scenes can take a long time on a free GPU. Kaggle sessions and GPU quota are not guaranteed.
+- Kokoro 82M runs on CPU after video generation to leave GPU memory available for Wan. Its model weights are Apache-2.0 licensed.
 - This is a free-compute starting point, not a promise of Zack D Films-level quality.
 
 ## Notebook setup
@@ -28,11 +30,13 @@ Open `YTAgent_Free_GPU_Worker.ipynb` in Kaggle. Run the cells in order:
 
 Do not print, commit, or share the worker token. If a fresh notebook session is needed, add `YT_AGENT_WORKER_TOKEN` as a Kaggle Notebook Secret before starting the worker. The same value must already exist as a private Railway variable.
 
-## Model
+## Models
 
-Wan 2.1 T2V 1.3B Diffusers: `Wan-AI/Wan2.1-T2V-1.3B-Diffusers`.
+- Video: Wan 2.1 T2V 1.3B Diffusers, `Wan-AI/Wan2.1-T2V-1.3B-Diffusers`.
+- Narration: Kokoro 82M, `hexgrad/Kokoro-82M`. Default narrator voice is `am_fenrir`. Set `KOKORO_VOICE` to another supported voice if needed.
 
 Official model code and hardware guidance: https://github.com/Wan-Video/Wan2.1
+Kokoro model, voice samples and license: https://huggingface.co/hexgrad/Kokoro-82M
 
 ## Troubleshooting
 

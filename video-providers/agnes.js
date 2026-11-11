@@ -125,14 +125,14 @@ async function waitForVideo(apiKey, model, videoId, onProgress) {
   throw new Error("Agnes video generation timed out after 15 minutes. No incomplete video will be published.");
 }
 
-async function downloadVideo(url, destination, apiKey) {
+async function downloadVideo(url, destination) {
   let parsed;
   try { parsed = new URL(url); } catch (_) { throw new Error("Agnes returned an invalid video URL."); }
   if (parsed.protocol !== "https:") throw new Error("Agnes returned an insecure video URL.");
   let response;
   try {
+    // The provider returns a signed CDN URL. Never forward the Agnes API key to that host.
     response = await fetch(parsed.toString(), {
-      headers: { Authorization: "Bearer " + apiKey },
       signal: AbortSignal.timeout(120000)
     });
   } catch (error) {
@@ -220,7 +220,7 @@ async function generateSceneClips(scenes, topic, workDir) {
       console.log("YTAgent scene pair " + (pairIndex + 1) + "/5:", status || "waiting", progress + "%");
     });
     const source = path.join(workDir, "agnes-pair-" + (pairIndex + 1) + ".mp4");
-    await downloadVideo(videoUrl, source, apiKey);
+    await downloadVideo(videoUrl, source);
 
     const firstPath = path.join(workDir, "generated-scene-" + (pairIndex * 2) + ".mp4");
     const secondPath = path.join(workDir, "generated-scene-" + (pairIndex * 2 + 1) + ".mp4");

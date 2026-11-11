@@ -10,6 +10,7 @@ const { generateSceneClips } = require("./video-providers/agnes");
 const { generateWanSceneClips } = require("./video-providers/wan-worker");
 const { generateRewindSceneClips } = require("./video-providers/rewind");
 const { generateFallbackSceneClips } = require("./video-providers/free-visual-fallback");
+const { createStudioProject } = require("./studio-project");
 
 function cleanText(value, max = 240) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -314,7 +315,7 @@ function getMediaDuration(filePath) {
   });
 }
 
-async function generateEducationalVideo(topic, outputPath, onProgress = () => {}) {
+async function generateEducationalVideo(topic, outputPath, onProgress = () => {}, options = {}) {
   let lastProgress = 0;
   const reportProgress = (progress, message) => {
     const value = Math.max(lastProgress, Math.max(0, Math.min(99, Number(progress) || 0)));
@@ -378,6 +379,18 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
     if (Math.abs(totalDuration - 60) > 1.5) {
       throw new Error("The rendered film did not pass the 60-second duration check.");
     }
+    let studioProject = null;
+    if (options.studioProjectRoot) {
+      const match = path.basename(outputPath).match(/^generated-([a-f0-9]{24})\\.mp4$/i);
+      if (!match) throw new Error("Could not associate the finished film with its editable studio project.");
+      studioProject = await createStudioProject({
+        projectId: match[1],
+        title: storyboard.title || topic,
+        storyboard,
+        sceneAssets,
+        rootDir: options.studioProjectRoot
+      });
+    }
     return {
       title: cleanText(storyboard.title || topic, 100),
       description: cleanText(storyboard.description || "", 1000) + "\n\nCreated with YTAgent's video compiler.",
@@ -392,6 +405,8 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
       voice_provider: Array.from(voiceProviders).join(" + "),
       visuals: visualResult.provider === "YTAgent Free Visual Fallback" ? "Ten animated artwork scenes assembled by the YTAgent video compiler" : "Ten AI-generated moving video scenes assembled by the YTAgent video compiler",
       visual_provider: visualResult.provider,
+      studioProjectId: studioProject?.id || null,
+      studioProjectUrl: studioProject ? "/api/studio/projects/" + studioProject.id : null,
       compiler: rendered
     };
   } finally {

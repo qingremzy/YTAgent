@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   buildPairPrompt,
+  generateSceneClips,
   getVideoId,
   getTaskStatus,
   getVideoUrl,
@@ -44,4 +45,22 @@ test("uses increasing capped delays for queue retries", () => {
   assert.equal(submissionRetryDelay(2), 120000);
   assert.equal(submissionRetryDelay(3), 240000);
   assert.equal(submissionRetryDelay(6), 300000);
+});
+
+test("blocks the paid Agnes model in zero-cost mode", async () => {
+  const oldKey = process.env.AGNES_API_KEY;
+  const oldModel = process.env.AGNES_VIDEO_MODEL;
+  process.env.AGNES_API_KEY = "test-key";
+  process.env.AGNES_VIDEO_MODEL = "agnes-video-2.5";
+  try {
+    await assert.rejects(
+      generateSceneClips(Array.from({ length: 10 }, () => ({ visual_direction: "A scene" })), "A topic", "/tmp"),
+      /blocks paid Agnes models/
+    );
+  } finally {
+    if (oldKey === undefined) delete process.env.AGNES_API_KEY;
+    else process.env.AGNES_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.AGNES_VIDEO_MODEL;
+    else process.env.AGNES_VIDEO_MODEL = oldModel;
+  }
 });

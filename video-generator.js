@@ -149,8 +149,8 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir) {
-  if (!process.env.AGNES_API_KEY) {
-    console.warn("Agnes API key is missing. Switching to the free animated visual fallback.");
+  if (!process.env.AGNES_API_KEY || process.env.AGNES_FREE_QUOTA_CONFIRMED !== "true") {
+    console.warn("Agnes is disabled unless its no-charge free quota is explicitly confirmed. Switching to the free animated visual fallback.");
     return { clips: await generateFallbackSceneClips(scenes, workDir), provider: "YTAgent Free Visual Fallback" };
   }
   try {
@@ -166,25 +166,31 @@ async function generateNarration(text, outputPath) {
   const narration = cleanText(text, 220);
   if (!narration) throw new Error("One scene is missing its narration.");
   if (process.env.GROQ_API_KEY) {
-    const response = await fetch("https://api.groq.com/openai/v1/audio/speech", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: process.env.GROQ_TTS_MODEL || "canopylabs/orpheus-v1-english",
-        input: narration,
-        voice: process.env.GROQ_TTS_VOICE || "hannah",
-        response_format: "wav"
-      })
-    });
-    if (response.ok) {
-      const audio = Buffer.from(await response.arrayBuffer());
-      if (audio.length > 1000) {
-        await fs.promises.writeFile(outputPath, audio);
-        return { provider: "Groq Orpheus", path: outputPath };
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/audio/speech", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: process.env.GROQ_TTS_MODEL || "canopylabs/orpheus-v1-english",
+          input: narration,
+          voice: process.env.GROQ_TTS_VOICE || "hannah",
+          response_format: "wav"
+        }),
+        signal: AbortSignal.timeout(45000)
+      });
+      if (response.ok) {
+        const audio = Buffer.from(await response.arrayBuffer());
+        if (audio.length > 1000) {
+          await fs.promises.writeFile(outputPath, audio);
+          return { provider: "Groq Orpheus", path: outputPath };
+        }
+        console.warn("Groq voice generation returned an empty audio file. Trying the free voice fallback.");
+      } else {
+        const detail = await response.text().catch(() => "");
+        console.warn("Groq voice generation failed:", response.status, detail.slice(0, 220));
       }
-    } else {
-      const detail = await response.text().catch(() => "");
-      console.warn("Groq voice generation failed:", response.status, detail.slice(0, 220));
+    } catch (error) {
+      console.warn("Groq voice generation request failed. Trying the free voice fallback:", error.message || error);
     }
   }
   try {

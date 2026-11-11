@@ -38,23 +38,54 @@ function persistGenerationJobs() {
   }
 }
 
+function scheduleGenerationJobCleanup(id, delayMs = 24 * 60 * 60 * 1000) {
+  const timer = setTimeout(() => {
+    localGenerationJobs.delete(id);
+    persistGenerationJobs();
+  }, Math.max(1, delayMs));
+  timer.unref();
+}
+
 function restoreGenerationJobs() {
   if (generationQueue || !fs.existsSync(generationJobsFile)) return;
   try {
     const saved = JSON.parse(fs.readFileSync(generationJobsFile, "utf8"));
     if (!Array.isArray(saved)) return;
+    const now = Date.now();
     for (const entry of saved) {
       if (!Array.isArray(entry) || entry.length !== 2) continue;
       const [id, job] = entry;
       if (!/^[a-f0-9]{24}$/.test(id) || !job || typeof job !== "object") continue;
+
       if (job.state === "active" || job.state === "waiting") {
         job.state = "failed";
         job.error = "The server restarted before this film finished. Please submit the generation again.";
-      } else if (job.state === "completed" && (!job.result || !job.result.downloadUrl || !fs.existsSync(path.join(uploadDir, path.basename(job.result.downloadUrl))))) {
-        job.state = "failed";
-        job.error = "The server restarted and the temporary MP4 is no longer available. Please generate the film again.";
+        job.completedAt = now;
       }
+
+      if (job.state === "completed") {
+        const filename = path.basename(job.result?.downloadUrl || "");
+        const filePath = path.join(uploadDir, filename);
+        if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename) || !fs.existsSync(filePath)) {
+          job.state = "failed";
+          job.error = "The server restarted and the temporary MP4 is no longer available. Please generate the film again.";
+          job.completedAt = now;
+        } else {
+          const remainingMs = GENERATED_FILE_TTL_MS - (now - fs.statSync(filePath).mtimeMs);
+          if (remainingMs <= 0) {
+            try { fs.unlinkSync(filePath); } catch (_) {}
+            job.state = "failed";
+            job.error = "This temporary MP4 has expired. Please generate the film again.";
+            job.completedAt = now;
+          }
+        }
+      }
+
+      const terminalAt = Number(job.completedAt || job.createdAt || now);
+      const cleanupIn = 24 * 60 * 60 * 1000 - (now - terminalAt);
+      if ((job.state === "completed" || job.state === "failed") && cleanupIn <= 0) continue;
       localGenerationJobs.set(id, job);
+      if (job.state === "completed" || job.state === "failed") scheduleGenerationJobCleanup(id, cleanupIn);
     }
     persistGenerationJobs();
   } catch (error) {
@@ -64,18 +95,41 @@ function restoreGenerationJobs() {
 const GENERATED_FILE_TTL_MS = 6 * 60 * 60 * 1000;
 fs.mkdirSync(uploadDir, { recursive: true });
 
-function scheduleGeneratedFileExpiry(filePath) {
+function scheduleGeneratedFileExpiry(filePath, delayMs = GENERATED_FILE_TTL_MS) {
   const timer = setTimeout(() => {
     fs.promises.unlink(filePath).catch(() => {});
-  }, GENERATED_FILE_TTL_MS);
+  }, Math.max(1, delayMs));
   timer.unref();
+}
+
+function restoreGeneratedFileExpiries() {
+  try {
+    for (const filename of fs.readdirSync(uploadDir)) {
+      if (!/^generated-[a-f0-9]{24}\\.mp4$/.test(filename)) continue;
+      const filePath = path.join(uploadDir, filename);
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile()) continue;
+      const remainingMs = GENERATED_FILE_TTL_MS - (Date.now() - stat.mtimeMs);
+      if (remainingMs <= 0) {
+        fs.unlinkSync(filePath);
+      } else {
+        scheduleGeneratedFileExpiry(filePath, remainingMs);
+      }
+    }
+  } catch (error) {
+    console.warn("Could not restore generated video expiry timers:", error.message);
+  }
 }
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "1mb" }));
+const sessionSecret = process.env.SESSION_SECRET || require("crypto").randomBytes(32).toString("hex");
+if (!process.env.SESSION_SECRET) {
+  console.warn("SESSION_SECRET is not configured. Sessions will be invalidated whenever this process restarts.");
+}
 app.use(session({
   name: "ytagent.sid",
-  secret: process.env.SESSION_SECRET || "development-only-change-this-secret",
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 24 * 60 * 60 * 1000 }
@@ -711,19 +765,19 @@ app.post("/api/generate", async (req, res) => {
       const details = await generateEducationalVideo(topic, outputPath);
       job.result = { ...details, downloadUrl: "/api/generated/" + filename };
       job.state = "completed";
+      job.completedAt = Date.now();
       scheduleGeneratedFileExpiry(outputPath);
       persistGenerationJobs();
+      scheduleGenerationJobCleanup(id);
     } catch (error) {
       await fs.promises.unlink(outputPath).catch(() => {});
       job.error = error.message || "Video generation failed.";
       job.state = "failed";
+      job.completedAt = Date.now();
       persistGenerationJobs();
+      scheduleGenerationJobCleanup(id);
       console.error("AI video generation failed:", job.error);
     }
-    setTimeout(() => {
-      localGenerationJobs.delete(id);
-      persistGenerationJobs();
-    }, 24 * 60 * 60 * 1000).unref();
   });
   return res.status(202).json({ success: true, queued: true, jobId: id });
 });
@@ -734,7 +788,12 @@ app.get("/api/generate/:jobId", async (req, res) => {
       const job = await generationQueue.getJob(req.params.jobId);
       if (!job) return res.status(404).json({ error: "Video generation task not found." });
       const state = await job.getState();
-      if (state === "completed") return res.json({ state, ...job.returnvalue });
+      if (state === "completed") {
+        if (!job.data?.outputPath || !fs.existsSync(job.data.outputPath)) {
+          return res.json({ state: "failed", error: "This temporary MP4 has expired or is no longer available. Please generate the film again." });
+        }
+        return res.json({ state, ...job.returnvalue });
+      }
       if (state === "failed") return res.json({ state, error: job.failedReason || "Video generation failed." });
       return res.json({ state, progress: typeof job.progress === "number" ? job.progress : 0 });
     } catch (error) {
@@ -744,7 +803,18 @@ app.get("/api/generate/:jobId", async (req, res) => {
   }
   const job = localGenerationJobs.get(req.params.jobId);
   if (!job) return res.status(404).json({ error: "Video generation task not found. It may have expired after a server restart." });
-  if (job.state === "completed") return res.json({ state: job.state, ...job.result });
+  if (job.state === "completed") {
+    const filename = path.basename(job.result?.downloadUrl || "");
+    const filePath = path.join(uploadDir, filename);
+    if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename) || !fs.existsSync(filePath)) {
+      job.state = "failed";
+      job.error = "This temporary MP4 has expired or is no longer available. Please generate the film again.";
+      job.completedAt = Date.now();
+      persistGenerationJobs();
+      return res.json({ state: "failed", error: job.error });
+    }
+    return res.json({ state: job.state, ...job.result });
+  }
   if (job.state === "failed") return res.json({ state: job.state, error: job.error });
   return res.json({ state: job.state, progress: 0 });
 });
@@ -813,5 +883,6 @@ if (redisEnabled) {
 }
 
 restoreGenerationJobs();
+restoreGeneratedFileExpiries();
 console.log("Generated videos use temporary local storage, are deleted after successful download, and expire after six hours.");
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

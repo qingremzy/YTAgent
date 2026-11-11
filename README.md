@@ -30,12 +30,13 @@ Set these in the hosting provider. Never commit keys or OAuth secrets.
 - `GOOGLE_REDIRECT_URI`
 - `SESSION_SECRET` — long random value.
 - `GEMINI_API_KEY` and/or `GROQ_API_KEY` — storyboard generation.
-- `AGNES_API_KEY` — required for generated moving video scenes.
-- `AGNES_VIDEO_MODEL` — optional. Defaults to `agnes-video-2.5-flash`.
-- `REDIS_URL` — optional. Enables BullMQ background queues. Without it, generation jobs are held in process memory and are lost if the app restarts.
+- `AGNES_API_KEY` — optional. Agnes is disabled by default to prevent unexpected charges.
+- `AGNES_FREE_QUOTA_CONFIRMED=true` — only enable after verifying in your Agnes account that video generation is currently free and will not charge you. Otherwise YTAgent uses its free FFmpeg visual fallback.
+- `AGNES_VIDEO_MODEL` — the zero-cost mode only permits `agnes-video-2.5-flash`. Paid models are blocked.
+- `REDIS_URL` — optional. Enables BullMQ background queues. Without it, job records are saved to the app's temporary filesystem and restored after a process restart when that filesystem survives. An interrupted film is marked failed and must be resubmitted.
 - `ANALYSIS_CONCURRENCY` — optional analysis worker concurrency.
 
-The Flash video model has been advertised with a limited-time free promotion. Availability, queues, quotas and pricing can change. YTAgent defaults to Flash and does not silently switch to the paid model. The paid `agnes-video-2.5` model is only used when explicitly configured.
+Agnes Flash has been advertised with a limited-time free promotion, but availability, quotas and pricing can change. To protect against unexpected charges, YTAgent does not call Agnes unless `AGNES_FREE_QUOTA_CONFIRMED=true` is explicitly set, and the paid `agnes-video-2.5` model is blocked. The free FFmpeg visual fallback is used by default.
 
 ## Run locally
 
@@ -66,7 +67,7 @@ Register the exact same redirect URI in Google Cloud Console. Use a persistent s
 5. FFmpeg compiles the ten scene plates and narrator tracks into one 60-second MP4.
 6. The render is rejected if narration is missing or the duration check fails.
 
-The pipeline no longer requires a Kaggle notebook, a temporary GPU tunnel, `VIDEO_WORKER_URL` or `YT_AGENT_WORKER_TOKEN`. Generation runs as a background job so the browser does not need to hold one long HTTP request open. With `REDIS_URL`, BullMQ stores generation jobs in Redis and runs one film at a time. Without Redis, a process-local fallback is used and an app restart loses its active jobs. Generated MP4s are stored temporarily on the app instance only while the user needs to download them. The download route deletes the MP4 after a successful transfer, with a six-hour expiry as a cleanup safeguard if the user never downloads it. No persistent video volume or paid storage service is required. Temporary files can still disappear if the hosting instance restarts before the download. The hosted video provider has rate limits and may queue or reject requests. A full end-to-end production render has not yet been verified.
+The pipeline no longer requires a Kaggle notebook, a temporary GPU tunnel, `VIDEO_WORKER_URL` or `YT_AGENT_WORKER_TOKEN`. Generation runs as a background job so the browser does not need to hold one long HTTP request open. With `REDIS_URL`, BullMQ stores generation jobs in Redis and runs one film at a time. Without Redis, YTAgent persists job records to the app's temporary filesystem and restores them after a process restart when that same filesystem is still available. A film interrupted by a restart is marked failed and must be submitted again. Redeploys or replacement instances with ephemeral filesystems can still erase job records and MP4s. Generated MP4s are stored temporarily on the app instance only while the user needs to download them. The download route deletes the MP4 after a successful transfer, with a six-hour expiry as a cleanup safeguard if the user never downloads it. No persistent video volume or paid storage service is required. Temporary files can still disappear if the hosting instance restarts before the download. The hosted video provider has rate limits and may queue or reject requests. A full end-to-end production render has not yet been verified.
 
 ## Other limitations
 

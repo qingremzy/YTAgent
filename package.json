@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test video-compiler/*.test.js video-providers/*.test.js middleware/*.test.js kaggle-mcp.test.js gpu-worker-bridge.test.js kaggle-notebook.test.js studio-project.test.js"
+    "test": "node --test video-compiler/*.test.js video-providers/*.test.js middleware/*.test.js kaggle-mcp.test.js gpu-worker-bridge.test.js kaggle-notebook.test.js studio-project.test.js",
+    "build": "vite build --config studio/vite.config.mjs",
+    "dev:studio": "vite --config studio/vite.config.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -23,6 +25,13 @@
     "ioredis": "^5.4.2",
     "ffmpeg-static": "^5.2.0",
     "sharp": "^0.33.5",
-    "node-edge-tts": "^1.2.12"
+    "node-edge-tts": "^1.2.12",
+    "@clipkit/editor": "1.1.0",
+    "@clipkit/runtime": "1.4.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "vite": "^6.4.6"
   }
 }

@@ -45,7 +45,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 
 .studio-topline{border-bottom:1px solid rgba(164,199,218,.1)}.studio-version{color:#6d8998}
 .live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#7df5c1;box-shadow:0 0 11px #7df5c1;margin-right:7px;vertical-align:middle}
 .studio-viewport{height:clamp(270px,54vw,420px);position:relative;overflow:hidden;isolation:isolate;background:radial-gradient(ellipse at 50% 48%,#1b303d 0,#101c26 38%,#080d13 78%)}
-#studioCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;z-index:1}
+#studioCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;z-index:1}
 .studio-vignette{position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(90deg,rgba(5,10,16,.76),transparent 48%,rgba(5,10,16,.48)),linear-gradient(0deg,rgba(5,10,16,.8),transparent 34%,rgba(5,10,16,.16))}
 .studio-hud{position:absolute;z-index:3;top:24px;max-width:190px;pointer-events:none;text-shadow:0 2px 12px #000}.hud-left{left:20px}.hud-right{right:20px;text-align:right}
 .hud-label{display:block;color:#83c7d8;font-size:9px;letter-spacing:2px;font-weight:850;margin-bottom:8px}.studio-hud strong{display:block;color:#f2f7fa;font-size:clamp(14px,2.6vw,20px);letter-spacing:.2px}.studio-hud small{display:block;color:#9bb0bc;font-size:10px;margin-top:5px;line-height:1.5}

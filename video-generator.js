@@ -308,9 +308,12 @@ function getMediaDuration(filePath) {
 }
 
 async function generateEducationalVideo(topic, outputPath, onProgress = () => {}) {
+  let lastProgress = 0;
   const reportProgress = (progress, message) => {
+    const value = Math.max(lastProgress, Math.max(0, Math.min(99, Number(progress) || 0)));
+    lastProgress = value;
     try {
-      const result = onProgress(progress, message);
+      const result = onProgress(value, message);
       if (result && typeof result.catch === "function") result.catch(() => {});
     } catch (_) {}
   };

@@ -13,7 +13,7 @@ const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const { createRateLimiter } = require("./middleware/rate-limit");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
-const { claimNextGpuJob, receiveGpuScene, failGpuJob } = require("./gpu-worker-bridge");
+const { claimNextGpuJob, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -768,6 +768,20 @@ app.post("/api/worker/jobs/:jobId/scenes/:index", requireGpuWorker,
       res.json(result);
     } catch (error) {
       res.status(400).json({ error: error.message || "Could not receive GPU scene." });
+    }
+  }
+);
+
+app.post("/api/worker/jobs/:jobId/audio/:index", requireGpuWorker,
+  express.raw({ type: ["application/octet-stream", "audio/wav", "audio/x-wav"], limit: "20mb" }),
+  async (req, res) => {
+    if (!/^[a-f0-9]{32}$/i.test(req.params.jobId)) return res.status(400).json({ error: "Invalid GPU job ID." });
+    const index = Number(req.params.index);
+    try {
+      const result = await receiveGpuAudio(req.params.jobId, index, req.body);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ error: error.message || "Could not receive narration audio." });
     }
   }
 );

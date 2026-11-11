@@ -7,3 +7,5 @@ transformers>=4.45.0
 accelerate>=1.0.0
 ftfy
 imageio[ffmpeg]
+kokoro>=0.9.4
+soundfile>=0.12.1

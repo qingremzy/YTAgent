@@ -58,7 +58,8 @@ async function generateWanSceneClips(scenes, topic, workDir) {
   if (token && process.env.VIDEO_WORKER_MODE !== "tunnel") {
     const { enqueueGpuJob } = require("../gpu-worker-bridge");
     const prompts = scenes.map((scene, index) => buildWanScenePrompt(scene, topic, index));
-    return enqueueGpuJob({ prompts, seed: 20261110, workDir });
+    const narrations = scenes.map(scene => clean(scene.narration, 220));
+    return enqueueGpuJob({ prompts, narrations, seed: 20261110, workDir });
   }
   if (!configuredUrl || !token) {
     throw new Error("Wan GPU worker is not configured. Set VIDEO_WORKER_URL and YT_AGENT_WORKER_TOKEN while the free GPU notebook is running.");

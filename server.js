@@ -156,6 +156,30 @@ function restoreStudioProjectExpiries() {
   }
 }
 
+async function persistGenerationArtifacts(outputPath, details) {
+  if (!objectStorage.configured) return details;
+  const filename = path.basename(outputPath);
+  const persisted = { ...details };
+  let videoStored = false;
+  let projectStored = false;
+  try {
+    await objectStorage.putFile("generated/" + filename, outputPath, "video/mp4");
+    videoStored = true;
+    if (details.studioProjectId) {
+      const projectDir = path.join(studioProjectRoot, details.studioProjectId);
+      if (fs.existsSync(projectDir)) {
+        await objectStorage.uploadDirectory(projectDir, "studio-projects/" + details.studioProjectId);
+        projectStored = true;
+      }
+    }
+    persisted.storage = { provider: "cloudflare-r2", videoStored, projectStored };
+  } catch (error) {
+    console.warn("Could not persist generated artifacts to Cloudflare R2:", error.message);
+    persisted.storageWarning = "The film is ready locally, but durable R2 storage did not complete.";
+  }
+  return persisted;
+}
+
 function restoreGeneratedFileExpiries() {
   try {
     for (const filename of fs.readdirSync(uploadDir)) {

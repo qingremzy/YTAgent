@@ -13,22 +13,30 @@ function createKaggleWorkerSessionManager({
     throw new TypeError("Kaggle worker session manager requires tool and notebook identity functions.");
   }
   let startPromise = null;
+  let lastStartAt = 0;
 
   async function startIfNeeded() {
     const identity = getNotebookIdentity();
-    const status = await callKaggleTool("get_notebook_session_status", {
-      userName: identity.userName,
-      kernelSlug: identity.kernelSlug
-    }).then(kaggleToolData).catch(error => ({ lookupError: error.message }));
+    const workerStatus = typeof getGpuWorkerStatus === "function" ? getGpuWorkerStatus() : null;
+    if (workerStatus?.online) {
+      return {
+        started: false,
+        alreadyRunning: true,
+        workerOnline: true,
+        workerStatus,
+        notebookRef: identity.slug,
+        message: "The free GPU worker is already online."
+      };
+    }
 
-    const statusText = String(status?.status || status?.state || status?.message || "").toUpperCase();
-    if (ACTIVE_SESSION_STATES.has(statusText)) {
+    const now = Date.now();
+    if (lastStartAt && now - lastStartAt < 10 * 60 * 1000) {
       return {
         started: false,
         alreadyRunning: true,
         notebookRef: identity.slug,
-        session: status,
-        message: "Kaggle already has an active notebook session."
+        retryAfterMs: Math.max(0, 10 * 60 * 1000 - (now - lastStartAt)),
+        message: "A Kaggle GPU notebook run was started recently. Waiting for its worker heartbeat."
       };
     }
 
@@ -42,21 +50,32 @@ function createKaggleWorkerSessionManager({
       throw new Error("Kaggle did not report a GPU machine shape. Save a notebook version with a GPU accelerator first.");
     }
 
-    const operation = kaggleToolData(await callKaggleTool("create_notebook_session", {
-      slug: identity.slug,
-      language: metadata.language || "python",
-      kernelType: metadata.kernelType || metadata.kernel_type || "notebook",
-      machineShape,
-      enableInternet: metadata.enableInternet ?? metadata.enable_internet ?? true
-    }));
+    const source = info?.blob?.source || info?.kernel?.blob?.source || "";
+    if (!source) {
+      throw new Error("Kaggle did not return the saved notebook source. Quick Save the GPU notebook first.");
+    }
+    const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
+    validateNotebookSource(source);
+    const request = buildNotebookSaveRequest(identity.slug, source, metadata);
+    request.kernelExecutionType = "SaveAndRunAll";
+
+    // Kaggle's interactive-session API only opens a Jupyter session; it does not
+    // execute the notebook cells. SaveAndRunAll actually launches the GPU worker.
+    lastStartAt = now;
+    const operation = kaggleToolData(await callKaggleTool("save_notebook", request));
+    if (operation?.error) {
+      lastStartAt = 0;
+      throw new Error(String(operation.error));
+    }
 
     return {
       started: true,
       alreadyRunning: false,
       notebookRef: identity.slug,
       machineShape,
+      versionNumber: operation?.versionNumber || operation?.version_number || null,
       operation,
-      message: "YTAgent started the saved Kaggle notebook session."
+      message: "YTAgent launched the saved Kaggle notebook as a GPU execution run."
     };
   }
 

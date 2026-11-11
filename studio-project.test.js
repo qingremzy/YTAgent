@@ -69,6 +69,8 @@ test("copies scene assets and persists a readable project manifest", async () =>
     const loaded = await readStudioProject(rootDir, id);
     assert.equal(saved.id, id);
     assert.equal(loaded.source.elements.length, 30);
+    assert.equal(loaded.metadata.title, storyboard.title);
+    assert.deepEqual(loaded.metadata.tags, []);
     assert.equal(await fs.promises.readFile(resolveStudioAsset(rootDir, id, "scene-01.mp4"), "utf8"), "video-0");
     assert.equal(await fs.promises.readFile(resolveStudioAsset(rootDir, id, "narration-10.wav"), "utf8"), "audio-9");
     assert.throws(() => resolveStudioAsset(rootDir, id, "../project.json"), /Invalid studio asset filename/);

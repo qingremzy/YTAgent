@@ -1,4 +1,5 @@
 const fs = require("fs");
+const crypto = require("crypto");
 const path = require("path");
 
 const POLL_INTERVAL_MS = 10000;
@@ -14,7 +15,12 @@ function buildWanScenePrompt(scene, topic, index) {
     "smooth lateral tracking shot following the action",
     "gentle orbit around the main subject",
     "slow crane movement revealing the environment",
-    "steady close-up that racks focus to the background"
+    "steady close-up that racks focus to the background",
+    "overhead reveal followed by a controlled tilt down to the subject",
+    "low-angle dolly tracking the character through the environment",
+    "wide establishing shot that pushes into the key physical interaction",
+    "macro detail shot that pulls focus from a prop to the character",
+    "three-quarter follow shot with a gentle handheld documentary feel"
   ];
   return [
     "An original high-quality stylized 3D animated explainer film shot, portrait 9:16. This must look like a real animated scene from a 3D movie, not a diagram or abstract motion graphic.",
@@ -59,7 +65,8 @@ async function generateWanSceneClips(scenes, topic, workDir, onProgress) {
     const { enqueueGpuJob } = require("../gpu-worker-bridge");
     const prompts = scenes.map((scene, index) => buildWanScenePrompt(scene, topic, index));
     const narrations = scenes.map(scene => clean(scene.narration, 220));
-    return enqueueGpuJob({ prompts, narrations, seed: 20261110, workDir, onProgress });
+    const seed = crypto.randomInt(1, 2147483647);
+    return enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress });
   }
   if (!configuredUrl || !token) {
     throw new Error("Wan GPU worker is not configured. Set VIDEO_WORKER_URL and YT_AGENT_WORKER_TOKEN while the free GPU notebook is running.");

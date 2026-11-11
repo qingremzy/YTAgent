@@ -86,7 +86,9 @@ export default function App() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Could not save the project.");
-      if (sequence === saveSequence.current) setSaveStatus("All changes saved");
+      if (sequence === saveSequence.current) {
+        setSaveStatus(data.storageWarning ? "Saved locally only" : data.durable ? "Saved to cloud" : "All changes saved");
+      }
       return true;
     } catch (error) {
       if (error.name === "AbortError") return false;

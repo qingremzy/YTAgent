@@ -3,19 +3,23 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { enqueueGpuJob, claimNextGpuJob, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
+const { enqueueGpuJob, claimNextGpuJob, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
 
 test("outbound GPU worker returns ten MP4 scenes and ten Kokoro narration tracks", async () => {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-bridge-test-"));
   try {
     const prompts = Array.from({ length: 10 }, (_, i) => "A cinematic 3D scene showing physical action number " + i);
     const narrations = Array.from({ length: 10 }, (_, i) => "This is the documentary narration for scene number " + i);
-    const completed = enqueueGpuJob({ prompts, narrations, seed: 1234, workDir });
+    const progressUpdates = [];
+    const completed = enqueueGpuJob({ prompts, narrations, seed: 1234, workDir, onProgress: (progress, message) => progressUpdates.push({ progress, message }) });
     const claimed = claimNextGpuJob();
     assert.ok(claimed);
     assert.equal(claimed.prompts.length, 10);
     assert.equal(claimed.narrations.length, 10);
     assert.equal(claimed.seed, 1234);
+    assert.equal(updateGpuJobProgress(claimed.job_id, 44, "Rendering scene 6"), true);
+    assert.equal(updateGpuJobProgress(claimed.job_id, 20, "Older status"), true);
+    assert.deepEqual(progressUpdates, [{ progress: 44, message: "Rendering scene 6" }, { progress: 44, message: "Older status" }]);
     for (let index = 0; index < 10; index++) {
       const mp4 = Buffer.alloc(24000);
       mp4.write("ftyp", 4, "ascii");

@@ -163,11 +163,13 @@ async function requestStoryboard(topic) {
   throw new Error("Storyboard generation failed. " + failures.join(" | "));
 }
 
-async function requestGeneratedScenes(scenes, topic, workDir) {
+async function requestGeneratedScenes(scenes, topic, workDir, onProgress) {
   // Rewind is opt-in so a newly added API key cannot spend tokens unexpectedly.
   if (process.env.REWIND_VIDEO_ENABLED === "true" && process.env.REWIND_API_KEY) {
     try {
+      if (onProgress) onProgress(10, "Generating cinematic scenes with Rewind AI.");
       const clips = await generateRewindSceneClips(scenes, topic, workDir);
+      if (onProgress) onProgress(86, "Rewind scenes are ready. Preparing narration.");
       return { clips, provider: "Rewind AI" };
     } catch (error) {
       console.warn("Rewind video generation failed. Checking the free GPU worker:", error.message || error);
@@ -177,7 +179,9 @@ async function requestGeneratedScenes(scenes, topic, workDir) {
   // Agnes is attempted only when the user has explicitly confirmed a no-charge quota.
   if (process.env.AGNES_API_KEY && process.env.AGNES_FREE_QUOTA_CONFIRMED === "true") {
     try {
+      if (onProgress) onProgress(10, "Generating cinematic scenes with Agnes AI.");
       const clips = await generateSceneClips(scenes, topic, workDir);
+      if (onProgress) onProgress(86, "Agnes scenes are ready. Preparing narration.");
       return { clips, provider: "Agnes AI" };
     } catch (error) {
       console.warn("Agnes visual generation failed:", error.message || error);
@@ -189,7 +193,7 @@ async function requestGeneratedScenes(scenes, topic, workDir) {
   }
 
   try {
-    const generated = await generateWanSceneClips(scenes, topic, workDir);
+    const generated = await generateWanSceneClips(scenes, topic, workDir, onProgress);
     if (Array.isArray(generated)) return { clips: generated, narrationClips: null, provider: "Wan 2.1 Free GPU Worker" };
     return { clips: generated.clips, narrationClips: generated.narrations, provider: "Wan 2.1 + Kokoro 82M Free GPU Worker" };
   } catch (error) {
@@ -303,12 +307,23 @@ function getMediaDuration(filePath) {
   });
 }
 
-async function generateEducationalVideo(topic, outputPath) {
+async function generateEducationalVideo(topic, outputPath, onProgress = () => {}) {
+  let lastProgress = 0;
+  const reportProgress = (progress, message) => {
+    const value = Math.max(lastProgress, Math.max(0, Math.min(99, Number(progress) || 0)));
+    lastProgress = value;
+    try {
+      const result = onProgress(value, message);
+      if (result && typeof result.catch === "function") result.catch(() => {});
+    } catch (_) {}
+  };
   if (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) {
     throw new Error("Add GEMINI_API_KEY or GROQ_API_KEY in Railway Variables before generating videos.");
   }
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable on this server.");
+  reportProgress(2, "AI director is researching the topic and writing the story.");
   const storyboard = await requestStoryboard(topic);
+  reportProgress(5, "Storyboard approved. Preparing ten matched scenes.");
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 10) {
     throw new Error("The AI director must return exactly ten scenes. Please regenerate.");
   }
@@ -323,7 +338,8 @@ async function generateEducationalVideo(topic, outputPath) {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-film-"));
   try {
     // Agnes supplies five 12-second cinematic clips, which are split into ten scene plates.
-    const visualResult = await requestGeneratedScenes(storyboard.scenes, topic, workDir);
+    const visualResult = await requestGeneratedScenes(storyboard.scenes, topic, workDir, reportProgress);
+    reportProgress(92, "All visuals and narration are ready. Mixing the film.");
     const generatedClips = visualResult.clips;
     const voiceProviders = new Set();
     const voiceState = {};
@@ -345,9 +361,12 @@ async function generateEducationalVideo(topic, outputPath) {
       }
       // The renderer applies only the small speed-up needed to fit the six-second slot.
       sceneAssets.push({ videoPath: generatedClips[i], narrationPath: speech.path, audioTempo });
+      if (!visualResult.narrationClips) reportProgress(92 + Math.round((i + 1) * 0.25), "Creating narration track " + (i + 1) + " of 10.");
     }
 
+    reportProgress(97, "Editing ten scenes, captions and narration into one film.");
     const rendered = await renderFilm({ blueprint, sceneAssets, outputPath });
+    reportProgress(99, "Running the final MP4 quality check.");
     const totalDuration = await getMediaDuration(outputPath);
     if (Math.abs(totalDuration - 60) > 1.5) {
       throw new Error("The rendered film did not pass the 60-second duration check.");

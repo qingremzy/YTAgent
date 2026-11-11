@@ -6,13 +6,13 @@ const jobs = new Map();
 const pending = [];
 const JOB_TIMEOUT_MS = 90 * 60 * 1000;
 
-function enqueueGpuJob({ prompts, narrations, seed, workDir }) {
+function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress }) {
   if (!Array.isArray(prompts) || prompts.length !== 10 || !Array.isArray(narrations) || narrations.length !== 10) {
     return Promise.reject(new Error("The free GPU worker requires exactly ten scene prompts."));
   }
   const id = crypto.randomBytes(16).toString("hex");
   return new Promise((resolve, reject) => {
-    const job = { id, prompts, narrations, seed, workDir, state: "queued", clips: new Array(10), audios: new Array(10), received: new Set(), audioReceived: new Set(), resolve, reject };
+    const job = { id, prompts, narrations, seed, workDir, onProgress, progress: 0, state: "queued", clips: new Array(10), audios: new Array(10), received: new Set(), audioReceived: new Set(), resolve, reject };
     job.timer = setTimeout(() => {
       jobs.delete(id);
       reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may be offline or out of GPU quota."));
@@ -21,6 +21,21 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir }) {
     jobs.set(id, job);
     pending.push(id);
   });
+}
+
+function updateGpuJobProgress(id, progress, message) {
+  const job = jobs.get(id);
+  if (!job || job.state !== "active") return false;
+  const value = Math.max(0, Math.min(99, Math.round(Number(progress) || 0)));
+  job.progress = Math.max(job.progress, value);
+  const detail = String(message || "").replace(/[<>]/g, "").slice(0, 180);
+  if (typeof job.onProgress === "function") {
+    try {
+      const pending = job.onProgress(job.progress, detail);
+      if (pending && typeof pending.catch === "function") pending.catch(() => {});
+    } catch (_) {}
+  }
+  return true;
 }
 
 function claimNextGpuJob() {
@@ -89,4 +104,4 @@ function failGpuJob(id, message) {
   return true;
 }
 
-module.exports = { enqueueGpuJob, claimNextGpuJob, receiveGpuScene, receiveGpuAudio, failGpuJob };
+module.exports = { enqueueGpuJob, claimNextGpuJob, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob };

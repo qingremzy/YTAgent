@@ -9,7 +9,7 @@ test("builds a moving cinematic 3D prompt for each storyboard action", () => {
     2
   );
   assert.match(prompt, /stylized 3D animated explainer/);
-  assert.match(prompt, /continuous movement/);
+  assert.match(prompt, /continuous natural movement/);
   assert.match(prompt, /scientist carefully lifts/);
   assert.match(prompt, /vertical mobile viewing/);
   assert.match(prompt, /orbit around the main subject/);

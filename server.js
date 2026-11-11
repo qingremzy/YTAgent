@@ -11,6 +11,7 @@ const ffmpegPath = require("ffmpeg-static");
 const { google } = require("googleapis");
 const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
+const { createRateLimiter } = require("./middleware/rate-limit");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -146,6 +147,18 @@ const videoUpload = multer({
   fileFilter: (_req, file, cb) => file.mimetype.startsWith("video/")
     ? cb(null, true)
     : cb(new Error("Please select a video file."))
+});
+
+// Public AI endpoints use paid/quota-limited provider keys, so cap per-IP usage.
+const generationRateLimit = createRateLimiter({
+  limit: 2,
+  windowMs: 60 * 60 * 1000,
+  message: "You've reached the video-generation limit. Please try again in about an hour."
+});
+const analysisRateLimit = createRateLimiter({
+  limit: 5,
+  windowMs: 60 * 60 * 1000,
+  message: "You've reached the video-analysis limit. Please try again in about an hour."
 });
 
 function oauthClient() {
@@ -627,7 +640,7 @@ app.get("/api/status", async (req, res) => {
   }
 });
 
-app.post("/api/analyze", videoUpload.single("video"), async (req, res) => {
+app.post("/api/analyze", analysisRateLimit, videoUpload.single("video"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Choose a video first." });
   if (analysisQueue) {
     try {
@@ -719,7 +732,7 @@ app.post("/api/upload", requireAuth, videoUpload.single("video"), async (req, re
 
 const { generateEducationalVideo } = require("./video-generator");
 
-app.post("/api/generate", async (req, res) => {
+app.post("/api/generate", generationRateLimit, async (req, res) => {
   const topic = String(req.body?.topic || "").trim();
   if (topic.length < 8) return res.status(400).json({ error: "Enter a video topic with at least 8 characters." });
   if (topic.length > 180) return res.status(400).json({ error: "Keep the topic under 180 characters." });

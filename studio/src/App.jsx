@@ -109,6 +109,10 @@ export default function App() {
     setRenderError("");
     setPublishError("");
     setPublishedUrl("");
+    if (exportUrl.current) {
+      URL.revokeObjectURL(exportUrl.current);
+      exportUrl.current = "";
+    }
     setExported(null);
     setRendering(true);
     setRenderProgress(0);
@@ -135,7 +139,9 @@ export default function App() {
     } catch (error) {
       setRenderError(error.message || "Export failed. Try source resolution or a shorter edit.");
     } finally {
-      if (runtime) runtime.dispose();
+      if (runtime) {
+        try { runtime.dispose(); } catch (_) {}
+      }
       setRendering(false);
     }
   }, [persistSource, projectId]);

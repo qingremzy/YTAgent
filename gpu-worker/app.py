@@ -78,6 +78,15 @@ def send_progress_to_server(remote_job_id, progress, message):
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read().decode("utf-8") or "{}")
 
+def remote_progress_heartbeat(remote_job_id, progress, message, stop_event):
+    # Keep the dashboard's status message alive while a single GPU inference takes minutes.
+    while not stop_event.wait(25):
+        try:
+            send_progress_to_server(remote_job_id, progress, message)
+        except Exception as exc:
+            print("YTAgent progress heartbeat failed:", str(exc)[:180])
+
+
 def send_scene_to_server(remote_job_id, index, clip_path):
     url = f"{SERVER_URL}/api/worker/jobs/{remote_job_id}/scenes/{index}"
     data = Path(clip_path).read_bytes()
@@ -192,24 +201,56 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
         ACTIVE_JOB = job_id
         JOBS[job_id]["status"] = "loading"
         JOBS[job_id]["message"] = "Loading Wan video model into GPU memory."
-        pipe = get_pipeline()
+        load_stop = threading.Event()
+        load_heartbeat = None
+        if remote_job_id:
+            load_heartbeat = threading.Thread(
+                target=remote_progress_heartbeat,
+                args=(remote_job_id, 3, "Loading Wan 2.1 into GPU memory. First startup can take a few minutes.", load_stop),
+                daemon=True
+            )
+            load_heartbeat.start()
+        try:
+            pipe = get_pipeline()
+        finally:
+            load_stop.set()
+            if load_heartbeat:
+                load_heartbeat.join(timeout=2)
         import torch
         from diffusers.utils import export_to_video
         clips = []
         for index, prompt in enumerate(prompts):
             JOBS[job_id]["status"] = "generating"
             JOBS[job_id]["progress"] = int(index * 100 / len(prompts))
-            JOBS[job_id]["message"] = f"Generating cinematic scene {index + 1} of {len(prompts)}."
+            scene_progress = 5 + int(index * 6.0)
+            scene_message = f"Rendering cinematic scene {index + 1} of 10. Wan is generating the frames now."
+            JOBS[job_id]["message"] = scene_message
+            if remote_job_id:
+                send_progress_to_server(remote_job_id, scene_progress, scene_message)
             generator = torch.Generator(device="cuda").manual_seed(seed + index)
-            result = pipe(
-                prompt=prompt,
-                height=832,
-                width=480,
-                num_frames=97,
-                num_inference_steps=int(os.environ.get("WAN_STEPS", "20")),
-                guidance_scale=5.0,
-                generator=generator
-            )
+            scene_stop = threading.Event()
+            scene_heartbeat = None
+            if remote_job_id:
+                scene_heartbeat = threading.Thread(
+                    target=remote_progress_heartbeat,
+                    args=(remote_job_id, scene_progress, scene_message, scene_stop),
+                    daemon=True
+                )
+                scene_heartbeat.start()
+            try:
+                result = pipe(
+                    prompt=prompt,
+                    height=832,
+                    width=480,
+                    num_frames=97,
+                    num_inference_steps=int(os.environ.get("WAN_STEPS", "20")),
+                    guidance_scale=5.0,
+                    generator=generator
+                )
+            finally:
+                scene_stop.set()
+                if scene_heartbeat:
+                    scene_heartbeat.join(timeout=2)
             frames = result.frames[0]
             clip_path = work / f"scene-{index:02d}.mp4"
             export_to_video(frames, str(clip_path), fps=16)

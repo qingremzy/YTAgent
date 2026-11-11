@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { callKaggleTool, toKaggleFieldNames } = require("./kaggle-mcp");
+const { callKaggleTool } = require("./kaggle-mcp");
 
 test("callKaggleTool initializes MCP and sends a notebook request", async () => {
   const previousFetch = global.fetch;
@@ -27,7 +27,7 @@ test("callKaggleTool initializes MCP and sends a notebook request", async () => 
     assert.equal(calls[2].body.method, "tools/call");
     assert.equal(calls[2].body.params.name, "get_notebook_session_status");
     assert.deepEqual(calls[2].body.params.arguments.request, {
-      user_name: "samsonbamigboye", kernel_slug: "notebook477419e21e"
+      userName: "samsonbamigboye", kernelSlug: "notebook477419e21e"
     });
     assert.equal(calls[2].headers["Mcp-Session-Id"], "test-session");
   } finally {
@@ -46,19 +46,4 @@ test("callKaggleTool refuses missing Kaggle credentials", async () => {
     if (previousToken === undefined) delete process.env.KAGGLE_API_TOKEN;
     else process.env.KAGGLE_API_TOKEN = previousToken;
   }
-});
-
-
-test("toKaggleFieldNames converts nested camelCase fields to Kaggle API snake_case", () => {
-  assert.deepEqual(toKaggleFieldNames({
-    userName: "samsonbamigboye",
-    kernelSlug: "notebook477419e21e",
-    enableInternet: true,
-    nestedOptions: [{ machineShape: "GPU" }]
-  }), {
-    user_name: "samsonbamigboye",
-    kernel_slug: "notebook477419e21e",
-    enable_internet: true,
-    nested_options: [{ machine_shape: "GPU" }]
-  });
 });

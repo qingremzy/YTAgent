@@ -384,11 +384,20 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
       const match = path.basename(outputPath).match(/^generated-([a-f0-9]{24})\.mp4$/i);
       if (!match) throw new Error("Could not associate the finished film with its editable studio project.");
       try {
+        const studioSceneAssets = await Promise.all(sceneAssets.map(async (asset, index) => {
+          const narrationPath = path.join(workDir, "studio-narration-" + String(index + 1).padStart(2, "0") + ".wav");
+          await run(ffmpegPath, [
+            "-y", "-hide_banner", "-loglevel", "error", "-i", asset.narrationPath,
+            "-af", "atempo=" + Number(asset.audioTempo).toFixed(3),
+            "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", narrationPath
+          ]);
+          return { ...asset, narrationPath };
+        }));
         studioProject = await createStudioProject({
           projectId: match[1],
           title: storyboard.title || topic,
           storyboard,
-          sceneAssets,
+          sceneAssets: studioSceneAssets,
           rootDir: options.studioProjectRoot
         });
       } catch (error) {

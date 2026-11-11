@@ -104,7 +104,7 @@ function compileBlueprint(storyboard, options = {}) {
         required: true,
         style: "natural_cinematic_documentary",
         language: options.language || "en",
-        voice_id: options.voiceId || "en-US-AriaNeural",
+        voice_id: options.voiceId || "en-US-ChristopherNeural",
         delivery: "expressive_clear_storytelling",
         fail_if_unavailable: true
       }),

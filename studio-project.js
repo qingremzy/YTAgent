@@ -88,6 +88,13 @@ async function createStudioProject({ projectId, title, storyboard, sceneAssets, 
       id,
       title: String(title || storyboard.title || "YTAgent film").slice(0, 100),
       createdAt: new Date().toISOString(),
+      metadata: {
+        title: String(storyboard.title || title || "YTAgent film").slice(0, 100),
+        description: String(storyboard.description || "").slice(0, 4000),
+        keywords: Array.isArray(storyboard.keywords) ? storyboard.keywords.map(String).slice(0, 20) : [],
+        tags: Array.isArray(storyboard.tags) ? storyboard.tags.map(String).slice(0, 30) : [],
+        hashtags: Array.isArray(storyboard.hashtags) ? storyboard.hashtags.map(String).slice(0, 8) : []
+      },
       source
     };
     await fs.promises.writeFile(path.join(projectDir, "project.json"), JSON.stringify(project, null, 2), { mode: 0o600 });

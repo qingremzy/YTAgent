@@ -69,7 +69,7 @@ function compileBlueprint(storyboard, options = {}) {
         text: narration,
         timeline_start_seconds: index * SCENE_DURATION_SECONDS,
         timeline_end_seconds: (index + 1) * SCENE_DURATION_SECONDS,
-        caption_sync: "word_level"
+        caption_sync: "scene_level"
       }),
       caption,
       visual_direction: direction,
@@ -110,22 +110,22 @@ function compileBlueprint(storyboard, options = {}) {
       }),
       captions: Object.freeze({
         required: true,
-        synchronization: "word_level_from_narration_timestamps",
+        synchronization: "scene_level_from_storyboard",
         burn_into_video: true
       }),
       music: Object.freeze({
-        required: true,
-        style: "cinematic_adaptive",
+        required: false,
+        style: "optional_cinematic",
         duck_under_narration: true
       }),
       sound_effects: Object.freeze({
-        enabled: true,
-        synchronized_to_scene_actions: true
+        enabled: false,
+        synchronized_to_scene_actions: false
       }),
       mix: Object.freeze({
         narrator_priority: "foreground",
         prevent_clipping: true,
-        target_loudness_lufs: -14,
+        target_loudness_lufs: null,
         true_peak_db: -1
       })
     }),

@@ -11,6 +11,7 @@ const ffmpegPath = require("ffmpeg-static");
 const { google } = require("googleapis");
 const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
+const { createRateLimiter } = require("./middleware/rate-limit");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -148,6 +149,18 @@ const videoUpload = multer({
     : cb(new Error("Please select a video file."))
 });
 
+// Public AI endpoints use paid/quota-limited provider keys, so cap per-IP usage.
+const generationRateLimit = createRateLimiter({
+  limit: 2,
+  windowMs: 60 * 60 * 1000,
+  message: "You've reached the video-generation limit. Please try again in about an hour."
+});
+const analysisRateLimit = createRateLimiter({
+  limit: 5,
+  windowMs: 60 * 60 * 1000,
+  message: "You've reached the video-analysis limit. Please try again in about an hour."
+});
+
 function oauthClient() {
   const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = process.env;
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
@@ -215,7 +228,8 @@ async function reviewWithOpenAI(frames, draft) {
       input: [{ role: "user", content }],
       text: { format: { type: "json_object" } },
       max_output_tokens: 1400
-    })
+    }),
+    signal: AbortSignal.timeout(45000)
   });
   if (!response.ok) throw new Error("OpenAI visual analysis failed: HTTP " + response.status);
   const data = await response.json();
@@ -247,7 +261,8 @@ async function reviewWithGroq(frames, draft) {
       response_format: { type: "json_object" },
       temperature: 0.3,
       max_tokens: 1400
-    })
+    }),
+    signal: AbortSignal.timeout(45000)
   });
   if (!response.ok) { const details = await response.text(); throw new Error("Groq visual analysis failed: HTTP " + response.status + " " + details.slice(0, 240)); }
   const data = await response.json();
@@ -275,7 +290,8 @@ async function reviewWithClaude(frames, draft) {
       max_tokens: 1600,
       system: "You are an independent visual video analyst and YouTube metadata editor. Inspect the supplied frame images yourself. Do not merely repeat the Gemini draft.",
       messages: [{ role: "user", content }]
-    })
+    }),
+    signal: AbortSignal.timeout(45000)
   });
   if (!response.ok) throw new Error("Claude visual analysis failed: HTTP " + response.status);
   const data = await response.json();
@@ -298,7 +314,8 @@ async function analyzeWithGemini(file) {
       "X-Goog-Upload-Header-Content-Type": mimeType,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ file: { display_name: path.basename(file.originalname || "ytagent-video") } })
+    body: JSON.stringify({ file: { display_name: path.basename(file.originalname || "ytagent-video") } }),
+    signal: AbortSignal.timeout(120000)
   });
   if (!start.ok) throw new Error("Gemini could not start the video upload. Check the API key and model access.");
   const uploadUrl = start.headers.get("x-goog-upload-url");
@@ -311,7 +328,8 @@ async function analyzeWithGemini(file) {
       "Content-Length": String(fileBuffer.length),
       "Content-Type": mimeType
     },
-    body: fileBuffer
+    body: fileBuffer,
+    signal: AbortSignal.timeout(120000)
   });
   if (!uploaded.ok) throw new Error("Gemini could not receive this video file.");
   let geminiFile = (await uploaded.json()).file;
@@ -322,7 +340,8 @@ async function analyzeWithGemini(file) {
       if (geminiFile.state === "FAILED") throw new Error("Gemini could not process this video.");
       await new Promise(resolve => setTimeout(resolve, 2000));
       const stateResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/" + geminiFile.name, {
-        headers: { "x-goog-api-key": apiKey }
+        headers: { "x-goog-api-key": apiKey },
+        signal: AbortSignal.timeout(30000)
       });
       if (!stateResponse.ok) throw new Error("Could not check the video analysis status.");
       geminiFile = await stateResponse.json();
@@ -355,7 +374,8 @@ Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords
         generated = await fetch(generationUrl, {
           method: "POST",
           headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-          body: generationBody
+          body: generationBody,
+          signal: AbortSignal.timeout(60000)
         });
         if (generated.ok) break;
         generationError = await generated.text();
@@ -627,7 +647,7 @@ app.get("/api/status", async (req, res) => {
   }
 });
 
-app.post("/api/analyze", videoUpload.single("video"), async (req, res) => {
+app.post("/api/analyze", analysisRateLimit, videoUpload.single("video"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Choose a video first." });
   if (analysisQueue) {
     try {
@@ -719,7 +739,7 @@ app.post("/api/upload", requireAuth, videoUpload.single("video"), async (req, re
 
 const { generateEducationalVideo } = require("./video-generator");
 
-app.post("/api/generate", async (req, res) => {
+app.post("/api/generate", generationRateLimit, async (req, res) => {
   const topic = String(req.body?.topic || "").trim();
   if (topic.length < 8) return res.status(400).json({ error: "Enter a video topic with at least 8 characters." });
   if (topic.length > 180) return res.status(400).json({ error: "Keep the topic under 180 characters." });

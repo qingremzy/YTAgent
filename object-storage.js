@@ -7,6 +7,7 @@ const {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command
 } = require("@aws-sdk/client-s3");
 
@@ -102,6 +103,18 @@ function createObjectStorage({ env = process.env, client = null } = {}) {
     return putBuffer(key, Buffer.from(JSON.stringify(value)), "application/json; charset=utf-8");
   }
 
+  async function exists(key) {
+    if (!configured) return false;
+    try {
+      await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: normalizeObjectKey(key) }));
+      return true;
+    } catch (error) {
+      const status = error?.$metadata?.httpStatusCode || error?.statusCode;
+      if (status === 404 || error?.name === "NotFound" || error?.name === "NoSuchKey") return false;
+      throw error;
+    }
+  }
+
   async function deleteObject(key) {
     if (!configured) return false;
     await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: normalizeObjectKey(key) }));
@@ -158,6 +171,7 @@ function createObjectStorage({ env = process.env, client = null } = {}) {
     getObject,
     getBuffer,
     getJson,
+    exists,
     deleteObject,
     listKeys,
     uploadDirectory

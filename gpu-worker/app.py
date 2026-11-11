@@ -1,4 +1,6 @@
 import os
+import argparse
+import sys
 import io
 import re
 import uuid
@@ -152,9 +154,15 @@ def report_remote_failure(remote_job_id, message):
     except Exception as exc:
         print("Could not report GPU worker failure to YTAgent:", str(exc)[:200])
 
-def poll_railway():
-    print("YTAgent outbound GPU polling is active. No Cloudflare tunnel is required.")
-    while True:
+def poll_railway_once(wait_seconds=600):
+    """Claim and process one remote job, waiting briefly for the queued job to appear."""
+    if not SERVER_URL or not TOKEN:
+        raise RuntimeError("YT_AGENT_SERVER_URL and YT_AGENT_WORKER_TOKEN are required.")
+    if not SERVER_URL.startswith("https://"):
+        raise RuntimeError("YT_AGENT_SERVER_URL must use HTTPS.")
+    deadline = time.time() + max(0, int(wait_seconds))
+    print("YTAgent one-job GPU runner is waiting for a queued job.")
+    while time.time() <= deadline:
         try:
             request = urllib.request.Request(
                 SERVER_URL + "/api/worker/next",
@@ -162,21 +170,24 @@ def poll_railway():
             )
             try:
                 with urllib.request.urlopen(request, timeout=30) as response:
-                    # HTTP 204 is the normal idle response. It is not an error,
-                    # and its empty body must never be parsed as a job.
+                    # HTTP 204 is the normal idle response and has no JSON body.
                     if response.status == 204:
-                        time.sleep(12)
-                        continue
-                    body = response.read().decode("utf-8").strip()
-                    if not body:
-                        time.sleep(12)
-                        continue
-                    job = json.loads(body)
+                        job = None
+                    else:
+                        body = response.read().decode("utf-8").strip()
+                        job = json.loads(body) if body else None
             except urllib.error.HTTPError as exc:
                 if exc.code == 204:
-                    time.sleep(12)
-                    continue
-                raise
+                    job = None
+                else:
+                    raise
+
+            if not job:
+                if time.time() >= deadline:
+                    break
+                time.sleep(min(12, max(1, deadline - time.time())))
+                continue
+
             remote_id = str(job.get("job_id", ""))
             prompts = job.get("prompts", [])
             narrations = job.get("narrations", [])
@@ -184,6 +195,7 @@ def poll_railway():
                 print("YTAgent returned an invalid GPU job. Skipping it.")
                 time.sleep(5)
                 continue
+
             local_id = "railway-" + remote_id
             JOBS[local_id] = {"status": "queued", "progress": 0, "message": "GPU job claimed from YTAgent."}
             print("Claimed YTAgent video job:", remote_id)
@@ -192,11 +204,25 @@ def poll_railway():
             result = JOBS.get(local_id, {})
             if result.get("status") == "failed":
                 report_remote_failure(remote_id, result.get("message", "GPU generation failed."))
+                print("YTAgent GPU job failed:", result.get("message", "unknown error"))
             else:
                 print("Finished sending all scenes to YTAgent:", remote_id)
+            return True
         except Exception as exc:
-            print("YTAgent polling connection failed:", str(exc)[:250])
-            time.sleep(20)
+            print("YTAgent one-job runner connection failed:", str(exc)[:250])
+            if time.time() >= deadline:
+                break
+            time.sleep(min(20, max(1, deadline - time.time())))
+
+    print("No queued YTAgent GPU job appeared before the worker wait window expired.")
+    return False
+
+
+def poll_railway():
+    print("YTAgent outbound GPU polling is active. No Cloudflare tunnel is required.")
+    while True:
+        poll_railway_once(wait_seconds=12)
+
 
 def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
     global ACTIVE_JOB, PIPE
@@ -370,3 +396,15 @@ def start_railway_polling():
             POLL_THREAD.start()
     else:
         print("YTAgent outbound polling is disabled. Set YT_AGENT_SERVER_URL and YT_AGENT_WORKER_TOKEN.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="YTAgent Kaggle GPU worker")
+    parser.add_argument("--run-once", action="store_true", help="Claim and process one queued YTAgent job, then exit.")
+    parser.add_argument("--wait-seconds", type=int, default=600, help="How long to wait for a queued job before exiting.")
+    args = parser.parse_args()
+    if args.run_once:
+        completed = poll_railway_once(wait_seconds=args.wait_seconds)
+        sys.exit(0 if completed else 0)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=7860)

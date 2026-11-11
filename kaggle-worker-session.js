@@ -54,9 +54,10 @@ function createKaggleWorkerSessionManager({
     if (!source) {
       throw new Error("Kaggle did not return the saved notebook source. Quick Save the GPU notebook first.");
     }
-    const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
-    validateNotebookSource(source);
-    const request = buildNotebookSaveRequest(identity.slug, source, metadata);
+    const { validateNotebookSource, buildNotebookSaveRequest, patchNotebookForBatchRun } = require("./kaggle-notebook");
+    const runnableSource = patchNotebookForBatchRun(source);
+    validateNotebookSource(runnableSource);
+    const request = buildNotebookSaveRequest(identity.slug, runnableSource, metadata);
     request.kernelExecutionType = "SaveAndRunAll";
 
     // Kaggle's interactive-session API only opens a Jupyter session; it does not

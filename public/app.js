@@ -100,7 +100,20 @@ const generateButton = document.getElementById("generateVideo");
 const generatorStatus = document.getElementById("generatorStatus");
 const generatedDownload = document.getElementById("generatedDownload");
 const generationOrb = document.getElementById("generationOrb");
-function setGenerationLoading(loading) { generationOrb.classList.toggle("hidden", !loading); }
+const generationProgress = document.getElementById("generationProgress");
+const generationProgressFill = document.getElementById("generationProgressFill");
+const generationProgressLabel = document.getElementById("generationProgressLabel");
+function setGenerationLoading(loading) {
+  generationOrb.classList.toggle("hidden", !loading);
+  if (!loading) generationProgress.classList.add("hidden");
+}
+function updateGenerationProgress(progress, message) {
+  const value = Math.max(0, Math.min(99, Number(progress) || 0));
+  generationProgress.classList.remove("hidden");
+  generationProgressFill.style.width = value + "%";
+  generationProgressLabel.textContent = Math.round(value) + "%";
+  if (message) generatorStatus.textContent = message;
+}
 const generationStorageKey = "ytagent-generation-job";
 function showGeneratedVideo(data, topic) {
   setGenerationLoading(false);
@@ -161,9 +174,13 @@ async function waitForGeneration(jobId) {
       throw new Error(data.error || "Video generation failed.");
     }
     const state = data.state || "waiting";
-    generatorStatus.textContent = state === "active"
-      ? "YTAgent is creating your film. You can leave this page and return later."
-      : "Your film is queued. Waiting for the video engine…";
+    if (typeof data.progress === "number" && data.progress > 0) {
+      updateGenerationProgress(data.progress, data.message || "YTAgent is creating your film.");
+    } else {
+      generatorStatus.textContent = state === "active"
+        ? "YTAgent is creating your film. You can leave this page and return later."
+        : "Your film is queued. Waiting for the video engine…";
+    }
     await wait(8000);
   }
   throw new Error("This film is taking longer than expected. Your task ID is saved. Reload this page to resume checking.");
@@ -174,6 +191,7 @@ generatorForm.addEventListener("submit", async event => {
   if (!topic) return;
   generateButton.disabled = true;
   setGenerationLoading(true);
+  updateGenerationProgress(1, "AI director is planning the film.");
   generateButton.textContent = "Generating video…";
   generatorStatus.textContent = "AI director is planning ten scenes. YTAgent is creating the visuals, generating narration, and assembling one complete MP4. This may take several minutes. You can leave and return later."
   generatedDownload.classList.add("hidden");

@@ -29,6 +29,11 @@ assert.equal(blueprint.scenes[0].start_seconds, 0);
 assert.equal(blueprint.scenes[9].end_seconds, 60);
 assert.equal(blueprint.scenes[3].world.camera, "orbit_left");
 assert.equal(blueprint.timeline, "single_continuous_film");
+assert.equal(blueprint.audio.narrator.required, true);
+assert.equal(blueprint.audio.narrator.fail_if_unavailable, true);
+assert.equal(blueprint.audio.captions.synchronization, "word_level_from_narration_timestamps");
+assert.equal(blueprint.audio.music.duck_under_narration, true);
+assert.equal(blueprint.scenes[0].narration_segment.caption_sync, "word_level");
 
 assert.throws(() => compileBlueprint({ scenes: [] }), /exactly 10 scenes/);
 assert.throws(() => compileBlueprint({

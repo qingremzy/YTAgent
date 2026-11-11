@@ -13,7 +13,7 @@ const WIDTH = 540, HEIGHT = 960, FPS = 24, SCENE_SECONDS = 6, SCENE_COUNT = 10;
 const DURATION = SCENE_SECONDS * SCENE_COUNT;
 
 function clean(value, max) {
-  return String(value || "").replace(/[<>]/g, "").replace(/\\s+/g, " ").trim().slice(0, max || 200);
+  return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max || 200);
 }
 function xml(value) {
   return clean(value, 220).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
@@ -46,7 +46,7 @@ function run(args, label) {
   });
 }
 function wrap(value, maxChars, maxLines) {
-  const words = clean(value, 220).split(/\\s+/), lines = [];
+  const words = clean(value, 220).split(/\s+/), lines = [];
   let line = "";
   for (const word of words) {
     if (line && (line + " " + word).length > maxChars) {
@@ -145,7 +145,7 @@ async function renderFilm(input) {
       segments.push(await renderScene(sceneAssets[i], blueprint.scenes[i], i, temp));
     }
     const concatList = path.join(temp, "segments.txt");
-    await fs.promises.writeFile(concatList, segments.map(file => "file '" + concatEscape(file) + "'").join("\\n") + "\\n");
+    await fs.promises.writeFile(concatList, segments.map(file => "file '" + concatEscape(file) + "'").join("\n") + "\n");
     const joinedPath = musicPath ? path.join(temp, "joined-no-music.mp4") : outputPath;
     await run([
       "-y", "-hide_banner", "-loglevel", "warning", "-threads", "1",

@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   buildPairPrompt,
+  buildCinematicShotDirection,
   generateSceneClips,
   getVideoId,
   getTaskStatus,
@@ -25,6 +26,21 @@ test("builds one vertical paired-scene prompt with a midpoint transition", () =>
   assert.match(prompt, /9:16/);
   assert.match(prompt, /red blood cell/);
   assert.match(prompt, /releases oxygen/);
+  assert.match(prompt, /Camera and lens direction/);
+  assert.match(prompt, /85mm cinema prime/);
+  assert.match(buildPairPrompt(
+    { visual_direction: "A cell moves" },
+    { visual_direction: "It divides" },
+    "Cell division",
+    1
+  ), /35mm anamorphic lens/);
+});
+
+test("cycles through distinct cinematic camera direction presets", () => {
+  assert.match(buildCinematicShotDirection(0), /macro push-in/);
+  assert.match(buildCinematicShotDirection(1), /lateral tracking/);
+  assert.match(buildCinematicShotDirection(2), /orbital move/);
+  assert.equal(buildCinematicShotDirection(5), buildCinematicShotDirection(0));
 });
 
 test("reads Agnes task IDs from supported response shapes", () => {

@@ -126,7 +126,7 @@ async function waitForGeneration(jobId) {
     }
     const state = data.state || "waiting";
     generatorStatus.textContent = state === "active"
-      ? "YTAgent is creating your film. The page can stay open while the narrator and scenes are prepared…"
+      ? "YTAgent is creating your film. You can leave this page and return later."
       : "Your film is safely queued. Waiting for the video engine…";
     await wait(8000);
   }
@@ -137,8 +137,8 @@ generatorForm.addEventListener("submit", async event => {
   const topic = document.getElementById("videoTopic").value.trim();
   if (!topic) return;
   generateButton.disabled = true;
-  generateButton.textContent = "Generating video… keep this page open";
-  generatorStatus.textContent = "AI director is planning ten scenes. The hosted video engine is creating five cinematic clips. YTAgent will assemble the complete film and add its required narrator. This may take several minutes."
+  generateButton.textContent = "Generating video…";
+  generatorStatus.textContent = "AI director is planning ten scenes. The hosted video engine is creating five cinematic clips. YTAgent will assemble the complete film and add its required narrator. This may take several minutes. You can leave and return later."
   generatedDownload.classList.add("hidden");
   try {
     const response = await fetch("/api/generate", {

@@ -12,7 +12,7 @@ Add this Railway variable:
 
 YTAgent uses this one connection for BullMQ background queues and the Express login-session store. The workers use a 30-second idle drain delay to reduce unnecessary commands.
 
-The Upstash free tier currently lists 256 MB and 500,000 commands per month. That is a limited allowance, not unlimited hosting. Check the [current Upstash pricing](https://upstash.com/pricing/redis) before increasing generation volume.
+The Upstash free tier currently lists 256 MB, 10 GB monthly bandwidth, and 500,000 commands per month. That is a limited allowance, not unlimited hosting. Check the [current Upstash pricing](https://upstash.com/pricing/redis) before increasing generation volume.
 
 ## 2. Cloudflare R2 (free tier)
 
@@ -28,7 +28,7 @@ Add these Railway variables:
 
 YTAgent uses the S3-compatible API with region `auto`. Finished MP4s and all scene/narration assets are uploaded privately. The app streams them through authenticated YTAgent routes. Local working copies still expire after six hours, while successful R2 copies remain available after a Railway restart.
 
-Cloudflare's free R2 allowance currently lists 10 GB-month storage, 1 million Class A operations, 10 million Class B operations, and no egress charge. Storage and request usage beyond the free allowance may be billed. Review [R2 pricing](https://developers.cloudflare.com/r2/pricing/) and consider a bucket lifecycle rule if you want automatic archival cleanup.
+Cloudflare's free R2 allowance for Standard storage currently lists 10 GB-month storage, 1 million Class A operations, 10 million Class B operations, and no egress charge. The free allowance does not apply to the Infrequent Access storage class. Storage and request usage beyond the free allowance may be billed. Review [R2 pricing](https://developers.cloudflare.com/r2/pricing/) and consider a bucket lifecycle rule if you want automatic archival cleanup.
 
 ## 3. Confirm durable mode
 

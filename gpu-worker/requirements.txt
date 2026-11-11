@@ -8,9 +8,15 @@ accelerate>=1.0.0
 ftfy
 imageio[ffmpeg]
 soundfile>=0.12.1
-# Python 3.13-safe Kokoro runtime dependencies. Install Kokoro and Misaki from source
-# without their optional spacy-curated-transformers dependency (no compatible Kaggle wheel).
+# Python 3.13-compatible Kokoro/Misaki runtime dependencies.
+# Kokoro and Misaki are installed from source without spacy-curated-transformers,
+# which currently pulls an incompatible curated-tokenizers build on Kaggle cp313.
 spacy>=3.8.2,<4
 num2words
 phonemizer-fork
 espeakng-loader
+loguru
+huggingface_hub
+addict
+regex
+pip>=25.0.1

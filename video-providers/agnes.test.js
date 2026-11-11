@@ -2,10 +2,15 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   buildPairPrompt,
+  buildCinematicShotDirection,
   generateSceneClips,
   getVideoId,
   getTaskStatus,
   getVideoUrl,
+  isSuccessfulStatus,
+  isFailedStatus,
+  getGenerationErrorDetail,
+  getRetryAfterMs,
   isQueueFullError,
   submissionRetryDelay
 } = require("./agnes");
@@ -21,6 +26,21 @@ test("builds one vertical paired-scene prompt with a midpoint transition", () =>
   assert.match(prompt, /9:16/);
   assert.match(prompt, /red blood cell/);
   assert.match(prompt, /releases oxygen/);
+  assert.match(prompt, /Camera and lens direction/);
+  assert.match(prompt, /85mm cinema prime/);
+  assert.match(buildPairPrompt(
+    { visual_direction: "A cell moves" },
+    { visual_direction: "It divides" },
+    "Cell division",
+    1
+  ), /35mm anamorphic lens/);
+});
+
+test("cycles through distinct cinematic camera direction presets", () => {
+  assert.match(buildCinematicShotDirection(0), /macro push-in/);
+  assert.match(buildCinematicShotDirection(1), /lateral tracking/);
+  assert.match(buildCinematicShotDirection(2), /orbital move/);
+  assert.equal(buildCinematicShotDirection(5), buildCinematicShotDirection(0));
 });
 
 test("reads Agnes task IDs from supported response shapes", () => {
@@ -32,6 +52,29 @@ test("reads Agnes task IDs from supported response shapes", () => {
 test("normalizes task status and generated video URL", () => {
   assert.equal(getTaskStatus({ data: { status: "COMPLETED" } }), "completed");
   assert.equal(getVideoUrl({ metadata: { url: "https://cdn.example/video.mp4" } }), "https://cdn.example/video.mp4");
+});
+
+test("recognizes provider success and failure status aliases", () => {
+  for (const status of ["completed", "succeeded", "success"]) {
+    assert.equal(isSuccessfulStatus(status), true);
+  }
+  for (const status of ["failed", "error", "cancelled", "canceled", "rejected"]) {
+    assert.equal(isFailedStatus(status), true);
+  }
+  assert.equal(isSuccessfulStatus("processing"), false);
+  assert.equal(isFailedStatus("processing"), false);
+});
+
+test("extracts provider error details and accepts alternate output shapes", () => {
+  assert.equal(getGenerationErrorDetail({ data: { error: { message: "render failed" } } }), "render failed");
+  assert.equal(getVideoUrl({ data: { outputs: ["https://cdn.example/out.mp4"] } }), "https://cdn.example/out.mp4");
+  assert.equal(getVideoUrl({ output: { url: "https://cdn.example/out2.mp4" } }), "https://cdn.example/out2.mp4");
+});
+
+test("parses Retry-After seconds and HTTP dates safely", () => {
+  assert.equal(getRetryAfterMs(new Headers({ "retry-after": "5" })), 5000);
+  assert.equal(getRetryAfterMs(new Headers()), 0);
+  assert.equal(getRetryAfterMs(null), 0);
 });
 
 test("recognizes Agnes queue-full messages", () => {

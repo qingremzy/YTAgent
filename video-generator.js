@@ -7,6 +7,7 @@ const ffmpegPath = require("ffmpeg-static");
 const { compileBlueprint } = require("./video-compiler/blueprint");
 const { renderFilm } = require("./video-compiler/renderer");
 const { generateSceneClips } = require("./video-providers/agnes");
+const { generateFallbackSceneClips } = require("./video-providers/free-visual-fallback");
 
 function cleanText(value, max = 240) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -148,7 +149,17 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir) {
-  return generateSceneClips(scenes, topic, workDir);
+  if (!process.env.AGNES_API_KEY) {
+    console.warn("Agnes API key is missing. Switching to the free animated visual fallback.");
+    return { clips: await generateFallbackSceneClips(scenes, workDir), provider: "YTAgent Free Visual Fallback" };
+  }
+  try {
+    const clips = await generateSceneClips(scenes, topic, workDir);
+    return { clips, provider: "Agnes AI" };
+  } catch (error) {
+    console.warn("Agnes visual generation failed. Switching to the free animated visual fallback:", error.message || error);
+    return { clips: await generateFallbackSceneClips(scenes, workDir), provider: "YTAgent Free Visual Fallback" };
+  }
 }
 
 async function generateNarration(text, outputPath) {
@@ -229,9 +240,6 @@ async function generateEducationalVideo(topic, outputPath) {
   if (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) {
     throw new Error("Add GEMINI_API_KEY or GROQ_API_KEY in Railway Variables before generating videos.");
   }
-  if (!process.env.AGNES_API_KEY) {
-    throw new Error("Add AGNES_API_KEY in Railway Variables to enable hosted AI video generation. No temporary GPU worker is required.");
-  }
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable on this server.");
   const storyboard = await requestStoryboard(topic);
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 10) {
@@ -248,7 +256,8 @@ async function generateEducationalVideo(topic, outputPath) {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-film-"));
   try {
     // Agnes supplies five 12-second cinematic clips, which are split into ten scene plates.
-    const generatedClips = await requestGeneratedScenes(storyboard.scenes, topic, workDir);
+    const visualResult = await requestGeneratedScenes(storyboard.scenes, topic, workDir);
+    const generatedClips = visualResult.clips;
     const voiceProviders = new Set();
     const sceneAssets = [];
     for (let i = 0; i < storyboard.scenes.length; i++) {
@@ -276,7 +285,8 @@ async function generateEducationalVideo(topic, outputPath) {
       captions: "Burned into the video (scene-level)",
       narration: "Included in every scene",
       voice_provider: Array.from(voiceProviders).join(" + "),
-      visuals: "Ten AI-generated moving scenes assembled by the YTAgent video compiler",
+      visuals: visualResult.provider === "Agnes AI" ? "Ten Agnes AI-generated moving scenes assembled by the YTAgent video compiler" : "Ten animated scenes created by YTAgent free visual fallback and assembled by the video compiler",
+      visual_provider: visualResult.provider,
       compiler: rendered
     };
   } finally {

@@ -1010,7 +1010,8 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
     return res.status(409).json({ error: "YTAgent is already generating a film. Wait for it to finish before starting another." });
   }
 
-  if (req.session?.tokens && process.env.KAGGLE_API_TOKEN) {
+  // GPU video generation must not depend on YouTube OAuth. Publishing is a separate step.
+  if (process.env.KAGGLE_API_TOKEN) {
     kaggleWorkerSessionManager.ensure().then(result => {
       if (result.started) console.log("YTAgent requested a free Kaggle GPU session:", result.notebookRef, result.machineShape);
     }).catch(error => {

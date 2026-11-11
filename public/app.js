@@ -99,8 +99,11 @@ const generatorForm = document.getElementById("generatorForm");
 const generateButton = document.getElementById("generateVideo");
 const generatorStatus = document.getElementById("generatorStatus");
 const generatedDownload = document.getElementById("generatedDownload");
+const generationOrb = document.getElementById("generationOrb");
+function setGenerationLoading(loading) { generationOrb.classList.toggle("hidden", !loading); }
 const generationStorageKey = "ytagent-generation-job";
 function showGeneratedVideo(data, topic) {
+  setGenerationLoading(false);
   generatedDownload.href = data.downloadUrl;
   generatedDownload.classList.remove("hidden");
   form.elements.title.value = data.title || topic;
@@ -110,13 +113,15 @@ function showGeneratedVideo(data, topic) {
   form.elements.keywords.value = (data.keywords || []).join(", ");
   generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated MP4 is ready. Voice: " + (data.voice_provider || "AI voice") + ". Visuals: " + (data.visual_provider || "YTAgent video engine") + ". Narration and captions are included. Download the actual video file below, then select it in the publishing section.";
 }
-async function fetchGenerationStatus(jobId) {
+async function fetchGenerationStatus(jobId, deadline) {
   const url = "/api/generate/" + encodeURIComponent(jobId);
   let lastError;
-  for (let attempt = 0; attempt < 8; attempt++) {
+  let attempt = 0;
+  while (Date.now() < deadline) {
     if (navigator.onLine === false) {
       generatorStatus.textContent = "Your film may still be generating. Waiting for your internet connection to return…";
-      await new Promise(resolve => window.addEventListener("online", resolve, { once: true }));
+      await Promise.race([new Promise(resolve => window.addEventListener("online", resolve, { once: true })), wait(15000)]);
+      continue;
     }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
@@ -138,16 +143,17 @@ async function fetchGenerationStatus(jobId) {
       if (error.message && !/fetch|network|abort|temporar|server returned an invalid response/i.test(error.message)) throw error;
       lastError = error;
     }
-    const delay = Math.min(30000, 1500 * Math.pow(2, attempt));
+    const delay = Math.min(30000, 1500 * Math.pow(2, Math.min(attempt, 5)));
+    attempt++;
     generatorStatus.textContent = "Connection interrupted. Your film may still be rendering. Reconnecting automatically in " + Math.ceil(delay / 1000) + " seconds…";
     await wait(delay);
   }
-  throw lastError || new Error("Could not reconnect to YTAgent yet.");
+  throw lastError || new Error("The six-hour video task window has expired. Reload to check whether the video is ready.");
 }
 async function waitForGeneration(jobId) {
   const deadline = Date.now() + 6 * 60 * 60 * 1000;
   while (Date.now() < deadline) {
-    const { response, data } = await fetchGenerationStatus(jobId);
+    const { response, data } = await fetchGenerationStatus(jobId, deadline);
     if (!response.ok) throw new Error(data.error || "Could not check video generation progress (HTTP " + response.status + ").");
     if (data.state === "completed") return data;
     if (data.state === "failed") {
@@ -167,6 +173,7 @@ generatorForm.addEventListener("submit", async event => {
   const topic = document.getElementById("videoTopic").value.trim();
   if (!topic) return;
   generateButton.disabled = true;
+  setGenerationLoading(true);
   generateButton.textContent = "Generating video…";
   generatorStatus.textContent = "AI director is planning ten scenes. YTAgent is creating the visuals, generating narration, and assembling one complete MP4. This may take several minutes. You can leave and return later."
   generatedDownload.classList.add("hidden");
@@ -185,6 +192,7 @@ generatorForm.addEventListener("submit", async event => {
     showGeneratedVideo(data, topic);
   } catch (error) { generatorStatus.textContent = error.message; }
   finally {
+    setGenerationLoading(false);
     generateButton.disabled = false;
     generateButton.textContent = "✦ Generate 60-second video";
   }
@@ -195,6 +203,7 @@ try {
   const savedJob = JSON.parse(localStorage.getItem(generationStorageKey) || "null");
   if (savedJob && savedJob.jobId) {
     generateButton.disabled = true;
+    setGenerationLoading(true);
     generateButton.textContent = "Resuming video generation…";
     generatorStatus.textContent = "Resuming your previous video task. You can leave this page and return later.";
     waitForGeneration(savedJob.jobId).then(data => {
@@ -203,6 +212,7 @@ try {
     }).catch(error => {
       generatorStatus.textContent = error.message;
     }).finally(() => {
+      setGenerationLoading(false);
       generateButton.disabled = false;
       generateButton.textContent = "✦ Generate 60-second video";
     });

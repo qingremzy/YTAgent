@@ -162,7 +162,16 @@ def poll_railway():
             )
             try:
                 with urllib.request.urlopen(request, timeout=30) as response:
-                    job = json.loads(response.read().decode("utf-8") or "{}")
+                    # HTTP 204 is the normal idle response. It is not an error,
+                    # and its empty body must never be parsed as a job.
+                    if response.status == 204:
+                        time.sleep(12)
+                        continue
+                    body = response.read().decode("utf-8").strip()
+                    if not body:
+                        time.sleep(12)
+                        continue
+                    job = json.loads(body)
             except urllib.error.HTTPError as exc:
                 if exc.code == 204:
                     time.sleep(12)

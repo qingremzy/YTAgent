@@ -287,7 +287,7 @@ async function generateEducationalVideo(topic, outputPath) {
       hashtags: Array.isArray(storyboard.hashtags) ? storyboard.hashtags.map(String).slice(0, 5) : [],
       duration_seconds: Math.round(totalDuration),
       scenes: storyboard.scenes.length,
-      format: "720x1280 vertical MP4",
+      format: "540x960 vertical MP4 (24 FPS)",
       captions: "Burned into the video (scene-level)",
       narration: "Included in every scene",
       voice_provider: Array.from(voiceProviders).join(" + "),

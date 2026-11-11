@@ -115,6 +115,7 @@ def poll_railway():
                 time.sleep(5)
                 continue
             local_id = "railway-" + remote_id
+            JOBS[local_id] = {"status": "queued", "progress": 0, "message": "GPU job claimed from YTAgent."}
             print("Claimed YTAgent video job:", remote_id)
             run_job(local_id, prompts, int(job.get("seed", 20261110)), remote_job_id=remote_id)
             result = JOBS.get(local_id, {})

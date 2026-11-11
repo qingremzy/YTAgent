@@ -21,3 +21,14 @@ test("escapes unsafe text in fallback artwork", () => {
   assert.doesNotMatch(svg, /<script>/);
   assert.match(svg, /Cells &amp; signals/);
 });
+
+test("uses the monochrome graphite palette without blue or purple accents", () => {
+  const svg = buildFallbackArtwork({
+    title: "A monochrome scene",
+    visual_direction: "A silver particle cloud moves through a dark chamber"
+  }, 0, 10);
+  assert.match(svg, /#08090b/);
+  assert.match(svg, /#d7dbe0/);
+  assert.equal(svg.includes("hsl("), false);
+  assert.doesNotMatch(svg, /#67e8f9|#071426|#102b48/i);
+});

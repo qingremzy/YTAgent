@@ -5,8 +5,8 @@ This worker runs the open Wan 2.1 T2V 1.3B Diffusers model on a temporary GPU no
 ## Important limits
 
 - This is genuine text-to-video generation, not a photo slideshow.
-- The 1.3B model creates short 480p landscape clips. YTAgent crops them for vertical Shorts.
-- Ten 5-second scenes can take a long time on a free GPU. Free notebook sessions can disconnect or hit usage limits.
+- The 1.3B model creates portrait 480p clips of about six seconds. YTAgent adds captions and narration, then assembles ten clips into one vertical 60-second Short.
+- Ten six-second scenes can take a long time on a free GPU. Free notebook sessions can disconnect or hit usage limits.
 - Keep the Kaggle notebook running while YTAgent generates a video.
 - No paid video API is used. GPU availability is not guaranteed.
 - This is a first real-video engine, not a promise of Zack D Films-level quality. The 1.3B model is a constrained free-compute starting point.
@@ -67,3 +67,12 @@ for line in iter(tunnel.stdout.readline, ""):
 Wan 2.1 T2V 1.3B Diffusers: `Wan-AI/Wan2.1-T2V-1.3B-Diffusers`.
 
 Official model code and hardware guidance: https://github.com/Wan-Video/Wan2.1
+
+
+## How YTAgent uses the worker
+
+When both `VIDEO_WORKER_URL` and `YT_AGENT_WORKER_TOKEN` are configured in Railway, YTAgent automatically tries this Wan worker first. It submits the ten storyboard prompts, waits for completion, downloads the ten individual MP4 scenes, then passes them to the existing low-memory FFmpeg compiler for narration, captions and final assembly.
+
+If the notebook is offline, the worker is busy, or generation fails, YTAgent falls back safely. Agnes is only attempted when `AGNES_FREE_QUOTA_CONFIRMED=true` and its key is present. Otherwise the local animated-art fallback is used. The fallback is not real AI video.
+
+The notebook is temporary. Its public Cloudflare Tunnel URL changes when the tunnel restarts, and the Kaggle session must remain active for the entire generation. No free GPU uptime is guaranteed.

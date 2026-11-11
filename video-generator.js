@@ -7,6 +7,7 @@ const ffmpegPath = require("ffmpeg-static");
 const { compileBlueprint } = require("./video-compiler/blueprint");
 const { renderFilm } = require("./video-compiler/renderer");
 const { generateSceneClips } = require("./video-providers/agnes");
+const { generateWanSceneClips } = require("./video-providers/wan-worker");
 const { generateFallbackSceneClips } = require("./video-providers/free-visual-fallback");
 
 function cleanText(value, max = 240) {
@@ -161,17 +162,28 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir) {
-  if (!process.env.AGNES_API_KEY || process.env.AGNES_FREE_QUOTA_CONFIRMED !== "true") {
-    console.warn("Agnes is disabled unless its no-charge free quota is explicitly confirmed. Switching to the free animated visual fallback.");
-    return { clips: await generateFallbackSceneClips(scenes, workDir), provider: "YTAgent Free Visual Fallback" };
+  // Prefer the user's own temporary free GPU worker. It produces real moving 3D clips.
+  if (process.env.VIDEO_WORKER_URL && process.env.YT_AGENT_WORKER_TOKEN) {
+    try {
+      const clips = await generateWanSceneClips(scenes, topic, workDir);
+      return { clips, provider: "Wan 2.1 Free GPU Worker" };
+    } catch (error) {
+      console.warn("Wan GPU worker failed. Checking the explicitly enabled free-provider fallback:", error.message || error);
+    }
   }
-  try {
-    const clips = await generateSceneClips(scenes, topic, workDir);
-    return { clips, provider: "Agnes AI" };
-  } catch (error) {
-    console.warn("Agnes visual generation failed. Switching to the free animated visual fallback:", error.message || error);
-    return { clips: await generateFallbackSceneClips(scenes, workDir), provider: "YTAgent Free Visual Fallback" };
+
+  // Agnes is never called unless the user has explicitly confirmed a no-charge quota.
+  if (process.env.AGNES_API_KEY && process.env.AGNES_FREE_QUOTA_CONFIRMED === "true") {
+    try {
+      const clips = await generateSceneClips(scenes, topic, workDir);
+      return { clips, provider: "Agnes AI" };
+    } catch (error) {
+      console.warn("Agnes visual generation failed. Switching to the free animated visual fallback:", error.message || error);
+    }
   }
+
+  console.warn("No live free AI video worker is available. Using YTAgent's animated artwork fallback.");
+  return { clips: await generateFallbackSceneClips(scenes, workDir), provider: "YTAgent Free Visual Fallback" };
 }
 
 function isGroqTtsEnabled(env = process.env) {
@@ -339,7 +351,7 @@ async function generateEducationalVideo(topic, outputPath) {
       captions: "Burned into the video (scene-level)",
       narration: "Included in every scene",
       voice_provider: Array.from(voiceProviders).join(" + "),
-      visuals: visualResult.provider === "Agnes AI" ? "Ten Agnes AI-generated moving scenes assembled by the YTAgent video compiler" : "Ten animated scenes created by YTAgent free visual fallback and assembled by the video compiler",
+      visuals: visualResult.provider === "YTAgent Free Visual Fallback" ? "Ten animated artwork scenes assembled by the YTAgent video compiler" : "Ten AI-generated moving video scenes assembled by the YTAgent video compiler",
       visual_provider: visualResult.provider,
       compiler: rendered
     };

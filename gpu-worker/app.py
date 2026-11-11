@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from typing import List
 from fastapi import FastAPI, BackgroundTasks, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="YTAgent Wan GPU Worker", version="1.0.0")
@@ -84,9 +84,9 @@ def run_job(job_id, prompts, seed):
             generator = torch.Generator(device="cuda").manual_seed(seed + index)
             result = pipe(
                 prompt=prompt,
-                height=480,
-                width=832,
-                num_frames=81,
+                height=832,
+                width=480,
+                num_frames=97,
                 num_inference_steps=int(os.environ.get("WAN_STEPS", "20")),
                 guidance_scale=5.0,
                 generator=generator
@@ -149,3 +149,18 @@ def download(job_id: str, authorization: str = Header(default="")):
         raise HTTPException(status_code=404, detail="Generated scene archive has expired.")
     return StreamingResponse(io.BytesIO(file_path.read_bytes()), media_type="application/zip",
                              headers={"Content-Disposition": 'attachment; filename="ytagent-scenes.zip"'})
+
+
+@app.get("/jobs/{job_id}/scenes/{scene_index}")
+def download_scene(job_id: str, scene_index: int, authorization: str = Header(default="")):
+    authorize(authorization)
+    job = JOBS.get(job_id)
+    if not job or job.get("status") != "completed":
+        raise HTTPException(status_code=409, detail="Generated scenes are not ready.")
+    if scene_index < 0 or scene_index >= 10:
+        raise HTTPException(status_code=404, detail="Scene index is outside the supported range.")
+    file_path = ROOT / job_id / ("scene-" + str(scene_index).zfill(2) + ".mp4")
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Generated scene file has expired or is missing.")
+    return FileResponse(str(file_path), media_type="video/mp4",
+                        filename="scene-" + str(scene_index + 1).zfill(2) + ".mp4")

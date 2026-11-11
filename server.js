@@ -13,7 +13,7 @@ const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const { createRateLimiter } = require("./middleware/rate-limit");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
-const { claimNextGpuJob, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
+const { claimNextGpuJob, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -758,6 +758,12 @@ app.get("/api/worker/next", requireGpuWorker, (_req, res) => {
   res.json(job);
 });
 
+app.post("/api/worker/jobs/:jobId/progress", requireGpuWorker, (req, res) => {
+  if (!/^[a-f0-9]{32}$/i.test(req.params.jobId)) return res.status(400).json({ error: "Invalid GPU job ID." });
+  const accepted = updateGpuJobProgress(req.params.jobId, req.body?.progress, req.body?.message);
+  res.json({ accepted });
+});
+
 app.post("/api/worker/jobs/:jobId/scenes/:index", requireGpuWorker,
   express.raw({ type: ["application/octet-stream", "video/mp4"], limit: "100mb" }),
   async (req, res) => {
@@ -830,15 +836,23 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
     }
   }
 
-  const job = { state: "waiting", createdAt: Date.now(), result: null, error: null };
+  const job = { state: "waiting", progress: 0, message: "Waiting for the AI director.", createdAt: Date.now(), result: null, error: null };
   localGenerationJobs.set(id, job);
   persistGenerationJobs();
   setImmediate(async () => {
     job.state = "active";
+    job.progress = 2;
+    job.message = "AI director is planning the film.";
     persistGenerationJobs();
     try {
-      const details = await generateEducationalVideo(topic, outputPath);
+      const details = await generateEducationalVideo(topic, outputPath, (progress, message) => {
+        job.progress = Math.max(job.progress || 0, Math.min(99, Number(progress) || 0));
+        if (message) job.message = String(message).slice(0, 180);
+        persistGenerationJobs();
+      });
       job.result = { ...details, downloadUrl: "/api/generated/" + filename };
+      job.progress = 100;
+      job.message = "Your finished film is ready.";
       job.state = "completed";
       job.completedAt = Date.now();
       scheduleGeneratedFileExpiry(outputPath);
@@ -847,6 +861,7 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
     } catch (error) {
       await fs.promises.unlink(outputPath).catch(() => {});
       job.error = error.message || "Video generation failed.";
+      job.message = job.error;
       job.state = "failed";
       job.completedAt = Date.now();
       persistGenerationJobs();
@@ -870,7 +885,7 @@ app.get("/api/generate/:jobId", async (req, res) => {
         return res.json({ state, ...job.returnvalue });
       }
       if (state === "failed") return res.json({ state, error: job.failedReason || "Video generation failed." });
-      return res.json({ state, progress: typeof job.progress === "number" ? job.progress : 0 });
+      return res.json({ state, progress: typeof job.progress === "number" ? job.progress : 0, message: job.data?.message || "YTAgent is processing your film." });
     } catch (error) {
       console.error("Video generation status check failed:", error.message);
       return res.status(503).json({ error: "Could not check video generation progress." });
@@ -891,7 +906,7 @@ app.get("/api/generate/:jobId", async (req, res) => {
     return res.json({ state: job.state, ...job.result });
   }
   if (job.state === "failed") return res.json({ state: job.state, error: job.error });
-  return res.json({ state: job.state, progress: 0 });
+  return res.json({ state: job.state, progress: Number(job.progress) || 0, message: job.message || "YTAgent is processing your film." });
 });
 
 app.get("/api/generated/:filename", (req, res) => {
@@ -1068,7 +1083,10 @@ if (redisEnabled) {
   const generationWorker = new Worker(generationQueueName, async job => {
     try {
       await job.updateProgress(5);
-      const details = await generateEducationalVideo(job.data.topic, job.data.outputPath);
+      const details = await generateEducationalVideo(job.data.topic, job.data.outputPath, async (progress, message) => {
+        await job.updateProgress(Math.max(0, Math.min(99, Number(progress) || 0)));
+        await job.updateData({ ...job.data, message: String(message || "").slice(0, 180) });
+      });
       await job.updateProgress(100);
       scheduleGeneratedFileExpiry(job.data.outputPath);
       return { ...details, downloadUrl: "/api/generated/" + job.data.filename };

@@ -184,8 +184,8 @@ async function requestGeneratedScenes(scenes, topic, workDir) {
     }
   }
 
-  if (!process.env.VIDEO_WORKER_URL || !process.env.YT_AGENT_WORKER_TOKEN) {
-    throw new Error("Real 3D video generation is unavailable. Enable Rewind after confirming its token cost, or start the free Kaggle GPU worker. YTAgent stopped instead of returning abstract artwork.");
+  if (!process.env.YT_AGENT_WORKER_TOKEN) {
+    throw new Error("Real 3D video generation is unavailable. Configure the private GPU worker token and start the free Kaggle worker. YTAgent stopped instead of returning abstract artwork.");
   }
 
   try {

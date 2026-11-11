@@ -32,7 +32,8 @@ Set these in the hosting provider. Never commit keys or OAuth secrets.
 - `GEMINI_API_KEY` and/or `GROQ_API_KEY` — storyboard generation.
 - `AGNES_API_KEY` — required for generated moving video scenes.
 - `AGNES_VIDEO_MODEL` — optional. Defaults to `agnes-video-2.5-flash`.
-- `REDIS_URL` — recommended. Enables persistent BullMQ queues for video analysis and long-running video generation.
+- `REDIS_URL` — required for durable background jobs. Enables BullMQ queues stored in Redis.
+- `YT_AGENT_DATA_DIR` — required for durable generated videos and uploads. Set this to the mount path of a persistent volume, for example `/data` on Railway.
 - `ANALYSIS_CONCURRENCY` — optional analysis worker concurrency.
 
 The Flash video model has been advertised with a limited-time free promotion. Availability, queues, quotas and pricing can change. YTAgent defaults to Flash and does not silently switch to the paid model. The paid `agnes-video-2.5` model is only used when explicitly configured.
@@ -66,7 +67,7 @@ Register the exact same redirect URI in Google Cloud Console. Use a persistent s
 5. FFmpeg compiles the ten scene plates and narrator tracks into one 60-second MP4.
 6. The render is rejected if narration is missing or the duration check fails.
 
-The pipeline no longer requires a Kaggle notebook, a temporary GPU tunnel, `VIDEO_WORKER_URL` or `YT_AGENT_WORKER_TOKEN`. Generation runs as a background job so the browser does not need to hold one long HTTP request open. With `REDIS_URL`, BullMQ stores generation jobs in Redis and runs one film at a time. Without Redis, a process-local fallback is used and an app restart loses its active jobs. Generated MP4 files are still stored on the app instance. The hosted video provider has rate limits and may queue or reject requests. A full end-to-end production render has not yet been verified.
+The pipeline no longer requires a Kaggle notebook, a temporary GPU tunnel, `VIDEO_WORKER_URL` or `YT_AGENT_WORKER_TOKEN`. Generation runs as a background job so the browser does not need to hold one long HTTP request open. With `REDIS_URL`, BullMQ stores generation jobs in Redis and runs one film at a time. Without Redis, a process-local fallback is used and an app restart loses its active jobs. Set `YT_AGENT_DATA_DIR` to the actual mount path of a persistent volume so generated MP4 files and uploaded source videos survive restarts and deployments. The application health endpoint reports whether both durable components are configured. On Railway, attach a persistent volume to the YTAgent service, mount it at `/data`, and set `YT_AGENT_DATA_DIR=/data`. Also ensure `REDIS_URL` points to a persistent Redis service. These resources may have hosting charges, so check the provider pricing before enabling them. Without both settings, YTAgent still runs, but jobs or files can be lost on restart. The hosted video provider has rate limits and may queue or reject requests. A full end-to-end production render has not yet been verified.
 
 ## Other limitations
 

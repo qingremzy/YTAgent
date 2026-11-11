@@ -209,11 +209,8 @@ async function generateSceneClips(scenes, topic, workDir) {
     throw new Error("The Agnes video engine requires exactly ten storyboard scenes.");
   }
   const model = process.env.AGNES_VIDEO_MODEL || DEFAULT_MODEL;
-  if (!["agnes-video-2.5-flash", "agnes-video-2.5"].includes(model)) {
-    throw new Error("Unsupported Agnes video model. Use agnes-video-2.5-flash or agnes-video-2.5.");
-  }
-  if (model === "agnes-video-2.5") {
-    console.warn("Agnes Video 2.5 is a paid model. Each generated second may incur charges.");
+  if (model !== "agnes-video-2.5-flash") {
+    throw new Error("YTAgent's zero-cost mode blocks paid Agnes models. Use the free visual fallback instead.");
   }
 
   const outputClips = [];

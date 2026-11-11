@@ -42,13 +42,13 @@ function buildCinematicShotDirection(pairIndex = 0) {
 
 function buildPairPrompt(first, second, topic, pairIndex = 0) {
   return [
-    "Create one continuous 12-second vertical 9:16 cinematic science documentary CGI shot.",
+    "Create one continuous 12-second vertical 9:16 photorealistic LIVE-ACTION documentary video shot, not an illustration or slideshow.",
     "Topic: " + safeText(topic, 180) + ".",
     "FIRST HALF, seconds 0-6: " + safeText(first.visual_direction, 420) + ".",
     "SECOND HALF, seconds 6-12: transition naturally into this new visual action: " + safeText(second.visual_direction, 420) + ".",
     "Make the midpoint transition visually clear through continuous camera movement, not a hard cut.",
     "Camera and lens direction: " + buildCinematicShotDirection(pairIndex),
-    "Premium photorealistic 3D CGI, physically plausible materials and motion, scientifically believable anatomy and scale, dramatic volumetric lighting, atmospheric depth, rich macro detail, smooth deliberate camera movement.",
+    "VISUAL PRIORITY: show real human beings on camera whenever the topic allows. Use natural human faces, realistic skin, hands, expressions and body movement. Show people actively doing something relevant: scientists working in a real laboratory, doctors examining models, people reacting, walking, speaking, demonstrating, building or exploring. Use documentary cinematography, authentic locations, practical lighting, natural movement, realistic camera motion and human-scale perspective. Avoid plastic CGI people, game-engine renders, cartoon looks, still-image animation and repeated stock-looking compositions. For invisible science such as cells or atoms, use a brief realistic macro or scientific visualization only when necessary, then return to real people demonstrating or explaining the idea.",
     "Keep the main subject large and centered for a 9:16 frame. No text, captions, labels, logos, watermarks, borders or split screens."
   ].join(" ");
 }

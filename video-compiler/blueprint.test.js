@@ -33,9 +33,8 @@ assert.equal(blueprint.timeline, "single_continuous_film");
 assert.throws(() => compileBlueprint({ scenes: [] }), /exactly 10 scenes/);
 assert.throws(() => compileBlueprint({
   scenes: Array.from({ length: SCENE_COUNT }, () => ({
-    narration: "Words",
     visual_direction: "A scene"
   }))
-}), /title is required|caption is required/);
+}), /narration is required/);
 
 console.log("Video compiler blueprint tests passed.");

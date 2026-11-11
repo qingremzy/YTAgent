@@ -122,7 +122,7 @@ async function requestStoryboard(topic) {
         method: "POST",
         headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.4 } }),
-        signal: AbortSignal.timeout(45000)
+        signal: AbortSignal.timeout(30000)
       });
       var data = await response.json().catch(function() { return {}; });
       if (!response.ok) failures.push("Gemini HTTP " + response.status + (data.error && data.error.message ? ": " + String(data.error.message).slice(0, 180) : ""));
@@ -136,7 +136,7 @@ async function requestStoryboard(topic) {
 
   if (process.env.GROQ_API_KEY) {
     var configuredModel = process.env.GROQ_SCRIPT_MODEL || "openai/gpt-oss-20b";
-    var models = [configuredModel, "llama-3.3-70b-versatile"].filter(function(model, index, all) { return all.indexOf(model) === index; });
+    var models = [configuredModel, "openai/gpt-oss-20b"].filter(function(model, index, all) { return all.indexOf(model) === index; });
     for (var attempt = 0; attempt < 2; attempt++) {
       var groqModel = models[Math.min(attempt, models.length - 1)];
       try {
@@ -150,10 +150,10 @@ async function requestStoryboard(topic) {
               { role: "user", content: prompt + (attempt ? "\nRETRY: The previous output failed validation. Return compact, complete valid JSON with exactly 10 scenes and no extra text." : "") }
             ],
             temperature: attempt ? 0.2 : 0.4,
-            max_completion_tokens: 5000,
+            max_completion_tokens: 8000,
             response_format: { type: "json_object" }
           }),
-          signal: AbortSignal.timeout(60000)
+          signal: AbortSignal.timeout(40000)
         });
         var groqData = await groqResponse.json().catch(function() { return {}; });
         if (!groqResponse.ok) {
@@ -171,7 +171,7 @@ async function requestStoryboard(topic) {
   // OpenRouter is an optional free-model fallback. Its free-model router changes
   // over time, so keep the model configurable rather than pinning a retired model.
   if (process.env.OPENROUTER_API_KEY) {
-    var openRouterModel = process.env.OPENROUTER_SCRIPT_MODEL || "openrouter/free";
+    var openRouterModel = process.env.OPENROUTER_SCRIPT_MODEL || "openai/gpt-oss-20b:free";
     try {
       var openRouterResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -187,8 +187,9 @@ async function requestStoryboard(topic) {
             { role: "system", content: "Return exactly one valid JSON object. No markdown or commentary. Include exactly ten scenes and follow every schema and storytelling constraint." },
             { role: "user", content: prompt }
           ],
-          temperature: 0.35,
-          max_tokens: 6000,
+          temperature: 0.2,
+          max_tokens: 8000,
+          reasoning: { effort: "low" },
           response_format: { type: "json_object" }
         }),
         signal: AbortSignal.timeout(60000)
@@ -198,9 +199,18 @@ async function requestStoryboard(topic) {
         var openRouterError = openRouterData.error && openRouterData.error.message || "HTTP " + openRouterResponse.status;
         failures.push("OpenRouter (" + openRouterModel + "): " + String(openRouterError).slice(0, 240));
       } else {
-        var openRouterRaw = openRouterData.choices && openRouterData.choices[0] && openRouterData.choices[0].message ? openRouterData.choices[0].message.content : "";
-        try { return validateStoryboard(parseStoryboardJson(openRouterRaw)); }
-        catch (error) { failures.push("OpenRouter (" + openRouterModel + "): " + error.message); }
+        var openRouterMessage = openRouterData.choices && openRouterData.choices[0] && openRouterData.choices[0].message ? openRouterData.choices[0].message : {};
+        var openRouterContent = openRouterMessage.content;
+        var openRouterRaw = typeof openRouterContent === "string" ? openRouterContent : Array.isArray(openRouterContent) ? openRouterContent.map(function(part) { return typeof part === "string" ? part : part && (part.text || part.content) || ""; }).join("") : "";
+        if (!openRouterRaw.trim()) {
+          var finishReason = openRouterData.choices && openRouterData.choices[0] ? openRouterData.choices[0].finish_reason : "unknown";
+          var selectedModel = openRouterData.model || openRouterModel;
+          var providerError = openRouterData.error && openRouterData.error.message ? openRouterData.error.message : "";
+          failures.push("OpenRouter (" + selectedModel + "): empty response (finish_reason=" + finishReason + ")" + (providerError ? " " + String(providerError).slice(0, 180) : ""));
+        } else {
+          try { return validateStoryboard(parseStoryboardJson(openRouterRaw)); }
+          catch (error) { failures.push("OpenRouter (" + (openRouterData.model || openRouterModel) + "): " + error.message); }
+        }
       }
     } catch (error) {
       failures.push("OpenRouter (" + openRouterModel + "): " + (error.message || "request failed"));

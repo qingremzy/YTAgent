@@ -113,6 +113,7 @@ function updateGenerationProgress(progress, message) {
   generationProgressFill.style.width = value + "%";
   generationProgressLabel.textContent = Math.round(value) + "%";
   if (message) generatorStatus.textContent = message;
+  window.dispatchEvent(new CustomEvent("ytagent:generation", { detail: { state: "active", progress: value, message: message || "Production is running." } }));
 }
 const generationStorageKey = "ytagent-generation-job";
 function showGeneratedVideo(data, topic) {
@@ -125,6 +126,7 @@ function showGeneratedVideo(data, topic) {
   form.elements.hashtags.value = (data.hashtags || []).join(" ");
   form.elements.keywords.value = (data.keywords || []).join(", ");
   generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated MP4 is ready. Voice: " + (data.voice_provider || "AI voice") + ". Visuals: " + (data.visual_provider || "YTAgent video engine") + ". Narration and captions are included. Download the actual video file below, then select it in the publishing section.";
+  window.dispatchEvent(new CustomEvent("ytagent:generation", { detail: { state: "completed", progress: 100, message: "Your finished film is ready." } }));;
 }
 async function fetchGenerationStatus(jobId, deadline) {
   const url = "/api/generate/" + encodeURIComponent(jobId);
@@ -208,7 +210,10 @@ generatorForm.addEventListener("submit", async event => {
     const data = await waitForGeneration(queued.jobId);
     localStorage.removeItem(generationStorageKey);
     showGeneratedVideo(data, topic);
-  } catch (error) { generatorStatus.textContent = error.message; }
+  } catch (error) {
+    generatorStatus.textContent = error.message;
+    window.dispatchEvent(new CustomEvent("ytagent:generation", { detail: { state: "failed", message: error.message } }));
+  }
   finally {
     setGenerationLoading(false);
     generateButton.disabled = false;

@@ -6,7 +6,7 @@ This worker runs the open Wan 2.1 T2V 1.3B Diffusers model on a temporary GPU no
 
 - This is genuine text-to-video generation, not a photo slideshow.
 - The 1.3B model creates portrait 480p clips of about six seconds. YTAgent adds captions and narration, then assembles ten clips into one vertical 60-second Short.
-- Ten 5-second scenes can take a long time on a free GPU. Free notebook sessions can disconnect or hit usage limits.
+- Ten six-second scenes can take a long time on a free GPU. Free notebook sessions can disconnect or hit usage limits.
 - Keep the Kaggle notebook running while YTAgent generates a video.
 - No paid video API is used. GPU availability is not guaranteed.
 - This is a first real-video engine, not a promise of Zack D Films-level quality. The 1.3B model is a constrained free-compute starting point.

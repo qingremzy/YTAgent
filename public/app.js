@@ -110,15 +110,45 @@ function showGeneratedVideo(data, topic) {
   form.elements.keywords.value = (data.keywords || []).join(", ");
   generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated MP4 is ready. Voice: " + (data.voice_provider || "AI voice") + ". Visuals: " + (data.visual_provider || "YTAgent video engine") + ". Narration and captions are included. Download the actual video file below, then select it in the publishing section.";
 }
-async function waitForGeneration(jobId) {
-  const deadline = Date.now() + 90 * 60 * 1000;
-  while (Date.now() < deadline) {
-    const response = await fetch("/api/generate/" + encodeURIComponent(jobId));
-    const data = await readJsonResponse(response);
-    if (!response.ok) {
-      if (response.status === 404) localStorage.removeItem(generationStorageKey);
-      throw new Error(data.error || "Could not check video generation progress.");
+async function fetchGenerationStatus(jobId) {
+  const url = "/api/generate/" + encodeURIComponent(jobId);
+  let lastError;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    if (navigator.onLine === false) {
+      generatorStatus.textContent = "Your film may still be generating. Waiting for your internet connection to return…";
+      await new Promise(resolve => window.addEventListener("online", resolve, { once: true }));
     }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(url, { method: "GET", cache: "no-store", signal: controller.signal });
+      clearTimeout(timeout);
+      const data = await readJsonResponse(response);
+      if (response.status === 404) {
+        localStorage.removeItem(generationStorageKey);
+        throw new Error(data.error || "This generation task is no longer available.");
+      }
+      if (response.status >= 500 || response.status === 429) {
+        lastError = new Error(data.error || "The server is temporarily busy.");
+      } else {
+        return { response, data };
+      }
+    } catch (error) {
+      clearTimeout(timeout);
+      if (error.message && !/fetch|network|abort|temporar|server returned an invalid response/i.test(error.message)) throw error;
+      lastError = error;
+    }
+    const delay = Math.min(30000, 1500 * Math.pow(2, attempt));
+    generatorStatus.textContent = "Connection interrupted. Your film may still be rendering. Reconnecting automatically in " + Math.ceil(delay / 1000) + " seconds…";
+    await wait(delay);
+  }
+  throw lastError || new Error("Could not reconnect to YTAgent yet.");
+}
+async function waitForGeneration(jobId) {
+  const deadline = Date.now() + 6 * 60 * 60 * 1000;
+  while (Date.now() < deadline) {
+    const { response, data } = await fetchGenerationStatus(jobId);
+    if (!response.ok) throw new Error(data.error || "Could not check video generation progress (HTTP " + response.status + ").");
     if (data.state === "completed") return data;
     if (data.state === "failed") {
       localStorage.removeItem(generationStorageKey);
@@ -127,10 +157,10 @@ async function waitForGeneration(jobId) {
     const state = data.state || "waiting";
     generatorStatus.textContent = state === "active"
       ? "YTAgent is creating your film. You can leave this page and return later."
-      : "Your film is safely queued. Waiting for the video engine…";
+      : "Your film is queued. Waiting for the video engine…";
     await wait(8000);
   }
-  throw new Error("This video is taking longer than expected. Reload this page to resume checking its progress.");
+  throw new Error("This film is taking longer than expected. Your task ID is saved. Reload this page to resume checking.");
 }
 generatorForm.addEventListener("submit", async event => {
   event.preventDefault();

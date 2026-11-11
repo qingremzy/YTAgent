@@ -105,7 +105,7 @@ function scheduleGeneratedFileExpiry(filePath, delayMs = GENERATED_FILE_TTL_MS) 
 function restoreGeneratedFileExpiries() {
   try {
     for (const filename of fs.readdirSync(uploadDir)) {
-      if (!/^generated-[a-f0-9]{24}\\.mp4$/.test(filename)) continue;
+      if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename)) continue;
       const filePath = path.join(uploadDir, filename);
       const stat = fs.statSync(filePath);
       if (!stat.isFile()) continue;
@@ -341,7 +341,7 @@ async function analyzeWithGemini(file) {
   "category_id": "best-fit YouTube category ID as a string, or empty if uncertain"
 }
 Do not repeat the same phrase excessively. Do not put hashtags in tags. Keywords must be natural search queries, not random broad words. Keep the title truthful, specific, clickable, and under 100 characters. `;
-    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     const generationUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent";
     const generationBody = JSON.stringify({
       contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType || mimeType, file_uri: geminiFile.uri } }, { text: prompt }] }],

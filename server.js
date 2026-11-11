@@ -261,8 +261,11 @@ function requireAuth(req, res, next) {
 
 app.get("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
   try {
-    const project = await readStudioProject(studioProjectRoot, req.params.projectId);
-    if (!project) return res.status(404).json({ error: "This editable project has expired or could not be found." });
+    let project = await readStudioProject(studioProjectRoot, req.params.projectId);
+    if (!project && objectStorage.configured) {
+      project = await objectStorage.getJson("studio-projects/" + req.params.projectId + "/project.json");
+    }
+    if (!project) return res.status(404).json({ error: "This editable project could not be found." });
     res.set("Cache-Control", "private, no-store");
     res.json(project);
   } catch (error) {
@@ -272,10 +275,33 @@ app.get("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
 
 app.put("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
   try {
-    const project = await saveStudioProject(studioProjectRoot, req.params.projectId, req.body?.source);
-    scheduleStudioProjectExpiry(project.id);
+    let project = await readStudioProject(studioProjectRoot, req.params.projectId);
+    if (project) {
+      project = await saveStudioProject(studioProjectRoot, req.params.projectId, req.body?.source);
+      scheduleStudioProjectExpiry(project.id);
+    } else if (objectStorage.configured) {
+      const id = String(req.params.projectId || "").toLowerCase();
+      project = await objectStorage.getJson("studio-projects/" + id + "/project.json");
+      if (!project) return res.status(404).json({ saved: false, error: "This editable project could not be found." });
+      project.source = validateStudioSource(req.body?.source, id);
+      project.updatedAt = new Date().toISOString();
+    } else {
+      return res.status(404).json({ saved: false, error: "This editable project has expired or could not be found." });
+    }
+
+    let durable = false;
+    let storageWarning = null;
+    if (objectStorage.configured) {
+      try {
+        await objectStorage.putJson("studio-projects/" + project.id + "/project.json", project);
+        durable = true;
+      } catch (error) {
+        storageWarning = "The edit was saved to temporary storage, but the durable copy could not be updated.";
+        console.warn("Could not update the studio project in R2:", error.message);
+      }
+    }
     res.set("Cache-Control", "private, no-store");
-    res.json({ saved: true, id: project.id, updatedAt: project.updatedAt });
+    res.json({ saved: true, durable, storageWarning, id: project.id, updatedAt: project.updatedAt });
   } catch (error) {
     const message = String(error.message || error);
     const status = /not found|expired/i.test(message) ? 404 : 400;
@@ -286,10 +312,22 @@ app.put("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
 app.get("/api/studio/projects/:projectId/assets/:filename", requireAuth, async (req, res) => {
   try {
     const assetPath = resolveStudioAsset(studioProjectRoot, req.params.projectId, req.params.filename);
-    const stat = await fs.promises.stat(assetPath);
-    if (!stat.isFile()) return res.status(404).send("Studio asset not found.");
+    try {
+      const stat = await fs.promises.stat(assetPath);
+      if (stat.isFile()) {
+        res.set("Cache-Control", "private, max-age=300");
+        return res.sendFile(assetPath);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    if (!objectStorage.configured) return res.status(404).send("Studio asset not found.");
+    const stored = await objectStorage.getObject("studio-projects/" + req.params.projectId + "/" + req.params.filename);
+    if (!stored?.Body) return res.status(404).send("Studio asset not found.");
     res.set("Cache-Control", "private, max-age=300");
-    res.sendFile(assetPath);
+    if (stored.ContentType) res.set("Content-Type", stored.ContentType);
+    if (stored.ContentLength) res.set("Content-Length", String(stored.ContentLength));
+    stored.Body.pipe(res);
   } catch (error) {
     if (error.code === "ENOENT") return res.status(404).send("Studio asset not found.");
     res.status(400).send(error.message || "Invalid studio asset.");

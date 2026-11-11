@@ -96,9 +96,9 @@ function validateStoryboard(storyboard) {
     if (seenNarration.has(normalized)) throw new Error("Scene " + (i + 1) + " repeats narration from another scene. Every scene needs a distinct spoken line.");
     seenNarration.add(normalized);
     var visualDirection = String(scene.visual_direction).trim();
-    var visualWords = visualDirection.split(/\\s+/).filter(Boolean).length;
+    var visualWords = visualDirection.split(/\s+/).filter(Boolean).length;
     if (visualWords < 12 || visualWords > 45) throw new Error("Scene " + (i + 1) + " visual_direction must contain 12 to 45 specific words describing a physical action and setting.");
-    var normalizedVisual = visualDirection.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\\s+/g, " ");
+    var normalizedVisual = visualDirection.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ");
     if (seenVisualDirections.has(normalizedVisual)) throw new Error("Scene " + (i + 1) + " repeats a visual direction. Every scene needs a distinct action or composition.");
     seenVisualDirections.add(normalizedVisual);
   }

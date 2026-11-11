@@ -99,12 +99,13 @@ function validateStoryboard(storyboard) {
 }
 
 async function requestStoryboard(topic) {
-  var prompt = "Create a factual, high-retention 60-second vertical YouTube science explainer about: \"" + cleanText(topic, 180) + "\".\n" +
-    "Return ONE valid JSON object only. No markdown, commentary or extra text. Required keys: title, description, tags, hashtags, keywords, scenes. " +
-    "Exactly 10 scenes. Every scene must contain title, narration, caption and visual_direction. Each narration should be 9 to 14 spoken words. " +
-    "Each visual_direction must describe one concrete, animatable action. Keep the subject large and centered for vertical 9:16. " +
-    "Use photorealistic live-action documentary footage with real-looking human subjects, expressive faces, natural skin texture, authentic locations and believable human movement. Show people actively demonstrating the subject whenever relevant. Use cinematic camera movement, practical lighting and varied shot sizes. Avoid cartoons, static illustrations, slideshows, plastic CGI humans and repetitive visuals. Use scientific CGI only for phenomena that cannot be filmed, and keep human presenters or demonstrations as the visual anchor. " +
-    "Be scientifically accurate. Build a strong hook, clear cause and effect, escalating visual interest and memorable ending. Do not imitate any creator's characters, scenes or branding.";
+  var prompt = "Create an original, factual, high-retention 60-second vertical YouTube explainer about: \"" + cleanText(topic, 180) + "\".\n" +
+    "Return ONE valid JSON object only. Required keys: title, description, tags, hashtags, keywords, scenes. Exactly 10 scenes. Every scene must contain title, narration, caption and visual_direction. " +
+    "NARRATION IS THE PRIORITY: write a connected spoken explanation, not ten disconnected facts or poetic fragments. Each scene line must contain 12 to 16 natural spoken words. Across the ten lines, explain what is happening, why it happens, how it works, what changes next, and the surprising result. Use plain conversational English, specific nouns, active verbs, short transitions and useful facts. No filler, vague hype, repeated hooks, rhetorical padding or unexplained jargon. The narrator should sound like an engaging documentary presenter teaching one curious viewer. " +
+    "STORY STRUCTURE: scene 1 opens with a surprising consequence or question; scenes 2-3 establish the subject; scenes 4-7 explain the mechanism step by step; scenes 8-9 reveal the consequence or twist; scene 10 delivers a memorable, accurate takeaway. Each scene must logically continue the previous one. " +
+    "VISUAL DIRECTIONS: describe one specific visible action with a clear subject, physical object, setting and camera framing. Show the exact thing being explained at that moment. Prefer expressive 3D animated human characters, practical props, recognizable environments, close-ups, demonstrations and cause-and-effect actions. Keep recurring characters and key objects visually consistent across scenes. " +
+    "Do not use abstract swirling lines, orbiting dots, atom-like patterns, floating particles, generic glowing shapes, decorative science backgrounds, random stock imagery, text cards or static illustrations unless the topic specifically requires that exact phenomenon. No repeated compositions. Keep the main action large and readable in vertical 9:16. " +
+    "Be scientifically accurate. Make every visual directly illustrate its narration line. Do not imitate any creator's characters, scripts, scenes or branding.";
   var failures = [];
   if (process.env.GEMINI_API_KEY) {
     try {
@@ -162,28 +163,27 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir) {
-  // Prefer the user's own temporary free GPU worker. It produces real moving 3D clips.
-  if (process.env.VIDEO_WORKER_URL && process.env.YT_AGENT_WORKER_TOKEN) {
-    try {
-      const clips = await generateWanSceneClips(scenes, topic, workDir);
-      return { clips, provider: "Wan 2.1 Free GPU Worker" };
-    } catch (error) {
-      console.warn("Wan GPU worker failed. Checking the explicitly enabled free-provider fallback:", error.message || error);
-    }
-  }
-
-  // Agnes is never called unless the user has explicitly confirmed a no-charge quota.
+  // Never silently substitute abstract artwork for the requested 3D film.
+  // Agnes is attempted only when the user has explicitly confirmed a no-charge quota.
   if (process.env.AGNES_API_KEY && process.env.AGNES_FREE_QUOTA_CONFIRMED === "true") {
     try {
       const clips = await generateSceneClips(scenes, topic, workDir);
       return { clips, provider: "Agnes AI" };
     } catch (error) {
-      console.warn("Agnes visual generation failed. Switching to the free animated visual fallback:", error.message || error);
+      console.warn("Agnes visual generation failed:", error.message || error);
     }
   }
 
-  console.warn("No live free AI video worker is available. Using YTAgent's animated artwork fallback.");
-  return { clips: await generateFallbackSceneClips(scenes, workDir), provider: "YTAgent Free Visual Fallback" };
+  if (!process.env.VIDEO_WORKER_URL || !process.env.YT_AGENT_WORKER_TOKEN) {
+    throw new Error("Real 3D video generation is unavailable. Start the free Kaggle GPU worker and connect its current HTTPS tunnel. YTAgent stopped instead of returning abstract artwork.");
+  }
+
+  try {
+    const clips = await generateWanSceneClips(scenes, topic, workDir);
+    return { clips, provider: "Wan 2.1 Free GPU Worker" };
+  } catch (error) {
+    throw new Error("The real 3D video worker is unavailable: " + (error.message || error) + ". YTAgent stopped instead of returning abstract artwork.");
+  }
 }
 
 function isGroqTtsEnabled(env = process.env) {

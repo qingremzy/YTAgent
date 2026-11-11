@@ -189,8 +189,9 @@ async function requestGeneratedScenes(scenes, topic, workDir) {
   }
 
   try {
-    const clips = await generateWanSceneClips(scenes, topic, workDir);
-    return { clips, provider: "Wan 2.1 Free GPU Worker" };
+    const generated = await generateWanSceneClips(scenes, topic, workDir);
+    if (Array.isArray(generated)) return { clips: generated, narrationClips: null, provider: "Wan 2.1 Free GPU Worker" };
+    return { clips: generated.clips, narrationClips: generated.narrations, provider: "Wan 2.1 + Kokoro 82M Free GPU Worker" };
   } catch (error) {
     throw new Error("The real 3D video worker is unavailable: " + (error.message || error) + ". YTAgent stopped instead of returning abstract artwork.");
   }
@@ -329,7 +330,9 @@ async function generateEducationalVideo(topic, outputPath) {
     const sceneAssets = [];
     for (let i = 0; i < storyboard.scenes.length; i++) {
       const audioPath = path.join(workDir, "narration-" + String(i + 1).padStart(2, "0") + ".wav");
-      const speech = await generateNarration(storyboard.scenes[i].narration, audioPath, voiceState);
+      const speech = visualResult.narrationClips && visualResult.narrationClips[i]
+        ? { provider: "Kokoro 82M (free local worker)", path: visualResult.narrationClips[i] }
+        : await generateNarration(storyboard.scenes[i].narration, audioPath, voiceState);
       voiceProviders.add(speech.provider);
       // Measure the actual generated speech before rendering so six-second scenes never silently chop words.
       const speechDuration = await getMediaDuration(speech.path);

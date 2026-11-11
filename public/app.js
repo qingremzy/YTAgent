@@ -108,7 +108,7 @@ function showGeneratedVideo(data, topic) {
   form.elements.tags.value = (data.tags || []).join(", ");
   form.elements.hashtags.value = (data.hashtags || []).join(" ");
   form.elements.keywords.value = (data.keywords || []).join(", ");
-  generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated video is ready. Voice: " + (data.voice_provider || "AI voice") + ". Ten AI-generated moving 3D scenes, narration and captions are included. Download it, then select it in the publishing section below.";
+  generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated MP4 is ready. Voice: " + (data.voice_provider || "AI voice") + ". Visuals: " + (data.visual_provider || "YTAgent video engine") + ". Narration and captions are included. Download the actual video file below, then select it in the publishing section.";
 }
 async function waitForGeneration(jobId) {
   const deadline = Date.now() + 90 * 60 * 1000;
@@ -138,7 +138,7 @@ generatorForm.addEventListener("submit", async event => {
   if (!topic) return;
   generateButton.disabled = true;
   generateButton.textContent = "Generating video…";
-  generatorStatus.textContent = "AI director is planning ten scenes. The hosted video engine is creating five cinematic clips. YTAgent will assemble the complete film and add its required narrator. This may take several minutes. You can leave and return later."
+  generatorStatus.textContent = "AI director is planning ten scenes. YTAgent is creating the visuals, generating narration, and assembling one complete MP4. This may take several minutes. You can leave and return later."
   generatedDownload.classList.add("hidden");
   try {
     const response = await fetch("/api/generate", {

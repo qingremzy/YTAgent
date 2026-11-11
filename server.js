@@ -1010,15 +1010,6 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
     return res.status(409).json({ error: "YTAgent is already generating a film. Wait for it to finish before starting another." });
   }
 
-  // GPU video generation must not depend on YouTube OAuth. Publishing is a separate step.
-  if (process.env.KAGGLE_API_TOKEN) {
-    kaggleWorkerSessionManager.ensure().then(result => {
-      if (result.started) console.log("YTAgent requested a free Kaggle GPU session:", result.notebookRef, result.machineShape);
-    }).catch(error => {
-      console.warn("YTAgent could not auto-start the Kaggle GPU worker:", error.message);
-    });
-  }
-
   const id = require("crypto").randomBytes(12).toString("hex");
   const filename = "generated-" + id + ".mp4";
   const outputPath = path.join(uploadDir, filename);
@@ -1030,6 +1021,11 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
         removeOnComplete: { age: 86400, count: 200 },
         removeOnFail: { age: 86400, count: 200 }
       });
+      if (process.env.KAGGLE_API_TOKEN) {
+        kaggleWorkerSessionManager.ensure().then(result => {
+          if (result.started) console.log("YTAgent launched the Kaggle batch GPU worker:", result.notebookRef, result.machineShape);
+        }).catch(error => console.warn("Kaggle GPU worker auto-start failed:", error.message));
+      }
       return res.status(202).json({ success: true, queued: true, jobId: String(job.id) });
     } catch (error) {
       console.error("Could not queue AI video generation:", error.message);
@@ -1050,7 +1046,19 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
         job.progress = Math.max(job.progress || 0, Math.min(99, Number(progress) || 0));
         if (message) job.message = String(message).slice(0, 180);
         persistGenerationJobs();
-      }, { studioProjectRoot });
+      }, {
+        studioProjectRoot,
+        onGpuJobQueued: async ({ jobId: gpuJobId } = {}) => {
+          if (!process.env.KAGGLE_API_TOKEN) {
+            throw new Error("KAGGLE_API_TOKEN is missing. Configure Kaggle access before starting the free GPU worker.");
+          }
+          const result = await kaggleWorkerSessionManager.ensure();
+          if (result.started) {
+            console.log("YTAgent launched the Kaggle GPU batch for queued job:", gpuJobId, result.notebookRef);
+          }
+          return result;
+        }
+      });
       const durableDetails = await persistGenerationArtifacts(outputPath, details);
       job.result = { ...durableDetails, downloadUrl: "/api/generated/" + filename };
       job.progress = 100;
@@ -1272,18 +1280,6 @@ app.post("/api/kaggle/notebook/start", requireAuth, async (_req, res) => {
   }
 });
 
-/* Internal worker control: lets a trusted GPU worker request its own Kaggle
-   notebook session without requiring YouTube OAuth. */
-app.post("/api/worker/session/start", requireGpuWorker, async (_req, res) => {
-  try {
-    const result = await kaggleWorkerSessionManager.ensure();
-    res.json(result);
-  } catch (error) {
-    const message = String(error.message || error);
-    console.error("GPU worker session start failed:", message);
-    res.status(502).json({ started: false, error: message.slice(0, 500) });
-  }
-});
 
 app.post("/api/kaggle/notebook/cancel", requireAuth, async (req, res) => {
   const kernelSessionId = Number(req.body?.kernelSessionId);

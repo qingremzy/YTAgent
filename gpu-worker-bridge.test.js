@@ -71,7 +71,7 @@ test("detects a worker heartbeat and fails jobs that are never claimed", async (
       workDir,
       claimTimeoutMs: 15
     });
-    await assert.rejects(queued, /did not connect within five minutes/);
+    await assert.rejects(queued, /did not connect within ten minutes/);
   } finally {
     await fs.promises.rm(workDir, { recursive: true, force: true });
   }

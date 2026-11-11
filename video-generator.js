@@ -167,6 +167,46 @@ async function requestStoryboard(topic) {
       } catch (error) { failures.push("Groq (" + groqModel + "): " + (error.message || "request failed")); }
     }
   } else failures.push("Groq API key is missing.");
+
+  // OpenRouter is an optional free-model fallback. Its free-model router changes
+  // over time, so keep the model configurable rather than pinning a retired model.
+  if (process.env.OPENROUTER_API_KEY) {
+    var openRouterModel = process.env.OPENROUTER_SCRIPT_MODEL || "openrouter/free";
+    try {
+      var openRouterResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + process.env.OPENROUTER_API_KEY,
+          "Content-Type": "application/json",
+          "HTTP-Referer": process.env.APP_URL || "https://ytagent-production-1038.up.railway.app",
+          "X-Title": "YTAgent"
+        },
+        body: JSON.stringify({
+          model: openRouterModel,
+          messages: [
+            { role: "system", content: "Return exactly one valid JSON object. No markdown or commentary. Include exactly ten scenes and follow every schema and storytelling constraint." },
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.35,
+          max_tokens: 6000,
+          response_format: { type: "json_object" }
+        }),
+        signal: AbortSignal.timeout(60000)
+      });
+      var openRouterData = await openRouterResponse.json().catch(function() { return {}; });
+      if (!openRouterResponse.ok) {
+        var openRouterError = openRouterData.error && openRouterData.error.message || "HTTP " + openRouterResponse.status;
+        failures.push("OpenRouter (" + openRouterModel + "): " + String(openRouterError).slice(0, 240));
+      } else {
+        var openRouterRaw = openRouterData.choices && openRouterData.choices[0] && openRouterData.choices[0].message ? openRouterData.choices[0].message.content : "";
+        try { return validateStoryboard(parseStoryboardJson(openRouterRaw)); }
+        catch (error) { failures.push("OpenRouter (" + openRouterModel + "): " + error.message); }
+      }
+    } catch (error) {
+      failures.push("OpenRouter (" + openRouterModel + "): " + (error.message || "request failed"));
+    }
+  } else failures.push("OpenRouter API key is not configured.");
+
   throw new Error("Storyboard generation failed. " + failures.join(" | "));
 }
 

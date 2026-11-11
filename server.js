@@ -105,6 +105,7 @@ function restoreGenerationJobs() {
 const GENERATED_FILE_TTL_MS = 6 * 60 * 60 * 1000;
 fs.mkdirSync(uploadDir, { recursive: true });
 const objectStorage = createObjectStorage();
+const r2StudioProjectsUploaded = new Set();
 
 if (redisEnabled) {
   redisConnection = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
@@ -169,6 +170,8 @@ async function persistGenerationArtifacts(outputPath, details) {
       const projectDir = path.join(studioProjectRoot, details.studioProjectId);
       if (fs.existsSync(projectDir)) {
         await objectStorage.uploadDirectory(projectDir, "studio-projects/" + details.studioProjectId);
+        await objectStorage.putBuffer("studio-projects/" + details.studioProjectId + "/_complete", Buffer.from("ok"), "text/plain");
+        r2StudioProjectsUploaded.add(details.studioProjectId);
         projectStored = true;
       }
     }
@@ -293,10 +296,26 @@ app.put("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
     let storageWarning = null;
     if (objectStorage.configured) {
       try {
-        const projectDir = path.join(studioProjectRoot, project.id);
-        if (fs.existsSync(projectDir)) await objectStorage.uploadDirectory(projectDir, "studio-projects/" + project.id);
-        else await objectStorage.putJson("studio-projects/" + project.id + "/project.json", project);
-        durable = true;
+        const id = project.id;
+        const prefix = "studio-projects/" + id;
+        const markerKey = prefix + "/_complete";
+        if (!r2StudioProjectsUploaded.has(id)) {
+          const alreadyUploaded = await objectStorage.exists(markerKey);
+          if (alreadyUploaded) {
+            r2StudioProjectsUploaded.add(id);
+          } else {
+            const projectDir = path.join(studioProjectRoot, id);
+            if (fs.existsSync(projectDir)) {
+              await objectStorage.uploadDirectory(projectDir, prefix);
+              await objectStorage.putBuffer(markerKey, Buffer.from("ok"), "text/plain");
+              r2StudioProjectsUploaded.add(id);
+            } else {
+              storageWarning = "The project manifest was saved, but its original scene assets are not available in durable storage.";
+            }
+          }
+        }
+        await objectStorage.putJson(prefix + "/project.json", project);
+        durable = r2StudioProjectsUploaded.has(id);
       } catch (error) {
         storageWarning = "The edit was saved to temporary storage, but the durable copy could not be updated.";
         console.warn("Could not update the studio project in R2:", error.message);

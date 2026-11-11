@@ -10,7 +10,7 @@ test("builds a vertical animated-fallback artwork for each scene", () => {
   assert.match(svg, /width="720" height="1280"/);
   assert.match(svg, /Inside the human brain/);
   assert.match(svg, /Neurons send electrical signals/);
-  assert.match(svg, /VISUAL BACKUP • 3\/10/);
+  assert.match(svg, /YT AGENT • SCENE 3\/10/);
 });
 
 test("escapes unsafe text in fallback artwork", () => {

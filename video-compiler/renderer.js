@@ -105,13 +105,13 @@ async function renderFilm(input) {
       voiceLabels.push("[" + a + "]");
       if (sfxIndex >= 0) {
         const s = "s" + i;
-        filters.push("[" + sfxIndex + ":a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.20,apad,atrim=duration=6,asetpts=PTS-STARTPTS[" + s + "]");
+        filters.push("[" + sfxIndex + ":a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.20,adelay=" + (i * 6000) + "|" + (i * 6000) + ",apad,atrim=duration=60,asetpts=PTS-STARTPTS[" + s + "]");
         sfxLabels.push("[" + s + "]");
       }
     }
     filters.push(videoLabels.join("") + "concat=n=10:v=1:a=0[vout]");
     filters.push(voiceLabels.join("") + "concat=n=10:v=0:a=1[voice]");
-    if (sfxLabels.length) filters.push(sfxLabels.join("") + "amix=inputs=" + sfxLabels.length + ":duration=longest:normalize=0[sfx]");
+    if (sfxLabels.length) filters.push(sfxLabels.join("") + "amix=inputs=" + sfxLabels.length + ":duration=longest:normalize=0,atrim=duration=60[sfx]");
     if (musicPath) {
       const musicIndex = inputIndex;
       args.push("-stream_loop", "-1", "-i", musicPath);

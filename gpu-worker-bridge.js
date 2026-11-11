@@ -6,7 +6,7 @@ const jobs = new Map();
 const pending = [];
 const JOB_TIMEOUT_MS = 90 * 60 * 1000;
 const CLAIM_TIMEOUT_MS = 20 * 60 * 1000;
-const WORKER_HEARTBEAT_TIMEOUT_MS = 120 * 1000;
+const WORKER_HEARTBEAT_TIMEOUT_MS = 8 * 60 * 1000;
 const WORKER_HEARTBEAT_CHECK_MS = 15 * 1000;
 let lastWorkerPollAt = 0;
 

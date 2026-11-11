@@ -73,6 +73,13 @@ async function makeOverlay(scene, index, total, output) {
     '<text y="780" fill="#fff" font-family="Arial" font-size="24" font-weight="700" stroke="#090a0c" stroke-width="4" paint-order="stroke">' + captionText + '</text></svg>';
   await sharp(Buffer.from(svg)).png().toFile(output);
 }
+function normalizeAudioTempo(value) {
+  const tempo = value === undefined || value === null ? 1 : Number(value);
+  if (!Number.isFinite(tempo) || tempo < 1 || tempo > 1.35) {
+    throw new Error("Narration speed adjustment must be between 1.00x and 1.35x. Shorten the spoken line instead of cutting it off.");
+  }
+  return tempo.toFixed(3);
+}
 function concatEscape(file) {
   return String(file).replace(/'/g, "'\\''");
 }
@@ -97,7 +104,7 @@ async function renderScene(asset, scene, index, temp) {
     "[0:v]scale=" + WIDTH + ":" + HEIGHT + ":force_original_aspect_ratio=increase,crop=" + WIDTH + ":" + HEIGHT + ",fps=" + FPS + ",setsar=1,trim=duration=" + SCENE_SECONDS + ",setpts=PTS-STARTPTS[base]",
     "[2:v]scale=" + WIDTH + ":" + HEIGHT + "[ov]",
     "[base][ov]overlay=0:0:shortest=1,format=yuv420p[vout]",
-    "[1:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=duration=" + SCENE_SECONDS + ",asetpts=PTS-STARTPTS[voice]"
+    "[1:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atempo=" + normalizeAudioTempo(asset.audioTempo) + ",apad,atrim=duration=" + SCENE_SECONDS + ",asetpts=PTS-STARTPTS[voice]"
   ];
   if (sfxIndex >= 0) {
     filters.push("[" + sfxIndex + ":a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.20,apad,atrim=duration=" + SCENE_SECONDS + ",asetpts=PTS-STARTPTS[sfx]");
@@ -178,4 +185,4 @@ function renderFilm(input) {
   renderQueue = task.catch(() => {});
   return task;
 }
-module.exports = { renderFilm };
+module.exports = { renderFilm, normalizeAudioTempo };

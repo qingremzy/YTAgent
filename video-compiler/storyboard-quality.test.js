@@ -9,7 +9,7 @@ function makeStoryboard() {
       title: "Scene " + (index + 1),
       narration: "This is a distinct spoken line with enough words for timing " + (index + 1) + ".",
       caption: "A short caption",
-      visual_direction: "A clear visual action unfolds in a cinematic environment."
+      visual_direction: "A distinct 3D character demonstrates a physical action using a practical object inside a recognizable cinematic location, with a unique camera composition for scene " + (index + 1) + "."
     }))
   };
 }
@@ -39,4 +39,16 @@ test("rejects repeated narration across scenes", () => {
   const storyboard = makeStoryboard();
   storyboard.scenes[1].narration = storyboard.scenes[0].narration;
   assert.throws(() => validateStoryboard(storyboard), /repeats narration/);
+});
+
+test("rejects duplicate visual directions across different scenes", () => {
+  const storyboard = makeStoryboard();
+  storyboard.scenes[1].visual_direction = storyboard.scenes[0].visual_direction;
+  assert.throws(() => validateStoryboard(storyboard), /repeats a visual direction/);
+});
+
+test("rejects vague visual directions that do not describe a physical action", () => {
+  const storyboard = makeStoryboard();
+  storyboard.scenes[0].visual_direction = "A glowing shape moves around.";
+  assert.throws(() => validateStoryboard(storyboard), /12 to 45 specific words/);
 });

@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { enqueueGpuJob, claimNextGpuJob, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
+const { enqueueGpuJob, claimNextGpuJob, noteGpuWorkerPoll, getGpuWorkerStatus, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
 
 test("outbound GPU worker returns ten MP4 scenes and ten Kokoro narration tracks", async () => {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-bridge-test-"));
@@ -57,4 +57,22 @@ test("outbound GPU worker rejects non-MP4 scene uploads", async () => {
   failGpuJob(claimed.job_id, "Test cleanup");
   await assert.rejects(completed, /Test cleanup/);
   await fs.promises.rm(workDir, { recursive: true, force: true });
+});
+
+test("detects a worker heartbeat and fails jobs that are never claimed", async () => {
+  const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-bridge-offline-"));
+  try {
+    noteGpuWorkerPoll();
+    assert.equal(getGpuWorkerStatus().online, true);
+    const queued = enqueueGpuJob({
+      prompts: Array.from({ length: 10 }, () => "A detailed 3D scene with a distinct physical action"),
+      narrations: Array.from({ length: 10 }, () => "A documentary narration line with enough words"),
+      seed: 2,
+      workDir,
+      claimTimeoutMs: 15
+    });
+    await assert.rejects(queued, /did not connect within two minutes/);
+  } finally {
+    await fs.promises.rm(workDir, { recursive: true, force: true });
+  }
 });

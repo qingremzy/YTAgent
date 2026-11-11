@@ -1352,5 +1352,9 @@ if (redisEnabled) {
 restoreGenerationJobs();
 restoreGeneratedFileExpiries();
 restoreStudioProjectExpiries();
-console.log("Generated videos use temporary local storage, are deleted after successful download, and expire after six hours.");
+if (objectStorage.configured) {
+  console.log("Cloudflare R2 artifact storage is enabled. Local working copies expire after six hours.");
+} else {
+  console.warn("R2 is not configured. Generated videos and studio projects use temporary local storage and expire after six hours.");
+}
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

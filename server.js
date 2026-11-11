@@ -895,22 +895,44 @@ function kaggleToolData(result) {
 }
 
 app.get("/api/kaggle/notebook", requireAuth, async (_req, res) => {
-  try {
-    const identity = kaggleNotebookIdentity();
-    const [info, status] = await Promise.all([
-      callKaggleTool("get_notebook_info", { userName: identity.userName, kernelSlug: identity.kernelSlug }),
-      callKaggleTool("get_notebook_session_status", { userName: identity.userName, kernelSlug: identity.kernelSlug })
-    ]);
-    res.json({ connected: true, notebookRef: identity.slug, notebook: kaggleToolData(info), session: kaggleToolData(status) });
-  } catch (error) {
-    console.error("Kaggle notebook inspection failed:", error.message);
-    res.status(502).json({ connected: false, error: error.message });
-  }
+  const identity = kaggleNotebookIdentity();
+  const [infoResult, statusResult] = await Promise.allSettled([
+    callKaggleTool("get_notebook_info", { userName: identity.userName, kernelSlug: identity.kernelSlug }),
+    callKaggleTool("get_notebook_session_status", { userName: identity.userName, kernelSlug: identity.kernelSlug })
+  ]);
+  const info = infoResult.status === "fulfilled" ? kaggleToolData(infoResult.value) : null;
+  const session = statusResult.status === "fulfilled" ? kaggleToolData(statusResult.value) : null;
+  const errors = {};
+  if (!info) errors.notebook = infoResult.reason?.message || "Notebook metadata is unavailable.";
+  if (!session) errors.session = statusResult.reason?.message || "Session status is unavailable.";
+  // A missing committed notebook version and an active interactive session can coexist.
+  // Return both observations instead of hiding all usable information behind HTTP 502.
+  res.status(info || session ? 200 : 502).json({
+    connected: Boolean(info || session),
+    notebookRef: identity.slug,
+    notebook: info,
+    session,
+    errors
+  });
 });
 
 app.post("/api/kaggle/notebook/start", requireAuth, async (_req, res) => {
   try {
     const identity = kaggleNotebookIdentity();
+    const statusResult = await callKaggleTool("get_notebook_session_status", {
+      userName: identity.userName, kernelSlug: identity.kernelSlug
+    }).then(kaggleToolData).catch(error => ({ lookupError: error.message }));
+    const statusText = String(statusResult?.status || statusResult?.state || statusResult?.message || "").toUpperCase();
+    if (["RUNNING", "QUEUED", "CANCEL_REQUESTED"].includes(statusText)) {
+      return res.json({
+        started: false,
+        alreadyRunning: true,
+        notebookRef: identity.slug,
+        session: statusResult,
+        message: "Kaggle already has an active session. YTAgent will not create a duplicate."
+      });
+    }
+
     const info = kaggleToolData(await callKaggleTool("get_notebook_info", {
       userName: identity.userName, kernelSlug: identity.kernelSlug
     }));
@@ -919,8 +941,7 @@ app.post("/api/kaggle/notebook/start", requireAuth, async (_req, res) => {
     if (!machineShape) {
       return res.status(409).json({
         started: false,
-        error: "Kaggle did not report a GPU machine shape for this notebook. Set a GPU accelerator in Kaggle Notebook settings first.",
-        notebook: { title: metadata.title || null, enableGpu: metadata.enableGpu ?? metadata.enable_gpu ?? null }
+        error: "Kaggle did not report a GPU machine shape for this notebook. Confirm that the notebook has a saved version and a GPU accelerator."
       });
     }
     const result = await callKaggleTool("create_notebook_session", {
@@ -929,11 +950,20 @@ app.post("/api/kaggle/notebook/start", requireAuth, async (_req, res) => {
       kernelType: metadata.kernelType || metadata.kernel_type || "notebook",
       machineShape,
       enableInternet: metadata.enableInternet ?? metadata.enable_internet ?? true
-    });
-    res.json({ started: true, notebookRef: identity.slug, machineShape, operation: kaggleToolData(result) });
+    }).then(kaggleToolData);
+    res.json({ started: true, notebookRef: identity.slug, machineShape, operation: result });
   } catch (error) {
-    console.error("Kaggle notebook start failed:", error.message);
-    res.status(502).json({ started: false, error: error.message });
+    const message = String(error.message || error);
+    console.error("Kaggle notebook start failed:", message);
+    if (/already running|session already exists|already has.*session/i.test(message)) {
+      return res.json({
+        started: false,
+        alreadyRunning: true,
+        notebookRef: process.env.KAGGLE_NOTEBOOK_REF || null,
+        message: "Kaggle reports an existing session. Check its status instead of starting another."
+      });
+    }
+    res.status(502).json({ started: false, error: message });
   }
 });
 

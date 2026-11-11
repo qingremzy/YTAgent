@@ -331,6 +331,54 @@ if (canvas && viewport) {
       document.querySelector("#generatorForm").scrollIntoView({ behavior: "smooth", block: "center" });
     });
 
+    let productionState = "idle";
+    window.addEventListener("ytagent:generation", event => {
+      const detail = event.detail || {};
+      productionState = detail.state || "active";
+      const progress = Number(detail.progress) || 0;
+      const mode = document.querySelector("#hudMode");
+      const title = document.querySelector("#hudTitle");
+      const subtitle = document.querySelector("#hudDetail");
+      if (productionState === "completed") {
+        mode.textContent = "FILM COMPLETE";
+        title.textContent = "Your film is ready.";
+        subtitle.textContent = "The finished MP4 is waiting in your download panel.";
+        chestLight.material.color.set(0x7dffb2);
+        tally.material.color.set(0x7dffb2);
+        monitors.forEach(monitor => monitor.material.color.set(0xb5ffda));
+        return;
+      }
+      if (productionState === "failed") {
+        mode.textContent = "PRODUCTION ALERT";
+        title.textContent = "The render needs attention.";
+        subtitle.textContent = "YTAgent stopped safely instead of delivering a broken film.";
+        chestLight.material.color.set(0xff6262);
+        tally.material.color.set(0xff4545);
+        monitors.forEach(monitor => monitor.material.color.set(0xff8b8b));
+        return;
+      }
+      chestLight.material.color.set(0x72eaff);
+      tally.material.color.set(0xff4949);
+      monitors.forEach(monitor => monitor.material.color.set(0xffffff));
+      if (progress < 8) {
+        mode.textContent = "AI DIRECTOR";
+        title.textContent = "Planning the story.";
+        subtitle.textContent = "Researching facts and arranging ten distinct shots.";
+      } else if (progress < 67) {
+        mode.textContent = "VIRTUAL FILM STAGE";
+        title.textContent = "Rendering scene " + Math.max(1, Math.min(10, Math.ceil((progress - 5) / 6))) + " of 10.";
+        subtitle.textContent = "Wan is building the physical action and camera movement.";
+      } else if (progress < 97) {
+        mode.textContent = "VOICE BOOTH";
+        title.textContent = "Recording the narrator.";
+        subtitle.textContent = "Kokoro is preparing the documentary voice tracks.";
+      } else {
+        mode.textContent = "EDIT SUITE";
+        title.textContent = "Finishing the film.";
+        subtitle.textContent = "Mixing scenes, captions and narration, then checking the MP4.";
+      }
+    });
+
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let tick = 0;
     function animate() {
@@ -342,7 +390,7 @@ if (canvas && viewport) {
       if (!drag && !reducedMotion) {
         targetRotationY += 0.00015;
       }
-      head.rotation.y = Math.sin(tick * 0.55) * 0.12;
+      head.rotation.y = Math.sin(tick * 0.55) * (productionState === "active" ? 0.24 : 0.12);
       head.rotation.x = Math.sin(tick * 0.32) * 0.025;
       tally.material.emissiveIntensity = 0.4 + (Math.sin(tick * 3.5) + 1) * 0.65;
       monitors.forEach((monitor, index) => {

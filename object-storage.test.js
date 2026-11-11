@@ -81,3 +81,19 @@ test("uploads every regular file in a project directory", async () => {
     await fs.promises.rm(dir, { recursive: true, force: true });
   }
 });
+
+test("checks whether an R2 object already exists", async () => {
+  const client = {
+    send: async command => {
+      if (command.constructor.name === "HeadObjectCommand" && command.input.Key === "missing") {
+        const error = new Error("missing");
+        error.name = "NotFound";
+        throw error;
+      }
+      return {};
+    }
+  };
+  const storage = createObjectStorage({ env: { R2_BUCKET_NAME: "ytagent" }, client });
+  assert.equal(await storage.exists("studio/abc/scene-01.mp4"), true);
+  assert.equal(await storage.exists("missing"), false);
+});

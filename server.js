@@ -172,6 +172,10 @@ app.use(session({
   saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 24 * 60 * 60 * 1000 }
 }));
+app.use("/studio", (req, res, next) => {
+  if (!req.session?.tokens) return res.redirect("/");
+  next();
+}, express.static(path.join(__dirname, "public", "studio")));
 app.use(express.static(path.join(__dirname, "public")));
 
 const storage = multer.diskStorage({

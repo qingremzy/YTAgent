@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test video-compiler/*.test.js video-providers/*.test.js middleware/*.test.js kaggle-mcp.test.js gpu-worker-bridge.test.js kaggle-notebook.test.js studio-project.test.js"
+    "test": "node --test video-compiler/*.test.js video-providers/*.test.js middleware/*.test.js kaggle-mcp.test.js gpu-worker-bridge.test.js kaggle-notebook.test.js studio-project.test.js kaggle-worker-session.test.js"
   },
   "engines": {
     "node": ">=20"

@@ -7,6 +7,8 @@ const {
   buildClipkitSource,
   createStudioProject,
   readStudioProject,
+  saveStudioProject,
+  validateStudioSource,
   resolveStudioAsset
 } = require("./studio-project");
 
@@ -45,6 +47,9 @@ test("rejects malformed project IDs and incomplete storyboards", () => {
   const { storyboard, sceneAssets } = fixtures();
   assert.throws(() => buildClipkitSource({ projectId: "../bad", storyboard, sceneAssets }), /Invalid studio project ID/);
   assert.throws(() => buildClipkitSource({ projectId: id, storyboard: { scenes: [] }, sceneAssets }), /ten matching scenes/);
+  const source = buildClipkitSource({ projectId: id, storyboard, sceneAssets });
+  assert.throws(() => validateStudioSource({ ...source, duration: 5000 }, id), /dimensions or duration/);
+  assert.throws(() => validateStudioSource({ ...source, elements: [{ ...source.elements[0], source: "https://evil.example/video.mp4" }] }, id), /must reference an asset owned/);
 });
 
 test("copies scene assets and persists a readable project manifest", async () => {
@@ -67,6 +72,11 @@ test("copies scene assets and persists a readable project manifest", async () =>
     assert.equal(await fs.promises.readFile(resolveStudioAsset(rootDir, id, "scene-01.mp4"), "utf8"), "video-0");
     assert.equal(await fs.promises.readFile(resolveStudioAsset(rootDir, id, "narration-10.wav"), "utf8"), "audio-9");
     assert.throws(() => resolveStudioAsset(rootDir, id, "../project.json"), /Invalid studio asset filename/);
+    const edited = { ...loaded.source, elements: loaded.source.elements.map(item => item.id === "caption-01" ? { ...item, text: "Edited caption" } : item) };
+    validateStudioSource(edited, id);
+    const updated = await saveStudioProject(rootDir, id, edited);
+    assert.equal(updated.source.elements.find(item => item.id === "caption-01").text, "Edited caption");
+    assert.ok(updated.updatedAt);
   } finally {
     await fs.promises.rm(rootDir, { recursive: true, force: true });
     await fs.promises.rm(inputDir, { recursive: true, force: true });

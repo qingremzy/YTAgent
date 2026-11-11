@@ -381,7 +381,7 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
     }
     let studioProject = null;
     if (options.studioProjectRoot) {
-      const match = path.basename(outputPath).match(/^generated-([a-f0-9]{24})\\.mp4$/i);
+      const match = path.basename(outputPath).match(/^generated-([a-f0-9]{24})\.mp4$/i);
       if (!match) throw new Error("Could not associate the finished film with its editable studio project.");
       studioProject = await createStudioProject({
         projectId: match[1],

@@ -1272,6 +1272,19 @@ app.post("/api/kaggle/notebook/start", requireAuth, async (_req, res) => {
   }
 });
 
+/* Internal worker control: lets a trusted GPU worker request its own Kaggle
+   notebook session without requiring YouTube OAuth. */
+app.post("/api/worker/session/start", requireGpuWorker, async (_req, res) => {
+  try {
+    const result = await kaggleWorkerSessionManager.ensure();
+    res.json(result);
+  } catch (error) {
+    const message = String(error.message || error);
+    console.error("GPU worker session start failed:", message);
+    res.status(502).json({ started: false, error: message.slice(0, 500) });
+  }
+});
+
 app.post("/api/kaggle/notebook/cancel", requireAuth, async (req, res) => {
   const kernelSessionId = Number(req.body?.kernelSessionId);
   if (!Number.isSafeInteger(kernelSessionId) || kernelSessionId <= 0) {

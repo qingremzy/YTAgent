@@ -34,7 +34,10 @@ function buildNotebookSaveRequest(slug, source, metadata = {}) {
     return fallback;
   };
   const machineShape = get("machineShape", "machine_shape", "NvidiaTeslaT4");
+  const notebookId = Number(get("id", "id", 0)) || null;
   return {
+    id: notebookId,
+    hasId: Boolean(notebookId),
     slug,
     newTitle: get("title", "title", "YTAgent Free GPU Worker"),
     text: source,

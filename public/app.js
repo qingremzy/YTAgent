@@ -142,7 +142,7 @@ function showGeneratedVideo(data, topic) {
     generatedEdit.href = "/studio?project=" + encodeURIComponent(data.studioProjectId);
     generatedEdit.textContent = "Open editable production studio ↗";
     const keepMs = data.storage?.projectStored ? 30 * 24 * 60 * 60 * 1000 : 6 * 60 * 60 * 1000;
-    localStorage.setItem(lastStudioProjectKey, JSON.stringify({ id: data.studioProjectId, expiresAt: Date.now() + keepMs }));
+    try { localStorage.setItem(lastStudioProjectKey, JSON.stringify({ id: data.studioProjectId, expiresAt: Date.now() + keepMs })); } catch (_) {}
     generatedEdit.classList.remove("hidden");
   } else if (generatedEdit) {
     generatedEdit.classList.add("hidden");

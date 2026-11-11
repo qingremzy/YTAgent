@@ -170,7 +170,7 @@ async function requestStoryboard(topic) {
   throw new Error("Storyboard generation failed. " + failures.join(" | "));
 }
 
-async function requestGeneratedScenes(scenes, topic, workDir, onProgress) {
+async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
   // Agnes is attempted only when the user has explicitly confirmed a no-charge quota.
   if (process.env.AGNES_API_KEY && process.env.AGNES_FREE_QUOTA_CONFIRMED === "true") {
     try {
@@ -188,7 +188,7 @@ async function requestGeneratedScenes(scenes, topic, workDir, onProgress) {
   }
 
   try {
-    const generated = await generateWanSceneClips(scenes, topic, workDir, onProgress);
+    const generated = await generateWanSceneClips(scenes, topic, workDir, onProgress, onGpuJobQueued);
     if (Array.isArray(generated)) return { clips: generated, narrationClips: null, provider: "Wan 2.1 Free GPU Worker" };
     return { clips: generated.clips, narrationClips: generated.narrations, provider: "Wan 2.1 + Kokoro 82M Free GPU Worker" };
   } catch (error) {
@@ -333,7 +333,7 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-film-"));
   try {
     // Agnes supplies five 12-second cinematic clips, which are split into ten scene plates.
-    const visualResult = await requestGeneratedScenes(storyboard.scenes, topic, workDir, reportProgress);
+    const visualResult = await requestGeneratedScenes(storyboard.scenes, topic, workDir, reportProgress, options.onGpuJobQueued);
     reportProgress(92, "All visuals and narration are ready. Mixing the film.");
     const generatedClips = visualResult.clips;
     const voiceProviders = new Set();

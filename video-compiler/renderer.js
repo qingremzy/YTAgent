@@ -150,7 +150,7 @@ async function renderFilm(input) {
       filters.push("[voice]alimiter=limit=0.89[aout]");
     }
     args.push("-filter_complex", filters.join(";"), "-map", "[vout]", "-map", "[aout]",
-      "-t", "60", "-r", "30", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+      "-t", "60", "-r", "24", "-threads", "1", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24",
       "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", outputPath);
     await run(args);
     const stat = await fs.promises.stat(outputPath);

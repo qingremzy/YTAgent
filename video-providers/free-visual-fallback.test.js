@@ -32,3 +32,17 @@ test("uses the monochrome graphite palette without blue or purple accents", () =
   assert.equal(svg.includes("hsl("), false);
   assert.doesNotMatch(svg, /#67e8f9|#071426|#102b48/i);
 });
+
+test("uses different scene compositions instead of repeating the same atom image", () => {
+  const space = buildFallbackArtwork({ title: "A planet", visual_direction: "A planet moves through space" }, 0, 10);
+  const ocean = buildFallbackArtwork({ title: "Ocean waves", visual_direction: "Waves move through the deep ocean" }, 1, 10);
+  assert.notEqual(space, ocean);
+  assert.match(space, /ellipse/);
+  assert.match(ocean, /Q190/);
+});
+test("renders readable native SVG text without unsupported foreignObject blocks", () => {
+  const svg = buildFallbackArtwork({ title: "Inside the brain", visual_direction: "Neurons send signals across the brain" }, 0, 10);
+  assert.match(svg, /<text/);
+  assert.doesNotMatch(svg, /foreignObject/);
+  assert.match(svg, /Neurons send signals/);
+});

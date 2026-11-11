@@ -86,6 +86,8 @@ export default function App() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Could not save the project.");
+      const keepMs = data.durable ? 30 * 24 * 60 * 60 * 1000 : 6 * 60 * 60 * 1000;
+      localStorage.setItem("ytagent-last-studio-project", JSON.stringify({ id: projectId, expiresAt: Date.now() + keepMs }));
       if (sequence === saveSequence.current) {
         setSaveStatus(data.storageWarning ? "Saved locally only" : data.durable ? "Saved to cloud" : "All changes saved");
       }

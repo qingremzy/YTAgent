@@ -86,4 +86,42 @@ async function listKaggleTools() {
   })).filter(tool => tool.name);
 }
 
-module.exports = { listKaggleTools };
+
+
+async function callKaggleTool(toolName, request = {}) {
+  const token = String(process.env.KAGGLE_API_TOKEN || "").trim();
+  if (!token) throw new Error("KAGGLE_API_TOKEN is not configured in Railway.");
+  if (!token.startsWith("KGAT_")) throw new Error("KAGGLE_API_TOKEN must be a Kaggle personal access token beginning with KGAT_.");
+  const initialized = await postMcp(token, {
+    jsonrpc: "2.0", id: 1, method: "initialize",
+    params: {
+      protocolVersion: "2025-03-26",
+      capabilities: {},
+      clientInfo: { name: "YTAgent", version: "1.0.0" }
+    }
+  });
+  if (initialized.payload?.error) {
+    throw new Error(initialized.payload.error.message || "Kaggle MCP initialization failed.");
+  }
+  const sessionId = initialized.sessionId;
+  await postMcp(token, {
+    jsonrpc: "2.0", method: "notifications/initialized", params: {}
+  }, sessionId);
+  const called = await postMcp(token, {
+    jsonrpc: "2.0", id: 3, method: "tools/call",
+    params: { name: toolName, arguments: { request } }
+  }, sessionId);
+  if (called.payload?.error) {
+    throw new Error(called.payload.error.message || ("Kaggle tool failed: " + toolName));
+  }
+  const result = called.payload?.result;
+  if (!result) throw new Error("Kaggle returned no result for " + toolName + ".");
+  if (result.isError) {
+    const message = (result.content || []).map(item => item.text || "").filter(Boolean).join(" ").slice(0, 500);
+    throw new Error(message || ("Kaggle tool failed: " + toolName));
+  }
+  return result;
+}
+
+module.exports = { listKaggleTools, callKaggleTool };
+

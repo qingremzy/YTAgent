@@ -12,7 +12,7 @@ const { google } = require("googleapis");
 const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const { createRateLimiter } = require("./middleware/rate-limit");
-const { listKaggleTools } = require("./kaggle-mcp");
+const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -872,6 +872,82 @@ app.get("/api/kaggle/status", async (_req, res) => {
   } catch (error) {
     console.error("Kaggle connection check failed:", error.message);
     res.status(502).json({ connected: false, error: error.message });
+  }
+});
+
+
+
+
+function kaggleNotebookIdentity() {
+  const ref = String(process.env.KAGGLE_NOTEBOOK_REF || "samsonbamigboye/notebook477419e21e").trim();
+  const parts = ref.split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) throw new Error("KAGGLE_NOTEBOOK_REF must use username/notebook-slug format.");
+  return { userName: parts[0], kernelSlug: parts[1], slug: ref };
+}
+
+function kaggleToolData(result) {
+  if (result?.structuredContent) return result.structuredContent;
+  const textContent = (result?.content || []).find(item => item.type === "text")?.text;
+  if (textContent) {
+    try { return JSON.parse(textContent); } catch (_) { return { message: textContent }; }
+  }
+  return result;
+}
+
+app.get("/api/kaggle/notebook", requireAuth, async (_req, res) => {
+  try {
+    const identity = kaggleNotebookIdentity();
+    const [info, status] = await Promise.all([
+      callKaggleTool("get_notebook_info", { userName: identity.userName, kernelSlug: identity.kernelSlug }),
+      callKaggleTool("get_notebook_session_status", { userName: identity.userName, kernelSlug: identity.kernelSlug })
+    ]);
+    res.json({ connected: true, notebookRef: identity.slug, notebook: kaggleToolData(info), session: kaggleToolData(status) });
+  } catch (error) {
+    console.error("Kaggle notebook inspection failed:", error.message);
+    res.status(502).json({ connected: false, error: error.message });
+  }
+});
+
+app.post("/api/kaggle/notebook/start", requireAuth, async (_req, res) => {
+  try {
+    const identity = kaggleNotebookIdentity();
+    const info = kaggleToolData(await callKaggleTool("get_notebook_info", {
+      userName: identity.userName, kernelSlug: identity.kernelSlug
+    }));
+    const metadata = info?.metadata || info?.kernel?.metadata || {};
+    const machineShape = metadata.machineShape || metadata.machine_shape || "";
+    if (!machineShape) {
+      return res.status(409).json({
+        started: false,
+        error: "Kaggle did not report a GPU machine shape for this notebook. Set a GPU accelerator in Kaggle Notebook settings first.",
+        notebook: { title: metadata.title || null, enableGpu: metadata.enableGpu ?? metadata.enable_gpu ?? null }
+      });
+    }
+    const result = await callKaggleTool("create_notebook_session", {
+      slug: identity.slug,
+      language: metadata.language || "python",
+      kernelType: metadata.kernelType || metadata.kernel_type || "notebook",
+      machineShape,
+      enableInternet: metadata.enableInternet ?? metadata.enable_internet ?? true
+    });
+    res.json({ started: true, notebookRef: identity.slug, machineShape, operation: kaggleToolData(result) });
+  } catch (error) {
+    console.error("Kaggle notebook start failed:", error.message);
+    res.status(502).json({ started: false, error: error.message });
+  }
+});
+
+app.post("/api/kaggle/notebook/cancel", requireAuth, async (req, res) => {
+  const kernelSessionId = Number(req.body?.kernelSessionId);
+  if (!Number.isSafeInteger(kernelSessionId) || kernelSessionId <= 0) {
+    return res.status(400).json({ cancelled: false, error: "A valid kernelSessionId is required." });
+  }
+  try {
+    const result = await callKaggleTool("cancel_notebook_session", { kernelSessionId });
+    res.json({ cancelled: true, result: kaggleToolData(result) });
+  } catch (error) {
+    console.error("Kaggle notebook cancel failed:", error.message);
+    res.status(502).json({ cancelled: false, error: error.message });
   }
 });
 

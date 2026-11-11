@@ -5,7 +5,7 @@ const path = require("path");
 const jobs = new Map();
 const pending = [];
 const JOB_TIMEOUT_MS = 90 * 60 * 1000;
-const CLAIM_TIMEOUT_MS = 2 * 60 * 1000;
+const CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
 let lastWorkerPollAt = 0;
 
 function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, claimTimeoutMs = CLAIM_TIMEOUT_MS }) {
@@ -18,7 +18,7 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, claimTi
     job.timer = setTimeout(() => {
       if (job.state === "queued") {
         jobs.delete(id);
-        reject(new Error("The free Kaggle GPU worker did not connect within two minutes. The notebook may be stopped or its private worker token may not be configured."));
+        reject(new Error("The free Kaggle GPU worker did not connect within ten minutes. Kaggle may still be starting the GPU session, or the notebook's worker token may not be configured."));
       } else {
         jobs.delete(id);
         reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may have disconnected or run out of GPU quota."));

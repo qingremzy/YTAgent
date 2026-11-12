@@ -93,4 +93,11 @@ async function pushNotebookWithKaggleCli({ identity, source, metadata = {} }) {
   }
 }
 
-module.exports = { pushNotebookWithKaggleCli };
+async function getKaggleQuota() {
+  if (!process.env.KAGGLE_API_TOKEN) throw new Error("Kaggle API token is not configured.");
+  const result = await runCommand("kaggle", ["quota", "--format", "json"], { timeoutMs: 20000 });
+  const output = result.stdout.trim();
+  try { return JSON.parse(output); } catch (_) { return output; }
+}
+
+module.exports = { pushNotebookWithKaggleCli, getKaggleQuota };

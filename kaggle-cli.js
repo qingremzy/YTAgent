@@ -54,6 +54,7 @@ async function pushNotebookWithKaggleCli({ identity, source, metadata = {} }) {
     fs.writeFileSync(notebookPath, source, { mode: 0o600 });
 
     const machineShape = metadata.machineShape || metadata.machine_shape || "NvidiaTeslaT4";
+    const timeoutSeconds = 32400;
     const kernelMetadata = {
       id: identity.slug,
       title: metadata.title || "YTAgent Free GPU Worker",
@@ -64,7 +65,6 @@ async function pushNotebookWithKaggleCli({ identity, source, metadata = {} }) {
       enable_gpu: true,
       enable_internet: true,
       machine_shape: machineShape,
-      session_timeout_seconds: 43200,
       dataset_sources: metadata.datasetDataSources || metadata.dataset_data_sources || [],
       kernel_sources: metadata.kernelDataSources || metadata.kernel_data_sources || [],
       competition_sources: metadata.competitionDataSources || metadata.competition_data_sources || [],
@@ -75,17 +75,17 @@ async function pushNotebookWithKaggleCli({ identity, source, metadata = {} }) {
 
     const result = await runCommand("kaggle", [
       "kernels", "push", "-p", directory,
-      "--timeout", "43200",
+      "--timeout", String(timeoutSeconds),
       "--accelerator", machineShape
     ], { timeoutMs: 120000 });
-    const combined = result.stdout + "\\n" + result.stderr;
-    const versionMatch = combined.match(/(?:version|versionNumber)\\s*[:#]?\\s*(\\d+)/i);
+    const combined = result.stdout + "\n" + result.stderr;
+    const versionMatch = combined.match(/\\bversion(?:Number)?\\s*[:#]?\\s*(\\d+)/i);
     return {
       versionNumber: versionMatch ? Number(versionMatch[1]) : null,
       cli: true,
-      timeoutSeconds: 43200,
+      timeoutSeconds,
       machineShape,
-      message: "Kaggle CLI accepted the notebook push with an explicit 12-hour execution timeout.",
+      message: "Kaggle CLI accepted the notebook push with the maximum 9-hour execution timeout.",
       output: combined.trim().slice(-1200)
     };
   } finally {

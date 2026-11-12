@@ -85,7 +85,7 @@ test("uses the Kaggle CLI runner when available instead of the short MCP save ca
     getNotebookSource: async () => notebookSource(),
     pushNotebookWithCli: async args => {
       cliCalls.push(args);
-      return { cli: true, versionNumber: 8, timeoutSeconds: 43200 };
+      return { cli: true, versionNumber: 8, timeoutSeconds: 32400 };
     },
     callKaggleTool: async (name, args) => {
       toolCalls.push({ name, args });
@@ -113,7 +113,7 @@ test("uses a one-time bootstrap token and sanitizes malformed markdown cells", a
     getBootstrapToken: async () => bootstrapToken,
     pushNotebookWithCli: async args => {
       pushedSource = args.source;
-      return { cli: true, versionNumber: 9, timeoutSeconds: 43200 };
+      return { cli: true, versionNumber: 9, timeoutSeconds: 32400 };
     },
     callKaggleTool: async name => {
       if (name === "get_notebook_info") return { metadata: { machineShape: "NvidiaTeslaT4", enableGpu: true, enableInternet: true } };

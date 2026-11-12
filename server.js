@@ -18,7 +18,7 @@ const { createObjectStorage } = require("./object-storage");
 const { createKaggleWorkerSessionManager } = require("./kaggle-worker-session");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
 const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
-const { pushNotebookWithKaggleCli } = require("./kaggle-cli");
+const { pushNotebookWithKaggleCli, getKaggleQuota } = require("./kaggle-cli");
 const { claimNextGpuJob, noteGpuWorkerPoll, getGpuWorkerStatus, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
 
 const app = express();
@@ -1157,17 +1157,20 @@ app.get("/api/generated/:filename", async (req, res) => {
 app.get("/api/kaggle/session-status", async (_req, res) => {
   try {
     const identity = kaggleNotebookIdentity();
-    const [sessionResult, infoResult, outputResult] = await Promise.allSettled([
+    const [sessionResult, infoResult, outputResult, quotaResult] = await Promise.allSettled([
       callKaggleTool("get_notebook_session_status", { userName: identity.userName, kernelSlug: identity.kernelSlug }),
       callKaggleTool("get_notebook_info", { userName: identity.userName, kernelSlug: identity.kernelSlug }),
-      callKaggleTool("list_notebook_session_output", { userName: identity.userName, kernelSlug: identity.kernelSlug, pageSize: 100, hasPageSize: true })
+      callKaggleTool("list_notebook_session_output", { userName: identity.userName, kernelSlug: identity.kernelSlug, pageSize: 100, hasPageSize: true }),
+      getKaggleQuota()
     ]);
     const session = sessionResult.status === "fulfilled" ? kaggleToolData(sessionResult.value) : null;
     const info = infoResult.status === "fulfilled" ? kaggleToolData(infoResult.value) : null;
     const output = outputResult.status === "fulfilled" ? kaggleToolData(outputResult.value) : null;
+    const quota = quotaResult.status === "fulfilled" ? quotaResult.value : null;
     res.status(session || info || output ? 200 : 502).json({
       notebookRef: identity.slug,
       session,
+      quota,
       outputLog: typeof output?.log === "string" ? output.log.slice(-12000) : null,
       outputFiles: Array.isArray(output?.files) ? output.files.map(file => ({ fileName: file.fileName || file.file_name, size: file.size || null })) : [],
       notebook: info?.metadata ? {

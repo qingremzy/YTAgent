@@ -18,6 +18,7 @@ const { createObjectStorage } = require("./object-storage");
 const { createKaggleWorkerSessionManager } = require("./kaggle-worker-session");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
 const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
+const { pushNotebookWithKaggleCli } = require("./kaggle-cli");
 const { claimNextGpuJob, noteGpuWorkerPoll, getGpuWorkerStatus, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
 
 const app = express();
@@ -1242,6 +1243,7 @@ const kaggleWorkerSessionManager = createKaggleWorkerSessionManager({
   getGpuWorkerStatus,
   getNotebookIdentity: kaggleNotebookIdentity,
   getNotebookSource: getCanonicalKaggleNotebookSource,
+  pushNotebookWithCli: pushNotebookWithKaggleCli,
   kaggleToolData
 });
 

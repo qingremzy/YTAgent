@@ -49,8 +49,8 @@ def get_pipeline():
         return PIPE
     # Maximize Hugging Face Xet download throughput before importing hub clients.
     os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
-    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "180")
-    os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
+    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "600")
+    os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "60")
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     # Optional Kaggle Secret: HF_TOKEN. Public model downloads still work without it.
     if not os.environ.get("HF_TOKEN"):
@@ -72,7 +72,7 @@ def get_pipeline():
     model_id = os.environ.get("WAN_MODEL_ID", "Wan-AI/Wan2.1-T2V-1.3B-Diffusers")
     dtype = torch.float16
     print("Loading Wan 2.1 VAE weights...", flush=True)
-    vae = AutoencoderKLWan.from_pretrained(model_id, subfolder="vae", torch_dtype=torch.float32)
+    vae = AutoencoderKLWan.from_pretrained(model_id, subfolder="vae", torch_dtype=torch.float32, low_cpu_mem_usage=True)
     print("Loading Wan 2.1 video pipeline...", flush=True)
     PIPE = WanPipeline.from_pretrained(
         model_id,
@@ -132,6 +132,8 @@ while True:
             response.read()
     except Exception as exc:
         print("YTAgent heartbeat subprocess failed:", str(exc)[:160], flush=True)
+    else:
+        print("YTAgent GPU worker heartbeat: model load still running.", flush=True)
     time.sleep(12)
 """
     try:
@@ -139,9 +141,9 @@ while True:
             [sys.executable, "-u", "-c", script, str(remote_job_id), str(int(progress)), str(message)[:180]],
             env=os.environ.copy(),
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
+            stdout=None,
+            stderr=None,
+            start_new_session=False,
             close_fds=True
         )
     except Exception as exc:

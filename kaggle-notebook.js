@@ -20,8 +20,8 @@ function validateNotebookSource(source) {
     throw new Error("Expected a valid Jupyter notebook (nbformat 4) containing at least one cell.");
   }
   for (const [index, cell] of notebook.cells.entries()) {
-    if (!cell || !["code", "markdown", "raw"].includes(cell.cell_type) || !(typeof cell.source === "string" || Array.isArray(cell.source))) {
-      throw new Error("Notebook cell " + (index + 1) + " has an invalid type or source.");
+    if (!cell || !["code", "markdown", "raw"].includes(cell.cell_type) || !(typeof cell.source === "string" || Array.isArray(cell.source)) || (Array.isArray(cell.source) && !cell.source.every(line => typeof line === "string"))) {
+      throw new Error("Notebook cell " + (index + 1) + " has an invalid type or source. Source arrays must contain only text strings.");
     }
   }
   return source;

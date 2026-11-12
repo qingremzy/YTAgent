@@ -140,7 +140,9 @@ while True:
             env=os.environ.copy(),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True
         )
     except Exception as exc:
         print("Could not start independent progress heartbeat:", str(exc)[:180], flush=True)

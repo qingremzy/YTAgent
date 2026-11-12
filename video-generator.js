@@ -107,6 +107,13 @@ function validateStoryboard(storyboard) {
 }
 
 async function requestStoryboard(topic) {
+  var prompt = "Create an original, factual, high-retention 60-second vertical YouTube explainer about: \"" + cleanText(topic, 180) + "\".\n" +
+    "Return ONE valid JSON object only. Required keys: title, description, tags, hashtags, keywords, scenes. Exactly 10 scenes. Every scene must contain title, narration, caption and visual_direction. " +
+    "NARRATION IS THE PRIORITY: write a connected spoken explanation, not ten disconnected facts or poetic fragments. Each scene line must contain 12 to 16 natural spoken words. Across the ten lines, explain what is happening, why it happens, how it works, what changes next, and the surprising result. Use plain conversational English, specific nouns, active verbs, short transitions and useful facts. No filler, vague hype, repeated hooks, rhetorical padding or unexplained jargon. The narrator should sound like an engaging documentary presenter teaching one curious viewer. " +
+    "STORY STRUCTURE: scene 1 opens with a surprising consequence or question; scenes 2-3 establish the subject; scenes 4-7 explain the mechanism step by step; scenes 8-9 reveal the consequence or twist; scene 10 delivers a memorable, accurate takeaway. Each scene must logically continue the previous one. " +
+    "VISUAL DIRECTIONS: each visual_direction must contain 18 to 30 specific words describing one physical action, a clear subject, a real object, a recognizable setting and camera framing. Show the exact thing being explained at that moment. Prefer expressive 3D animated human characters, practical props, recognizable environments, close-ups, demonstrations and cause-and-effect actions. Keep recurring characters and key objects visually consistent, but give every scene a distinct action, setting or composition. " +
+    "Do not use abstract swirling lines, orbiting dots, atom-like patterns, floating particles, generic glowing shapes, decorative science backgrounds, random stock imagery, text cards or static illustrations unless the topic specifically requires that exact phenomenon. No repeated compositions, locations or camera framing across adjacent scenes. Keep the main action large and readable in vertical 9:16. " +
+    "Be scientifically accurate. Make every visual directly illustrate its narration line. Do not imitate any creator's characters, scripts, scenes or branding.";
   // Hard zero-cost mode: only OpenRouter's explicitly free model route is allowed.
   // A :free model is priced at $0 and cannot fall through to a paid provider.
   if (process.env.YTAGENT_ZERO_COST_MODE !== "false") {
@@ -147,13 +154,6 @@ async function requestStoryboard(topic) {
     }
     return validateStoryboard(parseStoryboardJson(freeContent));
   }
-  var prompt = "Create an original, factual, high-retention 60-second vertical YouTube explainer about: \"" + cleanText(topic, 180) + "\".\n" +
-    "Return ONE valid JSON object only. Required keys: title, description, tags, hashtags, keywords, scenes. Exactly 10 scenes. Every scene must contain title, narration, caption and visual_direction. " +
-    "NARRATION IS THE PRIORITY: write a connected spoken explanation, not ten disconnected facts or poetic fragments. Each scene line must contain 12 to 16 natural spoken words. Across the ten lines, explain what is happening, why it happens, how it works, what changes next, and the surprising result. Use plain conversational English, specific nouns, active verbs, short transitions and useful facts. No filler, vague hype, repeated hooks, rhetorical padding or unexplained jargon. The narrator should sound like an engaging documentary presenter teaching one curious viewer. " +
-    "STORY STRUCTURE: scene 1 opens with a surprising consequence or question; scenes 2-3 establish the subject; scenes 4-7 explain the mechanism step by step; scenes 8-9 reveal the consequence or twist; scene 10 delivers a memorable, accurate takeaway. Each scene must logically continue the previous one. " +
-    "VISUAL DIRECTIONS: each visual_direction must contain 18 to 30 specific words describing one physical action, a clear subject, a real object, a recognizable setting and camera framing. Show the exact thing being explained at that moment. Prefer expressive 3D animated human characters, practical props, recognizable environments, close-ups, demonstrations and cause-and-effect actions. Keep recurring characters and key objects visually consistent, but give every scene a distinct action, setting or composition. " +
-    "Do not use abstract swirling lines, orbiting dots, atom-like patterns, floating particles, generic glowing shapes, decorative science backgrounds, random stock imagery, text cards or static illustrations unless the topic specifically requires that exact phenomenon. No repeated compositions, locations or camera framing across adjacent scenes. Keep the main action large and readable in vertical 9:16. " +
-    "Be scientifically accurate. Make every visual directly illustrate its narration line. Do not imitate any creator's characters, scripts, scenes or branding.";
   var failures = [];
   if (process.env.GEMINI_API_KEY) {
     try {

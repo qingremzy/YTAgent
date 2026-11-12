@@ -9,7 +9,7 @@
     "install": {
       "commands": [
         "...",
-        "python -m venv /app/.venv && /app/.venv/bin/pip install --no-cache-dir kaggle"
+        "python -m venv /app/.venv && /app/.venv/bin/pip install --no-cache-dir kaggle six"
       ]
     }
   },

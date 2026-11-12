@@ -7,6 +7,7 @@ function createKaggleWorkerSessionManager({
   getGpuWorkerStatus,
   getNotebookIdentity,
   getNotebookSource,
+  getBootstrapToken,
   pushNotebookWithCli,
   kaggleToolData = value => value
 }) {
@@ -62,7 +63,13 @@ function createKaggleWorkerSessionManager({
       throw new Error("The canonical YTAgent Kaggle notebook source is unavailable.");
     }
     const { validateNotebookSource, buildNotebookSaveRequest, patchNotebookForBatchRun } = require("./kaggle-notebook");
-    const runnableSource = patchNotebookForBatchRun(source);
+    const bootstrapToken = typeof getBootstrapToken === "function"
+      ? await getBootstrapToken(identity)
+      : null;
+    const runnableSource = patchNotebookForBatchRun(source, {
+      bootstrapToken,
+      serverUrl: process.env.APP_URL || "https://ytagent-production-1038.up.railway.app"
+    });
     validateNotebookSource(runnableSource);
     const request = buildNotebookSaveRequest(identity.slug, runnableSource, metadata);
     request.kernelExecutionType = "SaveAndRunAll";

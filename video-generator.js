@@ -385,8 +385,8 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
       if (result && typeof result.catch === "function") result.catch(() => {});
     } catch (_) {}
   };
-  if (process.env.YTAGENT_ZERO_COST_MODE !== "false" && !process.env.OPENROUTER_API_KEY) {
-    throw new Error("Zero-cost mode requires an OpenRouter key for its explicitly free :free model route.");
+  if (process.env.YTAGENT_ZERO_COST_MODE !== "false" && !process.env.OPENROUTER_API_KEY && !process.env.GROQ_API_KEY && !(process.env.GEMINI_API_KEY && process.env.GEMINI_FREE_TIER_ONLY === "true")) {
+    throw new Error("Zero-cost mode needs at least one configured free story director: OpenRouter free, Groq Free, or Gemini AI Studio Free with billing disabled.");
   }
   if (process.env.YTAGENT_ZERO_COST_MODE === "false" && !process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) {
     throw new Error("Configure an AI director key before generating videos.");

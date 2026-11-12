@@ -93,9 +93,49 @@ function buildNotebookSaveRequest(slug, source, metadata = {}) {
   };
 }
 
-function patchNotebookForBatchRun(source) {
+function patchNotebookForBatchRun(source, options = {}) {
   validateNotebookSource(source);
   const notebook = JSON.parse(source);
+  // Kaggle's nbconvert validator rejects code-only fields on markdown cells.
+  // Normalize all cells before saving/running the notebook through the CLI.
+  notebook.cells.forEach((item, index) => {
+    if (!item.metadata || typeof item.metadata !== "object") item.metadata = {};
+    if (!item.id) item.id = "ytagent-" + index.toString(36);
+    if (item.cell_type === "markdown" || item.cell_type === "raw") {
+      delete item.execution_count;
+      delete item.outputs;
+    } else if (item.cell_type === "code") {
+      if (!Array.isArray(item.outputs)) item.outputs = [];
+      if (item.execution_count === undefined) item.execution_count = null;
+    }
+  });
+
+  const tokenCell = notebook.cells.find(item => {
+    if (!item || item.cell_type !== "code") return false;
+    const cellSource = Array.isArray(item.source) ? item.source.join("") : item.source;
+    return typeof cellSource === "string" && cellSource.includes("YT_AGENT_WORKER_TOKEN");
+  });
+  if (options.bootstrapToken) {
+    if (!/^[a-f0-9]{64}$/.test(options.bootstrapToken)) {
+      throw new Error("Kaggle worker bootstrap token must be a 64-character hex value.");
+    }
+    if (!tokenCell) throw new Error("Kaggle worker notebook is missing its worker-token cell.");
+    const serverUrl = String(options.serverUrl || "https://ytagent-production-1038.up.railway.app").replace(/\/$/, "");
+    tokenCell.source = [
+      "import os, torch, requests\n",
+      "bootstrap_token = " + JSON.stringify(options.bootstrapToken) + "\n",
+      "response = requests.post(" + JSON.stringify(serverUrl + "/api/worker/bootstrap") + ", headers={\"Authorization\": \"Bearer \" + bootstrap_token}, timeout=25)\n",
+      "response.raise_for_status()\n",
+      "worker_token = response.json().get(\"token\")\n",
+      "if not worker_token: raise RuntimeError(\"YTAgent secure worker bootstrap returned no token.\")\n",
+      "os.environ[\"YT_AGENT_WORKER_TOKEN\"] = worker_token\n",
+      "print(\"Private worker token loaded through one-time secure bootstrap.\", flush=True)\n",
+      "print(\"GPU available:\", torch.cuda.is_available())\n",
+      "if torch.cuda.is_available(): print(\"GPU:\", torch.cuda.get_device_name(0))\n",
+      "else: raise RuntimeError(\"No GPU detected. Enable a Kaggle GPU accelerator.\")\n"
+    ];
+  }
+
   const cell = notebook.cells.find(item => {
     if (!item || item.cell_type !== "code") return false;
     const cellSource = Array.isArray(item.source) ? item.source.join("") : item.source;

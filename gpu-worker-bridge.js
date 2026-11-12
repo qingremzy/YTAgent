@@ -6,7 +6,7 @@ const jobs = new Map();
 const pending = [];
 const JOB_TIMEOUT_MS = 90 * 60 * 1000;
 const CLAIM_TIMEOUT_MS = 20 * 60 * 1000;
-const WORKER_HEARTBEAT_TIMEOUT_MS = 20 * 60 * 1000;
+const WORKER_HEARTBEAT_TIMEOUT_MS = 45 * 60 * 1000;
 const WORKER_HEARTBEAT_CHECK_MS = 15 * 1000;
 let lastWorkerPollAt = 0;
 
@@ -20,7 +20,7 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueue
     job.timer = setTimeout(() => {
       if (job.state === "queued") {
         jobs.delete(id);
-        reject(new Error("The free Kaggle GPU worker did not connect within ten minutes. Kaggle may still be starting the GPU session, or the notebook's worker token may not be configured."));
+        reject(new Error("The free Kaggle GPU worker did not connect within twenty minutes. Kaggle may still be starting the GPU session, or the notebook's worker token may not be configured."));
       } else {
         jobs.delete(id);
         reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may have disconnected or run out of GPU quota."));
@@ -80,7 +80,7 @@ function claimNextGpuJob() {
       clearInterval(job.heartbeatTimer);
       clearTimeout(job.timer);
       jobs.delete(id);
-      job.reject(new Error("The Kaggle GPU worker stopped reporting progress for two minutes. The batch run likely stopped or ran out of resources. Restart the worker and try again."));
+      job.reject(new Error("The Kaggle GPU worker stopped reporting progress for 45 minutes. The batch run may have stopped, disconnected, or run out of resources. Restart the worker and try again."));
     }, WORKER_HEARTBEAT_CHECK_MS);
     if (job.heartbeatTimer.unref) job.heartbeatTimer.unref();
     return { job_id: id, prompts: job.prompts, narrations: job.narrations, seed: job.seed };

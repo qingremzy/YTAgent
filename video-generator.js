@@ -148,22 +148,27 @@ async function requestStoryboard(topic) {
       });
     } else freeFailures.push("OpenRouter key missing");
 
-    // Groq's free plan has published hard rate limits and stops at quota.
+    // Groq free plan models have published hard rate limits and stop at quota.
+    // Try multiple models in sequence, without upgrading or switching to paid endpoints.
     if (process.env.GROQ_API_KEY) {
-      freeCandidates.push({ name: "Groq free tier", run: async function() {
-        var response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST", headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: process.env.GROQ_SCRIPT_MODEL || "openai/gpt-oss-20b",
-            messages: [{ role: "system", content: "Return exactly one valid JSON object. No markdown. Include exactly ten scenes." }, { role: "user", content: prompt }],
-            temperature: 0.2, max_completion_tokens: 8000, response_format: { type: "json_object" } }),
-          signal: AbortSignal.timeout(60000)
-        });
-        var data = await response.json().catch(function() { return {}; });
-        if (!response.ok) throw new Error("HTTP " + response.status + ": " + String(data.error && data.error.message || "request failed").slice(0, 220));
-        var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-        if (typeof content !== "string" || !content.trim()) throw new Error("empty response");
-        return parseStoryboardJson(content);
-      }});
+      var groqModels = (process.env.GROQ_SCRIPT_MODELS || process.env.GROQ_SCRIPT_MODEL ||
+        "openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.8-27b").split(",").map(function(model) { return model.trim(); }).filter(Boolean);
+      groqModels.forEach(function(model) {
+        freeCandidates.push({ name: "Groq free " + model, run: async function() {
+          var response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST", headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: model,
+              messages: [{ role: "system", content: "Return exactly one valid JSON object. No markdown. Include exactly ten scenes." }, { role: "user", content: prompt }],
+              temperature: 0.2, max_completion_tokens: 8000, response_format: { type: "json_object" } }),
+            signal: AbortSignal.timeout(60000)
+          });
+          var data = await response.json().catch(function() { return {}; });
+          if (!response.ok) throw new Error("HTTP " + response.status + ": " + String(data.error && data.error.message || "request failed").slice(0, 220));
+          var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+          if (typeof content !== "string" || !content.trim()) throw new Error("empty response");
+          return parseStoryboardJson(content);
+        }});
+      });
     } else freeFailures.push("Groq key missing");
 
     // Gemini is included only when explicitly marked as a no-billing free-tier project.

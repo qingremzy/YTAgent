@@ -36,9 +36,9 @@ test("builds save request while preserving Kaggle notebook settings", () => {
 
 
 test("patches the notebook runner to execute the one-job worker in the Kaggle kernel", () => {
-  const patched = JSON.parse(patchNotebookForBatchRun(notebook()));
+  const patched = JSON.parse(patchNotebookForBatchRun(notebook().replace("print('ready')", "print('--run-once')")));
   const runner = patched.cells.find(cell => cell.cell_type === "code");
-  assert.match(runner.source.join(""), /runpy\\.run_path/);
+  assert.match(runner.source.join(""), /runpy\.run_path/);
   assert.match(runner.source.join(""), /--wait-seconds/);
   assert.equal(validateNotebookSource(JSON.stringify(patched)), JSON.stringify(patched));
 });

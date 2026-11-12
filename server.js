@@ -1192,10 +1192,23 @@ function kaggleToolData(result) {
   return result;
 }
 
+async function getCanonicalKaggleNotebookSource(identity) {
+  const branch = String(process.env.GITHUB_BRANCH || "main").replace(/[^a-zA-Z0-9._-]/g, "");
+  const url = "https://raw.githubusercontent.com/qingremzy/YTAgent/" + branch + "/gpu-worker/YTAgent_Free_GPU_Worker.ipynb";
+  const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  if (!response.ok) {
+    throw new Error("Could not fetch the canonical YTAgent Kaggle notebook from GitHub (HTTP " + response.status + ").");
+  }
+  const source = await response.text();
+  validateNotebookSource(source);
+  return source;
+}
+
 const kaggleWorkerSessionManager = createKaggleWorkerSessionManager({
   callKaggleTool,
   getGpuWorkerStatus,
   getNotebookIdentity: kaggleNotebookIdentity,
+  getNotebookSource: getCanonicalKaggleNotebookSource,
   kaggleToolData
 });
 

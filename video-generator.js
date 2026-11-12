@@ -199,7 +199,18 @@ async function requestStoryboard(topic) {
       });
     } else if (process.env.GEMINI_API_KEY) freeFailures.push("Gemini skipped because GEMINI_FREE_TIER_ONLY is not true");
 
+    // Prefer Groq's free-plan endpoint for lower latency, then OpenRouter's free pool.
+    // Gemini stays last and is only present when explicitly enabled for a billing-disabled project.
+    function freeProviderRank(candidate) {
+      if (candidate.name.indexOf("Groq free ") === 0) return 0;
+      if (candidate.name.indexOf("OpenRouter ") === 0) return 1;
+      if (candidate.name.indexOf("Gemini free ") === 0) return 2;
+      return 3;
+    }
+    freeCandidates.sort(function(a, b) { return freeProviderRank(a) - freeProviderRank(b); });
+
     for (var candidate of freeCandidates) {
+      console.log("YTAgent trying free story director:", candidate.name);
       try {
         var candidateStoryboard = validateStoryboard(await candidate.run());
         console.log("YTAgent free story director succeeded:", candidate.name);

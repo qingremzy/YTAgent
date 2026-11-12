@@ -1153,6 +1153,35 @@ app.get("/api/generated/:filename", async (req, res) => {
 });
 
 
+app.get("/api/kaggle/session-status", async (_req, res) => {
+  try {
+    const identity = kaggleNotebookIdentity();
+    const [sessionResult, infoResult] = await Promise.allSettled([
+      callKaggleTool("get_notebook_session_status", { userName: identity.userName, kernelSlug: identity.kernelSlug }),
+      callKaggleTool("get_notebook_info", { userName: identity.userName, kernelSlug: identity.kernelSlug })
+    ]);
+    const session = sessionResult.status === "fulfilled" ? kaggleToolData(sessionResult.value) : null;
+    const info = infoResult.status === "fulfilled" ? kaggleToolData(infoResult.value) : null;
+    res.status(session || info ? 200 : 502).json({
+      notebookRef: identity.slug,
+      session,
+      notebook: info?.metadata ? {
+        machineShape: info.metadata.machineShape || info.metadata.machine_shape || null,
+        enableGpu: info.metadata.enableGpu ?? info.metadata.enable_gpu ?? null,
+        enableInternet: info.metadata.enableInternet ?? info.metadata.enable_internet ?? null,
+        sessionTimeoutSeconds: info.metadata.sessionTimeoutSeconds || info.metadata.session_timeout_seconds || null,
+        currentVersionNumber: info.metadata.currentVersionNumber || info.metadata.current_version_number || null
+      } : null,
+      errors: {
+        session: sessionResult.status === "rejected" ? String(sessionResult.reason?.message || sessionResult.reason) : null,
+        notebook: infoResult.status === "rejected" ? String(infoResult.reason?.message || infoResult.reason) : null
+      }
+    });
+  } catch (error) {
+    res.status(502).json({ error: String(error.message || error).slice(0, 400) });
+  }
+});
+
 app.get("/api/kaggle/status", async (_req, res) => {
   if (!process.env.KAGGLE_API_TOKEN) {
     return res.status(503).json({ connected: false, error: "Kaggle API token is not configured." });

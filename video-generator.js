@@ -115,14 +115,14 @@ async function requestStoryboard(topic) {
     "Do not use abstract swirling lines, orbiting dots, atom-like patterns, floating particles, generic glowing shapes, decorative science backgrounds, random stock imagery, text cards or static illustrations unless the topic specifically requires that exact phenomenon. No repeated compositions, locations or camera framing across adjacent scenes. Keep the main action large and readable in vertical 9:16. " +
     "Be scientifically accurate. Make every visual directly illustrate its narration line. Do not imitate any creator's characters, scripts, scenes or branding.";
   // Hard zero-cost mode: only OpenRouter's explicitly free model route is allowed.
-  // A :free model is priced at $0 and cannot fall through to a paid provider.
+  // openrouter/free routes only to currently available free models. Explicit :free variants are also allowed.
   if (process.env.YTAGENT_ZERO_COST_MODE !== "false") {
     if (!process.env.OPENROUTER_API_KEY) {
-      throw new Error("Zero-cost mode is active. Add an OpenRouter key and keep OPENROUTER_SCRIPT_MODEL on a :free model. Paid AI providers are blocked.");
+      throw new Error("Zero-cost mode is active. Add an OpenRouter key and keep OPENROUTER_SCRIPT_MODEL on openrouter/free or a :free model. Paid AI providers are blocked.");
     }
-    var freeModel = process.env.OPENROUTER_SCRIPT_MODEL || "openai/gpt-oss-20b:free";
+    var freeModel = process.env.OPENROUTER_SCRIPT_MODEL || "openrouter/free";
     if (freeModel !== "openrouter/free" && !/:free$/.test(freeModel)) {
-      throw new Error("Zero-cost mode blocked the configured model because it is not explicitly marked :free.");
+      throw new Error("Zero-cost mode allows only openrouter/free or an explicitly free :free model.");
     }
     var freeResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",

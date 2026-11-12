@@ -6,6 +6,7 @@ function createKaggleWorkerSessionManager({
   callKaggleTool,
   getGpuWorkerStatus,
   getNotebookIdentity,
+  getNotebookSource,
   kaggleToolData = value => value
 }) {
   if (typeof callKaggleTool !== "function" ||
@@ -50,9 +51,14 @@ function createKaggleWorkerSessionManager({
       throw new Error("Kaggle did not report a GPU machine shape. Save a notebook version with a GPU accelerator first.");
     }
 
-    const source = info?.blob?.source || info?.kernel?.blob?.source || "";
+    // The GitHub notebook is the source of truth. Kaggle's saved copy can lag behind
+    // repository fixes, which previously caused old setup cells to run on every job.
+    const savedSource = info?.blob?.source || info?.kernel?.blob?.source || "";
+    const source = typeof getNotebookSource === "function"
+      ? await getNotebookSource(identity)
+      : savedSource;
     if (!source) {
-      throw new Error("Kaggle did not return the saved notebook source. Quick Save the GPU notebook first.");
+      throw new Error("The canonical YTAgent Kaggle notebook source is unavailable.");
     }
     const { validateNotebookSource, buildNotebookSaveRequest, patchNotebookForBatchRun } = require("./kaggle-notebook");
     const runnableSource = patchNotebookForBatchRun(source);

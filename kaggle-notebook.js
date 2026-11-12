@@ -41,7 +41,7 @@ function buildNotebookSaveRequest(slug, source, metadata = {}) {
   const language = get("language", "language", "python");
   const kernelType = get("kernelType", "kernel_type", "notebook");
   const newTitle = get("title", "title", "YTAgent Free GPU Worker");
-  const sessionTimeoutSeconds = 43200;
+  const sessionTimeoutSeconds = 32400;
   const kernelExecutionType = "SaveAndRunAll";
   return {
     id: notebookId,

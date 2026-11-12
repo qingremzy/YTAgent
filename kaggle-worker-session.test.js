@@ -73,3 +73,31 @@ test("uses the canonical GitHub notebook instead of a stale Kaggle-saved copy", 
   assert.match(calls[1].args.text, /Canonical YTAgent notebook/);
   assert.doesNotMatch(calls[1].args.text, /# YTAgent/);
 });
+
+test("uses the Kaggle CLI runner when available instead of the short MCP save call", async () => {
+  const cliCalls = [];
+  const toolCalls = [];
+  const manager = createKaggleWorkerSessionManager({
+    getGpuWorkerStatus: () => ({ online: false }),
+    getNotebookIdentity: () => identity,
+    kaggleToolData: value => value,
+    getNotebookSource: async () => notebookSource(),
+    pushNotebookWithCli: async args => {
+      cliCalls.push(args);
+      return { cli: true, versionNumber: 8, timeoutSeconds: 43200 };
+    },
+    callKaggleTool: async (name, args) => {
+      toolCalls.push({ name, args });
+      if (name === "get_notebook_info") return { metadata: { machineShape: "NvidiaTeslaT4", enableGpu: true, enableInternet: true } };
+      throw new Error("Unexpected Kaggle tool " + name);
+    }
+  });
+  const result = await manager.ensure();
+  assert.equal(result.started, true);
+  assert.equal(result.versionNumber, 8);
+  assert.equal(cliCalls.length, 1);
+  assert.equal(cliCalls[0].identity.slug, identity.slug);
+  assert.match(cliCalls[0].source, /runpy\\.run_path/);
+  assert.equal(cliCalls[0].metadata.machineShape, "NvidiaTeslaT4");
+  assert.deepEqual(toolCalls.map(call => call.name), ["get_notebook_info"]);
+});

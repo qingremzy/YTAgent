@@ -79,7 +79,7 @@ async function pushNotebookWithKaggleCli({ identity, source, metadata = {} }) {
       "--accelerator", machineShape
     ], { timeoutMs: 120000 });
     const combined = result.stdout + "\n" + result.stderr;
-    const versionMatch = combined.match(/\\bversion(?:Number)?\\s*[:#]?\\s*(\\d+)/i);
+    const versionMatch = combined.match(/\bversion(?:Number)?\s*[:#]?\s*(\d+)/i);
     return {
       versionNumber: versionMatch ? Number(versionMatch[1]) : null,
       cli: true,

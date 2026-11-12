@@ -6,7 +6,8 @@ const identity = { userName: "samsonbamigboye", kernelSlug: "notebook477419e21e"
 
 function notebookSource() {
   return JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: {}, cells: [
-    { cell_type: "markdown", metadata: {}, source: ["# YTAgent"] },
+    { cell_type: "markdown", execution_count: null, metadata: {}, outputs: [], source: ["# YTAgent"] },
+    { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["worker_token = os.environ.get('YT_AGENT_WORKER_TOKEN')"] },
     { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["print('--run-once')"] }
   ] });
 }
@@ -100,4 +101,31 @@ test("uses the Kaggle CLI runner when available instead of the short MCP save ca
   assert.match(cliCalls[0].source, /runpy\\.run_path/);
   assert.equal(cliCalls[0].metadata.machineShape, "NvidiaTeslaT4");
   assert.deepEqual(toolCalls.map(call => call.name), ["get_notebook_info"]);
+});
+
+test("uses a one-time bootstrap token and sanitizes malformed markdown cells", async () => {
+  const bootstrapToken = "a".repeat(64);
+  let pushedSource = "";
+  const manager = createKaggleWorkerSessionManager({
+    getGpuWorkerStatus: () => ({ online: false }),
+    getNotebookIdentity: () => identity,
+    getNotebookSource: async () => notebookSource(),
+    getBootstrapToken: async () => bootstrapToken,
+    pushNotebookWithCli: async args => {
+      pushedSource = args.source;
+      return { cli: true, versionNumber: 9, timeoutSeconds: 43200 };
+    },
+    callKaggleTool: async name => {
+      if (name === "get_notebook_info") return { metadata: { machineShape: "NvidiaTeslaT4", enableGpu: true, enableInternet: true } };
+      throw new Error("Unexpected Kaggle tool " + name);
+    }
+  });
+  await manager.ensure();
+  const notebook = JSON.parse(pushedSource);
+  assert.equal(notebook.cells[0].execution_count, undefined);
+  assert.equal(notebook.cells[0].outputs, undefined);
+  const tokenCell = notebook.cells.find(cell => cell.cell_type === "code" && (Array.isArray(cell.source) ? cell.source.join("") : cell.source).includes("/api/worker/bootstrap"));
+  assert.ok(tokenCell);
+  assert.match(tokenCell.source.join(""), new RegExp(bootstrapToken));
+  assert.doesNotMatch(tokenCell.source.join(""), /get_secret/);
 });

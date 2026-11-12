@@ -114,45 +114,90 @@ async function requestStoryboard(topic) {
     "VISUAL DIRECTIONS: each visual_direction must contain 18 to 30 specific words describing one physical action, a clear subject, a real object, a recognizable setting and camera framing. Show the exact thing being explained at that moment. Prefer expressive 3D animated human characters, practical props, recognizable environments, close-ups, demonstrations and cause-and-effect actions. Keep recurring characters and key objects visually consistent, but give every scene a distinct action, setting or composition. " +
     "Do not use abstract swirling lines, orbiting dots, atom-like patterns, floating particles, generic glowing shapes, decorative science backgrounds, random stock imagery, text cards or static illustrations unless the topic specifically requires that exact phenomenon. No repeated compositions, locations or camera framing across adjacent scenes. Keep the main action large and readable in vertical 9:16. " +
     "Be scientifically accurate. Make every visual directly illustrate its narration line. Do not imitate any creator's characters, scripts, scenes or branding.";
-  // Hard zero-cost mode: only OpenRouter's explicitly free model route is allowed.
-  // openrouter/free routes only to currently available free models. Explicit :free variants are also allowed.
+  // Strict $0 mode: walk only providers/models with a genuine free tier.
+  // No trial-credit services, paid endpoints, or paid fallbacks are permitted.
   if (process.env.YTAGENT_ZERO_COST_MODE !== "false") {
-    if (!process.env.OPENROUTER_API_KEY) {
-      throw new Error("Zero-cost mode is active. Add an OpenRouter key and keep OPENROUTER_SCRIPT_MODEL on openrouter/free or a :free model. Paid AI providers are blocked.");
+    var freeFailures = [];
+    var freeCandidates = [];
+    var configuredOpenRouterModel = process.env.OPENROUTER_SCRIPT_MODEL || "openrouter/free";
+    if (process.env.OPENROUTER_API_KEY) {
+      var openRouterModels = [configuredOpenRouterModel, "openrouter/free",
+        "google/gemma-4-31b-it:free", "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "qwen/qwen3.8-27b:free"];
+      openRouterModels.filter(function(model, index, all) {
+        return (model === "openrouter/free" || /:free$/.test(model)) && all.indexOf(model) === index;
+      }).forEach(function(model) {
+        freeCandidates.push({ name: "OpenRouter " + model, run: async function() {
+          var response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + process.env.OPENROUTER_API_KEY, "Content-Type": "application/json",
+              "HTTP-Referer": process.env.APP_URL || "https://ytagent-production-1038.up.railway.app", "X-Title": "YTAgent" },
+            body: JSON.stringify({ model: model, messages: [
+              { role: "system", content: "Return exactly one valid JSON object. No markdown. Include exactly ten scenes and follow every schema and storytelling constraint." },
+              { role: "user", content: prompt }
+            ], temperature: 0.2, max_tokens: 8000, response_format: { type: "json_object" } }),
+            signal: AbortSignal.timeout(60000)
+          });
+          var data = await response.json().catch(function() { return {}; });
+          if (!response.ok) throw new Error("HTTP " + response.status + ": " + String(data.error && data.error.message || "request failed").slice(0, 220));
+          var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+          if (Array.isArray(content)) content = content.map(function(part) { return typeof part === "string" ? part : part && (part.text || part.content) || ""; }).join("");
+          if (typeof content !== "string" || !content.trim()) throw new Error("empty response");
+          return parseStoryboardJson(content);
+        }});
+      });
+    } else freeFailures.push("OpenRouter key missing");
+
+    // Groq's free plan has published hard rate limits and stops at quota.
+    if (process.env.GROQ_API_KEY) {
+      freeCandidates.push({ name: "Groq free tier", run: async function() {
+        var response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST", headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: process.env.GROQ_SCRIPT_MODEL || "openai/gpt-oss-20b",
+            messages: [{ role: "system", content: "Return exactly one valid JSON object. No markdown. Include exactly ten scenes." }, { role: "user", content: prompt }],
+            temperature: 0.2, max_completion_tokens: 8000, response_format: { type: "json_object" } }),
+          signal: AbortSignal.timeout(60000)
+        });
+        var data = await response.json().catch(function() { return {}; });
+        if (!response.ok) throw new Error("HTTP " + response.status + ": " + String(data.error && data.error.message || "request failed").slice(0, 220));
+        var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (typeof content !== "string" || !content.trim()) throw new Error("empty response");
+        return parseStoryboardJson(content);
+      }});
+    } else freeFailures.push("Groq key missing");
+
+    // Gemini is included only when explicitly marked as a no-billing free-tier project.
+    // Keep billing disabled on the Google Cloud project; this code cannot override account billing.
+    if (process.env.GEMINI_API_KEY && process.env.GEMINI_FREE_TIER_ONLY === "true") {
+      freeCandidates.push({ name: "Google Gemini free tier", run: async function() {
+        var model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+        var response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
+          method: "POST", headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json", temperature: 0.2, maxOutputTokens: 8000 } }),
+          signal: AbortSignal.timeout(60000)
+        });
+        var data = await response.json().catch(function() { return {}; });
+        if (!response.ok) throw new Error("HTTP " + response.status + ": " + String(data.error && data.error.message || "request failed").slice(0, 220));
+        var content = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts
+          ? data.candidates[0].content.parts.map(function(part) { return part.text || ""; }).join("") : "";
+        if (!content.trim()) throw new Error("empty response");
+        return parseStoryboardJson(content);
+      }});
+    } else if (process.env.GEMINI_API_KEY) freeFailures.push("Gemini skipped because GEMINI_FREE_TIER_ONLY is not true");
+
+    for (var candidate of freeCandidates) {
+      try {
+        var candidateStoryboard = validateStoryboard(await candidate.run());
+        console.log("YTAgent free story director succeeded:", candidate.name);
+        return candidateStoryboard;
+      } catch (error) {
+        freeFailures.push(candidate.name + ": " + String(error.message || error).slice(0, 260));
+        console.warn("YTAgent free story director fallback:", candidate.name, error.message || error);
+      }
     }
-    var freeModel = process.env.OPENROUTER_SCRIPT_MODEL || "openrouter/free";
-    if (freeModel !== "openrouter/free" && !/:free$/.test(freeModel)) {
-      throw new Error("Zero-cost mode allows only openrouter/free or an explicitly free :free model.");
-    }
-    var freeResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer " + process.env.OPENROUTER_API_KEY,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.APP_URL || "https://ytagent-production-1038.up.railway.app",
-        "X-Title": "YTAgent"
-      },
-      body: JSON.stringify({
-        model: freeModel,
-        messages: [
-          { role: "system", content: "Return exactly one valid JSON object. No markdown or commentary. Include exactly ten scenes and follow every schema and storytelling constraint." },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.2,
-        max_tokens: 8000,
-        response_format: { type: "json_object" }
-      }),
-      signal: AbortSignal.timeout(60000)
-    });
-    var freeData = await freeResponse.json().catch(function() { return {}; });
-    if (!freeResponse.ok) {
-      throw new Error("Free story director request failed (HTTP " + freeResponse.status + "): " + String(freeData.error && freeData.error.message || "free model unavailable").slice(0, 220) + ". No paid fallback was attempted.");
-    }
-    var freeContent = freeData.choices && freeData.choices[0] && freeData.choices[0].message && freeData.choices[0].message.content;
-    if (typeof freeContent !== "string" || !freeContent.trim()) {
-      throw new Error("The free story director returned no usable content. No paid fallback was attempted.");
-    }
-    return validateStoryboard(parseStoryboardJson(freeContent));
+    throw new Error("All configured free story directors failed. " + freeFailures.join(" | ") +
+      ". No paid provider or paid fallback was attempted. Add optional free-tier provider keys or retry after quota reset.");
   }
   var failures = [];
   if (process.env.GEMINI_API_KEY) {

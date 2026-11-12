@@ -11,11 +11,12 @@ function notebookSource() {
   ] });
 }
 
-function makeManager({ online = false, status = "COMPLETE", machineShape = "NvidiaTeslaT4", delay = 0 } = {}) {
+function makeManager({ online = false, status = "COMPLETE", machineShape = "NvidiaTeslaT4", delay = 0, canonicalSource = null } = {}) {
   const calls = [];
   const manager = createKaggleWorkerSessionManager({
     getGpuWorkerStatus: () => ({ online }),
     getNotebookIdentity: () => identity,
+    getNotebookSource: canonicalSource ? async () => canonicalSource : undefined,
     kaggleToolData: value => value,
     callKaggleTool: async (name, args) => {
       calls.push({ name, args });
@@ -60,4 +61,15 @@ test("deduplicates simultaneous notebook start requests", async () => {
 test("refuses to start a notebook without a configured GPU machine shape", async () => {
   const { manager } = makeManager({ machineShape: "" });
   await assert.rejects(manager.ensure(), /GPU machine shape/);
+});
+
+test("uses the canonical GitHub notebook instead of a stale Kaggle-saved copy", async () => {
+  const canonical = JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: {}, cells: [
+    { cell_type: "markdown", metadata: {}, source: ["# Canonical YTAgent notebook"] },
+    { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["print('--run-once')"] }
+  ] });
+  const { manager, calls } = makeManager({ canonicalSource: canonical });
+  await manager.ensure();
+  assert.match(calls[1].args.text, /Canonical YTAgent notebook/);
+  assert.doesNotMatch(calls[1].args.text, /# YTAgent/);
 });

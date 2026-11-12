@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
+const { validateNotebookSource, buildNotebookSaveRequest, patchNotebookForBatchRun } = require("./kaggle-notebook");
 
 function notebook() {
   return JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: {}, cells: [
@@ -32,4 +32,13 @@ test("builds save request while preserving Kaggle notebook settings", () => {
   assert.equal(request.machineShape, "NvidiaTeslaT4");
   assert.equal(request.enableInternet, true);
   assert.deepEqual(request.datasetDataSources, ["owner/data"]);
+});
+
+
+test("patches the notebook runner to execute the one-job worker in the Kaggle kernel", () => {
+  const patched = JSON.parse(patchNotebookForBatchRun(notebook()));
+  const runner = patched.cells.find(cell => cell.cell_type === "code");
+  assert.match(runner.source.join(""), /runpy\\.run_path/);
+  assert.match(runner.source.join(""), /--wait-seconds/);
+  assert.equal(validateNotebookSource(JSON.stringify(patched)), JSON.stringify(patched));
 });

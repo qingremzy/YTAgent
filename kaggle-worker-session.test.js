@@ -98,7 +98,7 @@ test("uses the Kaggle CLI runner when available instead of the short MCP save ca
   assert.equal(result.versionNumber, 8);
   assert.equal(cliCalls.length, 1);
   assert.equal(cliCalls[0].identity.slug, identity.slug);
-  assert.match(cliCalls[0].source, /runpy\\.run_path/);
+  assert.match(cliCalls[0].source, /runpy\.run_path/);
   assert.equal(cliCalls[0].metadata.machineShape, "NvidiaTeslaT4");
   assert.deepEqual(toolCalls.map(call => call.name), ["get_notebook_info"]);
 });

@@ -1156,15 +1156,19 @@ app.get("/api/generated/:filename", async (req, res) => {
 app.get("/api/kaggle/session-status", async (_req, res) => {
   try {
     const identity = kaggleNotebookIdentity();
-    const [sessionResult, infoResult] = await Promise.allSettled([
+    const [sessionResult, infoResult, outputResult] = await Promise.allSettled([
       callKaggleTool("get_notebook_session_status", { userName: identity.userName, kernelSlug: identity.kernelSlug }),
-      callKaggleTool("get_notebook_info", { userName: identity.userName, kernelSlug: identity.kernelSlug })
+      callKaggleTool("get_notebook_info", { userName: identity.userName, kernelSlug: identity.kernelSlug }),
+      callKaggleTool("list_notebook_session_output", { userName: identity.userName, kernelSlug: identity.kernelSlug, pageSize: 100, hasPageSize: true })
     ]);
     const session = sessionResult.status === "fulfilled" ? kaggleToolData(sessionResult.value) : null;
     const info = infoResult.status === "fulfilled" ? kaggleToolData(infoResult.value) : null;
-    res.status(session || info ? 200 : 502).json({
+    const output = outputResult.status === "fulfilled" ? kaggleToolData(outputResult.value) : null;
+    res.status(session || info || output ? 200 : 502).json({
       notebookRef: identity.slug,
       session,
+      outputLog: typeof output?.log === "string" ? output.log.slice(-12000) : null,
+      outputFiles: Array.isArray(output?.files) ? output.files.map(file => ({ fileName: file.fileName || file.file_name, size: file.size || null })) : [],
       notebook: info?.metadata ? {
         machineShape: info.metadata.machineShape || info.metadata.machine_shape || null,
         enableGpu: info.metadata.enableGpu ?? info.metadata.enable_gpu ?? null,

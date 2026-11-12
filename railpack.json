@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "node",
+  "packages": {
+    "node": "22",
+    "python": "3.11"
+  },
+  "steps": {
+    "install": {
+      "commands": [
+        "...",
+        "python -m venv /app/.venv && /app/.venv/bin/pip install --no-cache-dir kaggle"
+      ]
+    }
+  },
+  "deploy": {
+    "paths": [
+      "...",
+      "/app/.venv/bin"
+    ]
+  }
+}

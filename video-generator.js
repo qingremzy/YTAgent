@@ -171,24 +171,27 @@ async function requestStoryboard(topic) {
       });
     } else freeFailures.push("Groq key missing");
 
-    // Gemini is included only when explicitly marked as a no-billing free-tier project.
-    // Keep billing disabled on the Google Cloud project; this code cannot override account billing.
+    // Gemini is opt-in only when the Google project has billing disabled.
+    // Multiple free-tier model IDs are attempted, each as an independent fallback.
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_FREE_TIER_ONLY === "true") {
-      freeCandidates.push({ name: "Google Gemini free tier", run: async function() {
-        var model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-        var response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
-          method: "POST", headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json", temperature: 0.2, maxOutputTokens: 8000 } }),
-          signal: AbortSignal.timeout(60000)
-        });
-        var data = await response.json().catch(function() { return {}; });
-        if (!response.ok) throw new Error("HTTP " + response.status + ": " + String(data.error && data.error.message || "request failed").slice(0, 220));
-        var content = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts
-          ? data.candidates[0].content.parts.map(function(part) { return part.text || ""; }).join("") : "";
-        if (!content.trim()) throw new Error("empty response");
-        return parseStoryboardJson(content);
-      }});
+      var geminiModels = (process.env.GEMINI_FREE_MODELS || process.env.GEMINI_MODEL ||
+        "gemini-3.8-flash,gemini-3.6-flash,gemini-2.5-flash").split(",").map(function(model) { return model.trim(); }).filter(Boolean);
+      geminiModels.forEach(function(model) {
+        freeCandidates.push({ name: "Gemini free " + model, run: async function() {
+          var response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
+            method: "POST", headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { responseMimeType: "application/json", temperature: 0.2, maxOutputTokens: 8000 } }),
+            signal: AbortSignal.timeout(60000)
+          });
+          var data = await response.json().catch(function() { return {}; });
+          if (!response.ok) throw new Error("HTTP " + response.status + ": " + String(data.error && data.error.message || "request failed").slice(0, 220));
+          var content = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts
+            ? data.candidates[0].content.parts.map(function(part) { return part.text || ""; }).join("") : "";
+          if (!content.trim()) throw new Error("empty response");
+          return parseStoryboardJson(content);
+        }});
+      });
     } else if (process.env.GEMINI_API_KEY) freeFailures.push("Gemini skipped because GEMINI_FREE_TIER_ONLY is not true");
 
     for (var candidate of freeCandidates) {

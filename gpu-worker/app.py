@@ -184,35 +184,74 @@ def send_audio_to_server(remote_job_id, index, audio_path):
     with urllib.request.urlopen(request, timeout=90) as response:
         return json.loads(response.read().decode("utf-8") or "{}")
 
+def ensure_kokoro_runtime():
+    """Install narration dependencies only after Wan has finished using the GPU."""
+    try:
+        from kokoro import KPipeline
+        return KPipeline
+    except Exception as first_error:
+        print("Kokoro is not installed yet. Preparing the free local narrator after video rendering:", str(first_error)[:140], flush=True)
+    commands = [
+        [sys.executable, "-m", "pip", "install", "--quiet", "spacy>=3.8.2,<4", "num2words", "phonemizer-fork", "espeakng-loader", "loguru", "addict", "soundfile>=0.12.1"],
+        [sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "git+https://github.com/hexgrad/misaki.git"],
+        [sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "git+https://github.com/hexgrad/kokoro.git"]
+    ]
+    for command in commands:
+        subprocess.run(command, check=True)
+    if shutil.which("espeak-ng") is None:
+        subprocess.run(["apt-get", "-qq", "-y", "install", "espeak-ng"], check=True)
+    from kokoro import KPipeline
+    return KPipeline
+
+
 def get_kokoro_pipeline():
     global KOKORO_PIPE
     if KOKORO_PIPE is None:
-        from kokoro import KPipeline
+        KPipeline = ensure_kokoro_runtime()
         # CPU inference keeps GPU memory available for Wan and avoids a second model competing for VRAM.
         KOKORO_PIPE = KPipeline(lang_code="a", device="cpu")
     return KOKORO_PIPE
 
+
+def generate_espeak_audio(text, output_path):
+    """Last-resort offline narration if the Kokoro install or model fails."""
+    if shutil.which("espeak-ng") is None:
+        subprocess.run(["apt-get", "-qq", "-y", "install", "espeak-ng"], check=True)
+    subprocess.run(
+        ["espeak-ng", "-v", "en-us", "-s", "150", "-w", str(output_path)],
+        input=str(text), text=True, check=True, timeout=90
+    )
+    if not Path(output_path).is_file() or Path(output_path).stat().st_size < 1000:
+        raise RuntimeError("Offline eSpeak narration produced an empty audio file.")
+    print("Used offline eSpeak narration fallback.", flush=True)
+    return str(output_path)
+
+
 def generate_kokoro_audio(text, output_path):
     import numpy as np
     import soundfile as sf
-    pipeline = get_kokoro_pipeline()
-    voice = os.environ.get("KOKORO_VOICE", "am_fenrir")
-    speed = float(os.environ.get("KOKORO_SPEED", "1.0"))
-    speed = min(1.2, max(0.8, speed))
-    chunks = []
-    for _graphemes, _phonemes, audio in pipeline(str(text), voice=voice, speed=speed):
-        if audio is None:
-            continue
-        if hasattr(audio, "detach"):
-            audio = audio.detach().cpu().numpy()
-        chunks.append(np.asarray(audio, dtype=np.float32).reshape(-1))
-    if not chunks:
-        raise RuntimeError("Kokoro did not produce narration audio.")
-    waveform = np.concatenate(chunks)
-    sf.write(str(output_path), waveform, 24000, subtype="PCM_16")
-    if not Path(output_path).is_file() or Path(output_path).stat().st_size < 1000:
-        raise RuntimeError("Kokoro produced an empty narration file.")
-    return str(output_path)
+    try:
+        pipeline = get_kokoro_pipeline()
+        voice = os.environ.get("KOKORO_VOICE", "am_fenrir")
+        speed = float(os.environ.get("KOKORO_SPEED", "1.0"))
+        speed = min(1.2, max(0.8, speed))
+        chunks = []
+        for _graphemes, _phonemes, audio in pipeline(str(text), voice=voice, speed=speed):
+            if audio is None:
+                continue
+            if hasattr(audio, "detach"):
+                audio = audio.detach().cpu().numpy()
+            chunks.append(np.asarray(audio, dtype=np.float32).reshape(-1))
+        if not chunks:
+            raise RuntimeError("Kokoro did not produce narration audio.")
+        waveform = np.concatenate(chunks)
+        sf.write(str(output_path), waveform, 24000, subtype="PCM_16")
+        if not Path(output_path).is_file() or Path(output_path).stat().st_size < 1000:
+            raise RuntimeError("Kokoro produced an empty narration file.")
+        return str(output_path)
+    except Exception as exc:
+        print("Kokoro narration unavailable; using offline voice fallback:", str(exc)[:220], flush=True)
+        return generate_espeak_audio(text, output_path)
 
 def report_remote_failure(remote_job_id, message):
     if not SERVER_URL or not TOKEN:
@@ -341,7 +380,7 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
                     height=832,
                     width=480,
                     num_frames=97,
-                    num_inference_steps=int(os.environ.get("WAN_STEPS", "12")),
+                    num_inference_steps=int(os.environ.get("WAN_STEPS", "8")),
                     guidance_scale=5.0,
                     generator=generator
                 )

@@ -151,8 +151,7 @@ async function requestStoryboard(topic) {
     // Groq free plan models have published hard rate limits and stop at quota.
     // Try multiple models in sequence, without upgrading or switching to paid endpoints.
     if (process.env.GROQ_API_KEY) {
-      var groqModels = (process.env.GROQ_SCRIPT_MODELS || process.env.GROQ_SCRIPT_MODEL ||
-        "openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.8-27b").split(",").map(function(model) { return model.trim(); }).filter(Boolean);
+      var groqModels = (process.env.GROQ_SCRIPT_MODELS || [process.env.GROQ_SCRIPT_MODEL || "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"].join(",")).split(",").map(function(model) { return model.trim(); }).filter(Boolean);
       groqModels.forEach(function(model) {
         freeCandidates.push({ name: "Groq free " + model, run: async function() {
           var response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -174,8 +173,7 @@ async function requestStoryboard(topic) {
     // Gemini is opt-in only when the Google project has billing disabled.
     // Multiple free-tier model IDs are attempted, each as an independent fallback.
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_FREE_TIER_ONLY === "true") {
-      var geminiModels = (process.env.GEMINI_FREE_MODELS || process.env.GEMINI_MODEL ||
-        "gemini-3.8-flash,gemini-3.6-flash,gemini-2.5-flash").split(",").map(function(model) { return model.trim(); }).filter(Boolean);
+      var geminiModels = (process.env.GEMINI_FREE_MODELS || [process.env.GEMINI_MODEL || "gemini-3.8-flash", "gemini-3.6-flash", "gemini-2.5-flash"].join(",")).split(",").map(function(model) { return model.trim(); }).filter(Boolean);
       geminiModels.forEach(function(model) {
         freeCandidates.push({ name: "Gemini free " + model, run: async function() {
           var response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {

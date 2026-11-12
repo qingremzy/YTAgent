@@ -30,7 +30,13 @@ test("builds save request while preserving Kaggle notebook settings", () => {
   assert.equal(request.slug, "owner/worker");
   assert.equal(request.text, notebook());
   assert.equal(request.machineShape, "NvidiaTeslaT4");
+  assert.equal(request.machineShapeNullable, "NvidiaTeslaT4");
+  assert.equal(request.enableGpuNullable, true);
   assert.equal(request.enableInternet, true);
+  assert.equal(request.enableInternetNullable, true);
+  assert.equal(request.sessionTimeoutSeconds, 43200);
+  assert.equal(request.sessionTimeoutSecondsNullable, 43200);
+  assert.equal(request.kernelExecutionTypeNullable, "SaveAndRunAll");
   assert.deepEqual(request.datasetDataSources, ["owner/data"]);
 });
 

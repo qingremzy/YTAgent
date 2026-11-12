@@ -1226,6 +1226,18 @@ function kaggleToolData(result) {
   return result;
 }
 
+const workerBootstrapTokens = new Map();
+
+function issueWorkerBootstrapToken() {
+  const now = Date.now();
+  for (const [token, expiresAt] of workerBootstrapTokens) {
+    if (expiresAt <= now) workerBootstrapTokens.delete(token);
+  }
+  const token = require("crypto").randomBytes(32).toString("hex");
+  workerBootstrapTokens.set(token, now + 10 * 60 * 1000);
+  return token;
+}
+
 async function getCanonicalKaggleNotebookSource(identity) {
   const branch = String(process.env.GITHUB_BRANCH || "main").replace(/[^a-zA-Z0-9._-]/g, "");
   const url = "https://raw.githubusercontent.com/qingremzy/YTAgent/" + branch + "/gpu-worker/YTAgent_Free_GPU_Worker.ipynb";
@@ -1243,8 +1255,25 @@ const kaggleWorkerSessionManager = createKaggleWorkerSessionManager({
   getGpuWorkerStatus,
   getNotebookIdentity: kaggleNotebookIdentity,
   getNotebookSource: getCanonicalKaggleNotebookSource,
+  getBootstrapToken: () => issueWorkerBootstrapToken(),
   pushNotebookWithCli: pushNotebookWithKaggleCli,
   kaggleToolData
+});
+
+app.post("/api/worker/bootstrap", (req, res) => {
+  const authorization = String(req.get("authorization") || "");
+  const match = authorization.match(/^Bearer ([a-f0-9]{64})$/i);
+  if (!match) return res.status(401).json({ error: "Worker bootstrap token is invalid or expired." });
+  const expiresAt = workerBootstrapTokens.get(match[1]);
+  if (!expiresAt || expiresAt <= Date.now()) {
+    workerBootstrapTokens.delete(match[1]);
+    return res.status(401).json({ error: "Worker bootstrap token is invalid or expired." });
+  }
+  const workerToken = process.env.YT_AGENT_WORKER_TOKEN;
+  if (!workerToken) return res.status(503).json({ error: "YTAgent worker authentication is not configured." });
+  workerBootstrapTokens.delete(match[1]);
+  res.set("Cache-Control", "no-store");
+  return res.json({ token: workerToken });
 });
 
 app.get("/api/kaggle/notebook", requireAuth, async (_req, res) => {

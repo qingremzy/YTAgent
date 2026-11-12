@@ -7,7 +7,7 @@ const identity = { userName: "samsonbamigboye", kernelSlug: "notebook477419e21e"
 function notebookSource() {
   return JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: {}, cells: [
     { cell_type: "markdown", metadata: {}, source: ["# YTAgent"] },
-    { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["import sys\\n", "sys.argv = [\"app.py\", \"--run-once\"]\\n", "print(\"worker\")"] }
+    { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["print('--run-once')"] }
   ] });
 }
 
@@ -37,7 +37,7 @@ test("starts the saved GPU notebook when the worker is offline and no session is
   assert.deepEqual(calls.map(call => call.name), ["get_notebook_info", "save_notebook"]);
   assert.equal(calls[1].args.enableInternet, true);
   assert.equal(calls[1].args.kernelExecutionType, "SaveAndRunAll");
-  assert.match(calls[1].args.text, /runpy\\.run_path/);
+  assert.match(calls[1].args.text, /runpy\.run_path/);
   assert.equal(result.versionNumber, 7);
 });
 

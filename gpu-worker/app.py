@@ -47,6 +47,21 @@ def get_pipeline():
     global PIPE
     if PIPE is not None:
         return PIPE
+    # Maximize Hugging Face Xet download throughput before importing hub clients.
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "180")
+    os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+    # Optional Kaggle Secret: HF_TOKEN. Public model downloads still work without it.
+    if not os.environ.get("HF_TOKEN"):
+        try:
+            from kaggle_secrets import UserSecretsClient
+            hf_token = UserSecretsClient().get_secret("HF_TOKEN")
+            if hf_token:
+                os.environ["HF_TOKEN"] = hf_token
+                print("Hugging Face authentication loaded from Kaggle Secrets.", flush=True)
+        except Exception:
+            pass
     import torch
     from diffusers import AutoencoderKLWan, WanPipeline
     from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler

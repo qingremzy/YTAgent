@@ -35,26 +35,51 @@ function buildNotebookSaveRequest(slug, source, metadata = {}) {
   };
   const machineShape = get("machineShape", "machine_shape", "NvidiaTeslaT4");
   const notebookId = Number(get("id", "id", 0)) || null;
+  const enableGpu = get("enableGpu", "enable_gpu", Boolean(machineShape));
+  const enableInternet = get("enableInternet", "enable_internet", true);
+  const isPrivate = get("isPrivate", "is_private", true);
+  const language = get("language", "language", "python");
+  const kernelType = get("kernelType", "kernel_type", "notebook");
+  const newTitle = get("title", "title", "YTAgent Free GPU Worker");
+  const sessionTimeoutSeconds = 43200;
+  const kernelExecutionType = "SaveAndRunAll";
   return {
     id: notebookId,
+    idNullable: notebookId,
     hasId: Boolean(notebookId),
     slug,
-    newTitle: get("title", "title", "YTAgent Free GPU Worker"),
+    slugNullable: slug,
+    newTitle,
+    newTitleNullable: newTitle,
     text: source,
-    language: get("language", "language", "python"),
-    kernelType: get("kernelType", "kernel_type", "notebook"),
-    isPrivate: get("isPrivate", "is_private", true),
-    enableGpu: get("enableGpu", "enable_gpu", Boolean(machineShape)),
-    enableInternet: get("enableInternet", "enable_internet", true),
+    textNullable: source,
+    language,
+    languageNullable: language,
+    kernelType,
+    kernelTypeNullable: kernelType,
+    isPrivate,
+    isPrivateNullable: isPrivate,
+    enableGpu,
+    enableGpuNullable: enableGpu,
+    enableInternet,
+    enableInternetNullable: enableInternet,
     machineShape,
+    machineShapeNullable: machineShape,
     datasetDataSources: get("datasetDataSources", "dataset_data_sources", []),
+    datasetDataSourcesSetter: get("datasetDataSources", "dataset_data_sources", []),
     kernelDataSources: get("kernelDataSources", "kernel_data_sources", []),
+    kernelDataSourcesSetter: get("kernelDataSources", "kernel_data_sources", []),
     competitionDataSources: get("competitionDataSources", "competition_data_sources", []),
+    competitionDataSourcesSetter: get("competitionDataSources", "competition_data_sources", []),
     modelDataSources: get("modelDataSources", "model_data_sources", []),
+    modelDataSourcesSetter: get("modelDataSources", "model_data_sources", []),
     categoryIds: get("categoryIds", "category_ids", []),
-    kernelExecutionType: "SaveAndRunAll",
+    categoryIdsSetter: get("categoryIds", "category_ids", []),
+    kernelExecutionType,
+    kernelExecutionTypeNullable: kernelExecutionType,
     hasKernelExecutionType: true,
-    sessionTimeoutSeconds: 43200,
+    sessionTimeoutSeconds,
+    sessionTimeoutSecondsNullable: sessionTimeoutSeconds,
     hasSessionTimeoutSeconds: true,
     hasEnableGpu: true,
     hasEnableInternet: true,

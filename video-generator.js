@@ -122,8 +122,15 @@ async function requestStoryboard(topic) {
     var configuredOpenRouterModel = process.env.OPENROUTER_SCRIPT_MODEL || "openrouter/free";
     if (process.env.OPENROUTER_API_KEY) {
       var openRouterModels = [configuredOpenRouterModel, "openrouter/free",
-        "google/gemma-4-31b-it:free", "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "qwen/qwen3.8-27b:free"];
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3.5-super-vl:free",
+        "nvidia/nemotron-3.5-lightning:free",
+        "google/gemma-4-31b-it:free",
+        "recursive/flint-v1.0:free",
+        "cohere/north-mini-code:free",
+        "baidu/ernie-5.5-flash-preview:free",
+        "thinkingmachines/inkling-2-small:free",
+        "liquid/lfm-3-1.7b:free"];
       openRouterModels.filter(function(model, index, all) {
         return (model === "openrouter/free" || /:free$/.test(model)) && all.indexOf(model) === index;
       }).forEach(function(model) {

@@ -7,6 +7,7 @@ function createKaggleWorkerSessionManager({
   getGpuWorkerStatus,
   getNotebookIdentity,
   getNotebookSource,
+  pushNotebookWithCli,
   kaggleToolData = value => value
 }) {
   if (typeof callKaggleTool !== "function" ||
@@ -71,7 +72,12 @@ function createKaggleWorkerSessionManager({
     lastStartAt = now;
     let operation;
     try {
-      operation = kaggleToolData(await callKaggleTool("save_notebook", request));
+      operation = typeof pushNotebookWithCli === "function"
+        ? await pushNotebookWithCli({ identity, source: runnableSource, metadata })
+        : null;
+      if (operation === null) {
+        operation = kaggleToolData(await callKaggleTool("save_notebook", request));
+      }
     } catch (error) {
       lastStartAt = 0;
       throw error;

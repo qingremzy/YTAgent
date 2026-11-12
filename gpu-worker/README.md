@@ -22,6 +22,8 @@ This worker runs the open Wan 2.1 T2V 1.3B Diffusers model on a temporary Kaggle
 
 ## Notebook setup
 
+### Primary: Kaggle
+
 Open `YTAgent_Free_GPU_Worker.ipynb` in Kaggle. Run the cells in order:
 
 1. Pull the latest repository code and install worker packages.
@@ -45,3 +47,19 @@ Kokoro model, voice samples and license: https://huggingface.co/hexgrad/Kokoro-8
 - If the free GPU session disconnects, restart the notebook and run the setup cells again.
 - If the worker is running but no job starts, check that YTAgent's private `YT_AGENT_WORKER_TOKEN` matches the Kaggle secret.
 - The worker no longer needs `VIDEO_WORKER_URL`, a Cloudflare URL, or a tunnel process.
+
+
+### Backup: Google Colab free GPU
+
+Open `YTAgent_Colab_Free_GPU_Worker.ipynb` in Google Colab if Kaggle has no GPU available. Select a GPU runtime if Colab offers one, then add `YT_AGENT_WORKER_TOKEN` to Colab Secrets (key icon) and allow notebook access. Run the cells in order.
+
+Colab's free GPU is a useful backup, not a guaranteed replacement: hardware, session duration and availability change dynamically. The free tier is intended for interactive notebook use. Do not purchase compute units or upgrade for this project.
+
+## Zero-cost provider policy
+
+YTAgent's default production mode is strict zero-cost:
+- Story generation uses only an OpenRouter model ID ending in `:free`.
+- Hosted video-generation APIs are not called.
+- Hosted text-to-speech fallbacks are disabled. Narration must come from local Kokoro in the GPU worker.
+- If a free provider is unavailable or its quota is exhausted, the job stops with an error instead of switching to a paid provider.
+- Never add prepaid credits or enable paid fallbacks for YTAgent.

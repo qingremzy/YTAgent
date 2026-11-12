@@ -107,6 +107,46 @@ function validateStoryboard(storyboard) {
 }
 
 async function requestStoryboard(topic) {
+  // Hard zero-cost mode: only OpenRouter's explicitly free model route is allowed.
+  // A :free model is priced at $0 and cannot fall through to a paid provider.
+  if (process.env.YTAGENT_ZERO_COST_MODE !== "false") {
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error("Zero-cost mode is active. Add an OpenRouter key and keep OPENROUTER_SCRIPT_MODEL on a :free model. Paid AI providers are blocked.");
+    }
+    var freeModel = process.env.OPENROUTER_SCRIPT_MODEL || "openai/gpt-oss-20b:free";
+    if (freeModel !== "openrouter/free" && !/:free$/.test(freeModel)) {
+      throw new Error("Zero-cost mode blocked the configured model because it is not explicitly marked :free.");
+    }
+    var freeResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + process.env.OPENROUTER_API_KEY,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.APP_URL || "https://ytagent-production-1038.up.railway.app",
+        "X-Title": "YTAgent"
+      },
+      body: JSON.stringify({
+        model: freeModel,
+        messages: [
+          { role: "system", content: "Return exactly one valid JSON object. No markdown or commentary. Include exactly ten scenes and follow every schema and storytelling constraint." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.2,
+        max_tokens: 8000,
+        response_format: { type: "json_object" }
+      }),
+      signal: AbortSignal.timeout(60000)
+    });
+    var freeData = await freeResponse.json().catch(function() { return {}; });
+    if (!freeResponse.ok) {
+      throw new Error("Free story director request failed (HTTP " + freeResponse.status + "): " + String(freeData.error && freeData.error.message || "free model unavailable").slice(0, 220) + ". No paid fallback was attempted.");
+    }
+    var freeContent = freeData.choices && freeData.choices[0] && freeData.choices[0].message && freeData.choices[0].message.content;
+    if (typeof freeContent !== "string" || !freeContent.trim()) {
+      throw new Error("The free story director returned no usable content. No paid fallback was attempted.");
+    }
+    return validateStoryboard(parseStoryboardJson(freeContent));
+  }
   var prompt = "Create an original, factual, high-retention 60-second vertical YouTube explainer about: \"" + cleanText(topic, 180) + "\".\n" +
     "Return ONE valid JSON object only. Required keys: title, description, tags, hashtags, keywords, scenes. Exactly 10 scenes. Every scene must contain title, narration, caption and visual_direction. " +
     "NARRATION IS THE PRIORITY: write a connected spoken explanation, not ten disconnected facts or poetic fragments. Each scene line must contain 12 to 16 natural spoken words. Across the ten lines, explain what is happening, why it happens, how it works, what changes next, and the surprising result. Use plain conversational English, specific nouns, active verbs, short transitions and useful facts. No filler, vague hype, repeated hooks, rhetorical padding or unexplained jargon. The narrator should sound like an engaging documentary presenter teaching one curious viewer. " +
@@ -221,18 +261,7 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
-  // Agnes is attempted only when the user has explicitly confirmed a no-charge quota.
-  if (process.env.AGNES_API_KEY && process.env.AGNES_FREE_QUOTA_CONFIRMED === "true") {
-    try {
-      if (onProgress) onProgress(10, "Generating cinematic scenes with Agnes AI.");
-      const clips = await generateSceneClips(scenes, topic, workDir);
-      if (onProgress) onProgress(86, "Agnes scenes are ready. Preparing narration.");
-      return { clips, provider: "Agnes AI" };
-    } catch (error) {
-      console.warn("Agnes visual generation failed:", error.message || error);
-    }
-  }
-
+  // Zero-cost mode never calls hosted video-generation APIs.
   if (!process.env.YT_AGENT_WORKER_TOKEN) {
     throw new Error("Real 3D video generation is unavailable. Configure the private GPU worker token and start the free Kaggle worker. YTAgent stopped instead of returning abstract artwork.");
   }
@@ -264,59 +293,8 @@ function shouldAttemptGroqTts(voiceState = {}, env = process.env) {
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function generateNarration(text, outputPath, voiceState = {}) {
-  const narration = cleanText(text, 220);
-  if (!narration) throw new Error("One scene is missing its narration.");
-  if (shouldAttemptGroqTts(voiceState)) {
-    try {
-      const response = await fetch("https://api.groq.com/openai/v1/audio/speech", {
-        method: "POST",
-        headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: process.env.GROQ_TTS_MODEL || "canopylabs/orpheus-v1-english",
-          input: narration,
-          voice: process.env.GROQ_TTS_VOICE || "hannah",
-          response_format: "wav"
-        }),
-        signal: AbortSignal.timeout(45000)
-      });
-      if (response.ok) {
-        const audio = Buffer.from(await response.arrayBuffer());
-        if (audio.length > 1000) {
-          await fs.promises.writeFile(outputPath, audio);
-          return { provider: "Groq Orpheus", path: outputPath };
-        }
-        console.warn("Groq voice generation returned an empty audio file. Trying the free voice fallback.");
-      } else {
-        const detail = await response.text().catch(() => "");
-        console.warn("Groq voice generation failed:", response.status, detail.slice(0, 220));
-        if (response.status === 429) voiceState.groqRateLimited = true;
-      }
-    } catch (error) {
-      console.warn("Groq voice generation request failed. Trying the free voice fallback:", error.message || error);
-    }
-  }
-  const { EdgeTTS } = require("node-edge-tts");
-  const mp3Path = outputPath.replace(/\\.wav$/i, ".mp3");
-  let edgeError;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      if (attempt > 0) await wait(edgeTtsRetryDelayMs(attempt - 1));
-      const tts = new EdgeTTS({
-        voice: process.env.EDGE_TTS_VOICE || "en-US-ChristopherNeural",
-        lang: "en-US",
-        outputFormat: "audio-24khz-96kbitrate-mono-mp3",
-        timeout: 30000
-      });
-      await tts.ttsPromise(narration, mp3Path);
-      return { provider: "Microsoft Edge TTS", path: mp3Path };
-    } catch (error) {
-      edgeError = error;
-      if (!isRateLimitError(error) || attempt === 2) break;
-      console.warn("Microsoft Edge TTS is rate-limiting requests. Retrying after a short delay.");
-    }
-  }
-  throw new Error("Voice generation failed. Groq TTS may be rate-limited and Microsoft Edge TTS could not recover after retries: " + (edgeError && edgeError.message || "unknown error"));
+async function generateNarration() {
+  throw new Error("Zero-cost mode requires Kokoro narration from the free GPU worker. Hosted TTS fallbacks are disabled.");
 }
 
 function sceneArtwork(scene, index, total) {
@@ -362,8 +340,11 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
       if (result && typeof result.catch === "function") result.catch(() => {});
     } catch (_) {}
   };
-  if (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) {
-    throw new Error("Add GEMINI_API_KEY or GROQ_API_KEY in Railway Variables before generating videos.");
+  if (process.env.YTAGENT_ZERO_COST_MODE !== "false" && !process.env.OPENROUTER_API_KEY) {
+    throw new Error("Zero-cost mode requires an OpenRouter key for its explicitly free :free model route.");
+  }
+  if (process.env.YTAGENT_ZERO_COST_MODE === "false" && !process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) {
+    throw new Error("Configure an AI director key before generating videos.");
   }
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable on this server.");
   reportProgress(2, "AI director is researching the topic and writing the story.");

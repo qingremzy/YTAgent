@@ -2,7 +2,8 @@
 cmds = ["npm run build"]
 
 [phases.setup]
-nixPkgs = ["fontconfig", "dejavu_fonts"]
+nixPkgs = ["fontconfig", "dejavu_fonts", "python311", "python311Packages.pip"]
+cmds = ["python3 -m pip install --break-system-packages --no-cache-dir kaggle"]
 
 [variables]
 FONTCONFIG_FILE = "/etc/fonts/fonts.conf"

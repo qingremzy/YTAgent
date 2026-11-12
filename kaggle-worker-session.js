@@ -86,6 +86,7 @@ function createKaggleWorkerSessionManager({
       lastStartAt = 0;
       throw new Error(String(operation.error));
     }
+    console.log("YTAgent Kaggle launch method:", operation?.cli ? "Kaggle CLI" : "Kaggle MCP", "version:", operation?.versionNumber || operation?.version_number || "pending", "timeoutSeconds:", operation?.timeoutSeconds || request.sessionTimeoutSeconds || "provider default");
 
     return {
       started: true,

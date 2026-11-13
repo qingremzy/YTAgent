@@ -85,14 +85,36 @@ form.addEventListener("submit", async event => {
   } catch (error) { result.textContent = error.message; }
   finally { submit.disabled = false; submit.textContent = "Publish to YouTube"; }
 });
-document.getElementById("runCommand").addEventListener("click", () => {
+document.getElementById("runCommand").addEventListener("click", async () => {
   const command = document.getElementById("command").value.trim().toLowerCase();
   const reply = document.getElementById("commandReply");
+  const button = document.getElementById("runCommand");
   if (!command) { reply.textContent = "Type a command first."; return; }
+  if (/self[- ]?test|diagnos|system check|check (the )?system|health check/.test(command)) {
+    button.disabled = true;
+    button.textContent = "Checking…";
+    reply.textContent = "Running read-only system checks. No video will be generated and nothing will be published.";
+    try {
+      const response = await fetch("/api/diagnostics", { cache: "no-store" });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || "System diagnostics failed.");
+      const lines = (data.checks || []).map(item => {
+        const mark = item.status === "passed" || item.status === "configured" ? "✓" : item.status === "failed" ? "✕" : "!";
+        return mark + " " + item.name + ": " + item.detail;
+      });
+      reply.textContent = data.summary + "\n" + lines.join("\n") + "\nChecked: " + data.checkedAt;
+    } catch (error) {
+      reply.textContent = "Diagnostic request failed: " + error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Run";
+    }
+    return;
+  }
   if (command.includes("post") || command.includes("upload") || command.includes("video") || command.includes("publish")) {
     videoInput.click();
     reply.textContent = "Choose your video, analyse it, review the generated details, then publish.";
-  } else reply.textContent = 'Try: "analyse and publish my video".';
+  } else reply.textContent = "Try: run a complete self-test, or analyse and publish my video.";
 });
 
 const generatorForm = document.getElementById("generatorForm");

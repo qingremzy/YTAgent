@@ -1394,6 +1394,64 @@ app.get("/health", (_req, res) => res.json({
   },
   durabilityReady: Boolean(redisConnection && redisConnection.status === "ready" && objectStorage.configured)
 }));
+
+app.get("/api/diagnostics", async (req, res) => {
+  const checks = [];
+  const add = (name, status, detail) => checks.push({ name, status, detail });
+  add("Backend API", "passed", "Express server is responding.");
+  add("Video engine", "passed", "Video generation module loaded.");
+  const storyConfigured = Boolean(process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY || process.env.AGENT_API_KEY);
+  add("AI story provider", storyConfigured ? "configured" : "warning",
+    storyConfigured ? "At least one story-provider key is configured. This checks configuration, not a billable generation." : "No story-provider key was detected.");
+  add("Gemini video analysis", process.env.GEMINI_API_KEY ? "configured" : "warning",
+    process.env.GEMINI_API_KEY ? "Gemini API key is present; live inference was not triggered." : "GEMINI_API_KEY is missing.");
+  const zeroCost = process.env.YTAGENT_ZERO_COST_MODE === "true" || process.env.GEMINI_FREE_TIER_ONLY === "true";
+  add("Free-tier mode", zeroCost ? "configured" : "info", "Zero-cost mode: " + (zeroCost ? "enabled" : "not explicitly enabled") + ".");
+  add("Redis queue", redisConnection && redisConnection.status === "ready" ? "passed" : "warning",
+    redisConnection && redisConnection.status === "ready" ? "Redis is connected; background jobs use durable queues." : "Redis is not connected; jobs use process-local storage and can be lost on restart.");
+  add("Cloud storage", objectStorage.configured ? "passed" : "warning",
+    objectStorage.configured ? "Cloudflare R2 is configured." : "R2 is not configured; generated MP4s and studio projects expire after six hours.");
+  add("Kaggle credentials", process.env.KAGGLE_API_TOKEN ? "configured" : "warning",
+    process.env.KAGGLE_API_TOKEN ? "Kaggle API token is present." : "KAGGLE_API_TOKEN is missing.");
+  if (process.env.KAGGLE_API_TOKEN) {
+    try {
+      const kaggleTools = await Promise.race([
+        listKaggleTools(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Kaggle check timed out after 10 seconds.")), 10000))
+      ]);
+      add("Kaggle MCP", "passed", "Kaggle responded with " + kaggleTools.length + " available tools.");
+    } catch (error) {
+      add("Kaggle MCP", "failed", String(error.message || error).slice(0, 240));
+    }
+  } else {
+    add("Kaggle MCP", "blocked", "Skipped because Kaggle credentials are not configured.");
+  }
+  add("GPU worker", "info", JSON.stringify(getGpuWorkerStatus()).slice(0, 500));
+  if (req.session && req.session.tokens) {
+    try {
+      const auth = oauthClient();
+      auth.setCredentials(req.session.tokens);
+      const yt = google.youtube({ version: "v3", auth });
+      const response = await yt.channels.list({ part: ["snippet"], mine: true });
+      const channel = response.data.items && response.data.items[0];
+      add("YouTube OAuth", "passed", "Connected to " + ((channel && channel.snippet && channel.snippet.title) || "a YouTube channel") + ".");
+    } catch (_) {
+      add("YouTube OAuth", "failed", "The saved YouTube session could not be verified. Reconnect before publishing.");
+    }
+  } else {
+    add("YouTube OAuth", "not_connected", "No YouTube account is connected in this browser session. Publishing is unavailable until connected.");
+  }
+  const failed = checks.filter(item => item.status === "failed").length;
+  const warnings = checks.filter(item => ["warning", "blocked", "not_connected"].includes(item.status)).length;
+  res.set("Cache-Control", "no-store");
+  res.json({
+    ok: failed === 0,
+    summary: failed ? failed + " failed check(s), " + warnings + " warning(s)." : warnings ? "Core service is online with " + warnings + " configuration warning(s)." : "All configured checks passed.",
+    checkedAt: new Date().toISOString(),
+    checks
+  });
+});
+
 app.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Video is too large. Maximum size is 256 MB." });
   res.status(400).json({ error: err.message || "Something went wrong." });

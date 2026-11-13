@@ -86,9 +86,10 @@ def get_pipeline():
         num_train_timesteps=1000,
         flow_shift=3.0
     )
-    # Sequential offload is slower, but safer on Kaggle's 16 GB T4 during first load and rendering.
-    print("Enabling sequential CPU offload for the Tesla T4...", flush=True)
-    PIPE.enable_sequential_cpu_offload()
+    # The 1.3B model fits the T4 GPU with model-level offload. This is
+    # substantially faster than sequential layer-by-layer CPU offload.
+    print("Enabling model-level CPU offload for the Kaggle T4...", flush=True)
+    PIPE.enable_model_cpu_offload()
     try:
         PIPE.enable_vae_slicing()
         PIPE.enable_vae_tiling()
@@ -379,8 +380,10 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
                     prompt=prompt,
                     height=832,
                     width=480,
-                    num_frames=97,
-                    num_inference_steps=int(os.environ.get("WAN_STEPS", "8")),
+                    # Wan frame counts must be 4*k+1. 49 frames at 8 FPS
+                    # preserves the six-second scene while nearly halving frame work.
+                    num_frames=int(os.environ.get("WAN_NUM_FRAMES", "49")),
+                    num_inference_steps=int(os.environ.get("WAN_STEPS", "6")),
                     guidance_scale=5.0,
                     generator=generator
                 )
@@ -388,7 +391,7 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
                 stop_remote_progress_heartbeat(scene_heartbeat)
             frames = result.frames[0]
             clip_path = work / f"scene-{index:02d}.mp4"
-            export_to_video(frames, str(clip_path), fps=16)
+            export_to_video(frames, str(clip_path), fps=int(os.environ.get("WAN_FPS", "8")))
             clips.append(clip_path)
             if remote_job_id:
                 send_scene_to_server(remote_job_id, index, clip_path)

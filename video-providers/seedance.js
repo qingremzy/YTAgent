@@ -9,6 +9,29 @@ const PAIR_SECONDS = 12;
 const POLL_MS = 10000;
 const TASK_TIMEOUT_MS = 20 * 60 * 1000;
 
+function enabled(value) {
+  return ["true", "1", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+// Seedance through BytePlus ModelArk is a paid API. Never submit a generation
+// request in YTAgent's default $0 mode, even if an API key is present.
+function assertSeedanceBillingAllowed(env = process.env) {
+  const zeroCostMode = String(env.YTAGENT_ZERO_COST_MODE || "true").trim().toLowerCase() !== "false";
+  if (zeroCostMode) {
+    throw new Error("Seedance blocked: YTAGENT_ZERO_COST_MODE is active. BytePlus ModelArk Seedance is not a verified free API. No request was submitted and no credits were consumed.");
+  }
+  if (!enabled(env.ARK_ALLOW_PAID_VIDEO_APIS)) {
+    throw new Error("Seedance blocked: explicit paid-API approval is missing. Set ARK_ALLOW_PAID_VIDEO_APIS=true only after you knowingly authorize paid usage.");
+  }
+  if (!enabled(env.ARK_SEEDANCE_ENABLED)) {
+    throw new Error("Seedance is disabled. Set ARK_SEEDANCE_ENABLED=true to request it after paid usage is explicitly authorized.");
+  }
+  if (!env.ARK_API_KEY) {
+    throw new Error("ARK_API_KEY is missing. No Seedance request was submitted.");
+  }
+  return true;
+}
+
 function clean(value, max = 500) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
 }
@@ -126,8 +149,8 @@ function splitClip(source, destination, start) {
 }
 
 async function generateSeedanceSceneClips(scenes, topic, workDir, onProgress = () => {}) {
+  assertSeedanceBillingAllowed(process.env);
   const apiKey = process.env.ARK_API_KEY;
-  if (!apiKey) throw new Error("ARK_API_KEY is missing from the YTAgent environment.");
   if (!Array.isArray(scenes) || scenes.length !== 10) throw new Error("Seedance requires exactly ten storyboard scenes.");
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable for splitting Seedance clips.");
 
@@ -151,4 +174,4 @@ async function generateSeedanceSceneClips(scenes, topic, workDir, onProgress = (
   return clips;
 }
 
-module.exports = { generateSeedanceSceneClips, buildPrompt, requestJson };
+module.exports = { generateSeedanceSceneClips, buildPrompt, requestJson, assertSeedanceBillingAllowed };

@@ -9,6 +9,8 @@ function createKaggleWorkerSessionManager({
   getNotebookSource,
   getBootstrapToken,
   pushNotebookWithCli,
+  getKaggleKernelStatus,
+  statusPollIntervalMs = 30000,
   kaggleToolData = value => value
 }) {
   if (typeof callKaggleTool !== "function" ||
@@ -17,11 +19,64 @@ function createKaggleWorkerSessionManager({
   }
   let startPromise = null;
   let lastStartAt = 0;
+  let statusTimer = null;
+  let statusPollInFlight = false;
 
-  async function startIfNeeded() {
+  function stopStatusMonitor() {
+    if (statusTimer) clearInterval(statusTimer);
+    statusTimer = null;
+  }
+
+  function parseKernelState(value) {
+    const raw = String(value || "");
+    const match = raw.match(/KernelWorkerStatus\.([A-Z_]+)/i) ||
+      raw.match(/\b(QUEUED|RUNNING|COMPLETE|ERROR|CANCEL_REQUESTED|CANCEL_ACKNOWLEDGED|NEW_SCRIPT)\b/i);
+    return match ? match[1].toUpperCase() : "UNKNOWN";
+  }
+
+  function startStatusMonitor(identity, onStatus) {
+    if (typeof getKaggleKernelStatus !== "function" || statusTimer) return;
+    const poll = async () => {
+      if (statusPollInFlight) return;
+      const workerStatus = typeof getGpuWorkerStatus === "function" ? getGpuWorkerStatus() : null;
+      if (workerStatus?.online) {
+        stopStatusMonitor();
+        return;
+      }
+      statusPollInFlight = true;
+      try {
+        const result = await getKaggleKernelStatus(identity);
+        const raw = typeof result === "string" ? result : (result?.status || "");
+        const state = parseKernelState(raw);
+        console.log("YTAgent Kaggle live kernel status:", state, String(raw).slice(-350));
+        if (typeof onStatus === "function") {
+          try {
+            await onStatus({ state, raw: String(raw).slice(-1000), terminal: ["COMPLETE", "ERROR", "CANCEL_ACKNOWLEDGED"].includes(state) });
+          } catch (error) {
+            console.error("YTAgent Kaggle status callback failed:", error.message || error);
+          }
+        }
+        if (["COMPLETE", "ERROR", "CANCEL_ACKNOWLEDGED"].includes(state)) {
+          stopStatusMonitor();
+          lastStartAt = 0;
+          console.error("YTAgent Kaggle notebook ended before the worker connected:", state);
+        }
+      } catch (error) {
+        console.error("YTAgent Kaggle status poll failed; retaining the existing run:", String(error.message || error).slice(0, 300));
+      } finally {
+        statusPollInFlight = false;
+      }
+    };
+    void poll();
+    statusTimer = setInterval(poll, Math.max(5000, Number(statusPollIntervalMs) || 30000));
+    if (statusTimer.unref) statusTimer.unref();
+  }
+
+  async function startIfNeeded({ onStatus } = {}) {
     const identity = getNotebookIdentity();
     const workerStatus = typeof getGpuWorkerStatus === "function" ? getGpuWorkerStatus() : null;
     if (workerStatus?.online) {
+      stopStatusMonitor();
       return {
         started: false,
         alreadyRunning: true,
@@ -99,6 +154,7 @@ function createKaggleWorkerSessionManager({
     console.log("YTAgent Kaggle launch method:", operation?.cli ? "Kaggle CLI" : "Kaggle MCP", "version:", operation?.versionNumber || operation?.version_number || "pending", "timeoutSeconds:", operation?.timeoutSeconds || request.sessionTimeoutSeconds || "provider default");
     if (operation?.runStatus) console.log("YTAgent Kaggle execution status after push:", String(operation.runStatus).slice(0, 500));
 
+    startStatusMonitor(identity, onStatus);
     return {
       started: true,
       alreadyRunning: false,
@@ -110,9 +166,10 @@ function createKaggleWorkerSessionManager({
     };
   }
 
-  async function ensure() {
+  async function ensure(options = {}) {
     const workerStatus = typeof getGpuWorkerStatus === "function" ? getGpuWorkerStatus() : null;
     if (workerStatus?.online) {
+      stopStatusMonitor();
       return {
         started: false,
         alreadyRunning: true,
@@ -122,7 +179,7 @@ function createKaggleWorkerSessionManager({
       };
     }
     if (startPromise) return startPromise;
-    startPromise = startIfNeeded();
+    startPromise = startIfNeeded(options);
     try {
       return await startPromise;
     } finally {
@@ -130,7 +187,7 @@ function createKaggleWorkerSessionManager({
     }
   }
 
-  return { ensure };
+  return { ensure, stopStatusMonitor };
 }
 
 module.exports = { createKaggleWorkerSessionManager, ACTIVE_SESSION_STATES };

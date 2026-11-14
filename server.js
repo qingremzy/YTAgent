@@ -1087,7 +1087,18 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
           if (!process.env.KAGGLE_API_TOKEN) {
             throw new Error("KAGGLE_API_TOKEN is missing. Configure Kaggle access before starting the free GPU worker.");
           }
-          const result = await kaggleWorkerSessionManager.ensure();
+          const result = await kaggleWorkerSessionManager.ensure({
+            onStatus: ({ state, raw, terminal }) => {
+              if (!terminal) {
+                console.log("YTAgent Kaggle queue monitor:", state);
+                return;
+              }
+              const detail = state === "ERROR"
+                ? "Kaggle notebook execution failed before the YTAgent worker connected. Check the Kaggle notebook logs. " + raw
+                : "Kaggle notebook ended with status " + state + " before the YTAgent worker connected.";
+              failGpuJob(gpuJobId, detail.slice(0, 480));
+            }
+          });
           if (result.started) {
             console.log("YTAgent launched the Kaggle GPU batch for queued job:", gpuJobId, result.notebookRef);
           }
@@ -1336,6 +1347,7 @@ const kaggleWorkerSessionManager = createKaggleWorkerSessionManager({
   getNotebookSource: getCanonicalKaggleNotebookSource,
   getBootstrapToken: () => issueWorkerBootstrapToken(),
   pushNotebookWithCli: pushNotebookWithKaggleCli,
+  getKaggleKernelStatus,
   kaggleToolData
 });
 
@@ -1576,7 +1588,18 @@ if (redisEnabled) {
           if (!process.env.KAGGLE_API_TOKEN) {
             throw new Error("KAGGLE_API_TOKEN is missing. Configure Kaggle access before starting the free GPU worker.");
           }
-          const result = await kaggleWorkerSessionManager.ensure();
+          const result = await kaggleWorkerSessionManager.ensure({
+            onStatus: ({ state, raw, terminal }) => {
+              if (!terminal) {
+                console.log("YTAgent Kaggle queue monitor:", state);
+                return;
+              }
+              const detail = state === "ERROR"
+                ? "Kaggle notebook execution failed before the YTAgent worker connected. Check the Kaggle notebook logs. " + raw
+                : "Kaggle notebook ended with status " + state + " before the YTAgent worker connected.";
+              failGpuJob(gpuJobId, detail.slice(0, 480));
+            }
+          });
           if (result.started) {
             console.log("YTAgent launched the Kaggle GPU batch for queued Redis job:", gpuJobId, result.notebookRef);
           }

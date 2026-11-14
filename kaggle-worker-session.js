@@ -33,13 +33,16 @@ function createKaggleWorkerSessionManager({
     }
 
     const now = Date.now();
-    if (lastStartAt && now - lastStartAt < 10 * 60 * 1000) {
+    // A queued Kaggle run is still consuming the account's one active launch slot.
+    // Do not submit another version while the previous 45-minute startup window is open.
+    const activeRunWindowMs = 45 * 60 * 1000;
+    if (lastStartAt && now - lastStartAt < activeRunWindowMs) {
       return {
         started: false,
         alreadyRunning: true,
         notebookRef: identity.slug,
-        retryAfterMs: Math.max(0, 10 * 60 * 1000 - (now - lastStartAt)),
-        message: "A Kaggle GPU notebook run was started recently. Waiting for its worker heartbeat."
+        retryAfterMs: Math.max(0, activeRunWindowMs - (now - lastStartAt)),
+        message: "A Kaggle GPU notebook run is still within its startup window. Waiting for its worker heartbeat instead of submitting a duplicate run."
       };
     }
 

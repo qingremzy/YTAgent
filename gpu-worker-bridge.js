@@ -5,7 +5,9 @@ const path = require("path");
 const jobs = new Map();
 const pending = [];
 const JOB_TIMEOUT_MS = 90 * 60 * 1000;
-const CLAIM_TIMEOUT_MS = 12 * 60 * 1000;
+// Free Kaggle GPU capacity can queue headless notebook runs for a while.
+// Keep the single submitted run alive instead of failing and inviting duplicates.
+const CLAIM_TIMEOUT_MS = 45 * 60 * 1000;
 const QUEUE_HEARTBEAT_MS = 15000;
 const WORKER_HEARTBEAT_TIMEOUT_MS = 45 * 60 * 1000;
 const WORKER_HEARTBEAT_CHECK_MS = 15 * 1000;
@@ -22,7 +24,7 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueue
       if (job.state === "queued") {
         if (job.queueHeartbeatTimer) clearInterval(job.queueHeartbeatTimer);
         jobs.delete(id);
-        reject(new Error("The Kaggle GPU notebook did not connect within 12 minutes. Its run may be queued, GPU capacity unavailable, or notebook startup failed. Check Kaggle run status and retry when a GPU is available."));
+        reject(new Error("The Kaggle GPU notebook did not connect within 45 minutes. Kaggle may have kept the notebook queued because free GPU capacity was unavailable. Check the latest Kaggle kernel status before starting another run."));
       } else {
         jobs.delete(id);
         reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may have disconnected or run out of GPU quota."));

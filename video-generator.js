@@ -7,6 +7,7 @@ const ffmpegPath = require("ffmpeg-static");
 const { compileBlueprint } = require("./video-compiler/blueprint");
 const { renderFilm } = require("./video-compiler/renderer");
 const { generateSceneClips } = require("./video-providers/agnes");
+const { generateSeedanceSceneClips } = require("./video-providers/seedance");
 const { generateWanSceneClips } = require("./video-providers/wan-worker");
 const { generateFallbackSceneClips } = require("./video-providers/free-visual-fallback");
 const { createStudioProject } = require("./studio-project");
@@ -330,8 +331,15 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
-  // Prefer the explicitly confirmed free Agnes Flash quota. This avoids waiting
-  // for a Kaggle GPU slot and removes the cold-start/model-download bottleneck.
+  // Seedance is opt-in because video generation can consume paid quota.
+  // Enabling the route does not submit a task; a user-triggered render does.
+  const seedanceEnabled = ["true", "1", "yes", "on"].includes(String(process.env.ARK_SEEDANCE_ENABLED || "").trim().toLowerCase());
+  if (seedanceEnabled && process.env.ARK_API_KEY) {
+    const clips = await generateSeedanceSceneClips(scenes, topic, workDir, onProgress);
+    return { clips, narrationClips: null, provider: "BytePlus ModelArk Dreamina Seedance 2.5" };
+  }
+
+  // Prefer the explicitly confirmed free Agnes Flash quota.
   const quotaConfirmation = String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase();
   const useConfirmedAgnesFree = ["true", "1", "yes", "confirmed", "on"].includes(quotaConfirmation) &&
     Boolean(process.env.AGNES_API_KEY) &&
@@ -342,8 +350,6 @@ async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJ
       const clips = await generateSceneClips(scenes, topic, workDir, onProgress);
       return { clips, narrationClips: null, provider: "Agnes Video 2.5 Flash (confirmed free quota)" };
     } catch (error) {
-      // A congested free provider must not block the whole production run.
-      // If Kaggle is configured, fall through to its worker as the backup.
       if (!process.env.YT_AGENT_WORKER_TOKEN) {
         throw new Error("Agnes free video generation could not complete: " + (error.message || error));
       }
@@ -352,7 +358,7 @@ async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJ
   }
 
   if (!process.env.YT_AGENT_WORKER_TOKEN) {
-    throw new Error("No free video engine is currently available. Confirm Agnes free quota or start the Kaggle GPU worker.");
+    throw new Error("No video engine is currently available. Enable Seedance, confirm Agnes free quota, or start the Kaggle GPU worker.");
   }
 
   try {

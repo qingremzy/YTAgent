@@ -78,7 +78,7 @@ test("detects a worker heartbeat and fails jobs that are never claimed", async (
     });
     await new Promise(resolve => setTimeout(resolve, 20));
     assert.ok(progressUpdates.some(item => item.progress === 19 && /Waiting for its startup heartbeat/.test(item.message)));
-    await assert.rejects(queued, /did not connect within 12 minutes/);
+    await assert.rejects(queued, /did not connect within 45 minutes/);
   } finally {
     clearInterval(keepAlive);
     await fs.promises.rm(workDir, { recursive: true, force: true });

@@ -330,9 +330,28 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
-  // Zero-cost mode never calls hosted video-generation APIs.
+  // Prefer the explicitly confirmed free Agnes Flash quota. This avoids waiting
+  // for a Kaggle GPU slot and removes the cold-start/model-download bottleneck.
+  const useConfirmedAgnesFree = process.env.AGNES_FREE_QUOTA_CONFIRMED === "true" &&
+    Boolean(process.env.AGNES_API_KEY) &&
+    (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") === "agnes-video-2.5-flash";
+
+  if (useConfirmedAgnesFree) {
+    try {
+      const clips = await generateSceneClips(scenes, topic, workDir, onProgress);
+      return { clips, narrationClips: null, provider: "Agnes Video 2.5 Flash (confirmed free quota)" };
+    } catch (error) {
+      // A congested free provider must not block the whole production run.
+      // If Kaggle is configured, fall through to its worker as the backup.
+      if (!process.env.YT_AGENT_WORKER_TOKEN) {
+        throw new Error("Agnes free video generation could not complete: " + (error.message || error));
+      }
+      console.warn("Agnes free video route unavailable; falling back to the Kaggle GPU worker:", error.message || error);
+    }
+  }
+
   if (!process.env.YT_AGENT_WORKER_TOKEN) {
-    throw new Error("Real 3D video generation is unavailable. Configure the private GPU worker token and start the free Kaggle worker. YTAgent stopped instead of returning abstract artwork.");
+    throw new Error("No free video engine is currently available. Confirm Agnes free quota or start the Kaggle GPU worker.");
   }
 
   try {
@@ -340,7 +359,7 @@ async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJ
     if (Array.isArray(generated)) return { clips: generated, narrationClips: null, provider: "Wan 2.1 Free GPU Worker" };
     return { clips: generated.clips, narrationClips: generated.narrations, provider: "Wan 2.1 + Kokoro 82M Free GPU Worker" };
   } catch (error) {
-    throw new Error("The real 3D video worker is unavailable: " + (error.message || error) + ". YTAgent stopped instead of returning abstract artwork.");
+    throw new Error("The free video workers are unavailable: " + (error.message || error));
   }
 }
 
@@ -362,8 +381,33 @@ function shouldAttemptGroqTts(voiceState = {}, env = process.env) {
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function generateNarration() {
-  throw new Error("Zero-cost mode requires Kokoro narration from the free GPU worker. Hosted TTS fallbacks are disabled.");
+async function generateNarration(text, outputPath) {
+  // Microsoft Edge's online neural TTS is the free no-key narration route.
+  // Keep this independent from Kaggle so Agnes-generated scenes can finish
+  // as a complete narrated Short without a GPU notebook.
+  const { EdgeTTS } = require("node-edge-tts");
+  const voice = process.env.EDGE_TTS_VOICE || "en-US-ChristopherNeural";
+  const tts = new EdgeTTS({
+    voice,
+    lang: "en-US",
+    outputFormat: "audio-24khz-96kbitrate-mono-mp3",
+    rate: "+3%",
+    timeout: 45000
+  });
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await tts.ttsPromise(String(text || "").trim(), outputPath);
+      const stat = await fs.promises.stat(outputPath);
+      if (stat.size < 1000) throw new Error("Edge TTS returned an empty narration file.");
+      return { provider: "Microsoft Edge neural TTS (free)", path: outputPath };
+    } catch (error) {
+      lastError = error;
+      await fs.promises.unlink(outputPath).catch(() => {});
+      if (attempt === 0) await wait(edgeTtsRetryDelayMs(attempt));
+    }
+  }
+  throw new Error("Free narration generation failed: " + (lastError?.message || "Edge TTS unavailable"));
 }
 
 function sceneArtwork(scene, index, total) {
@@ -440,10 +484,10 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
     const voiceState = {};
     const sceneAssets = [];
     for (let i = 0; i < storyboard.scenes.length; i++) {
-      const audioPath = path.join(workDir, "narration-" + String(i + 1).padStart(2, "0") + ".wav");
+      const audioPath = path.join(workDir, "narration-" + String(i + 1).padStart(2, "0") + ".mp3");
       const speech = visualResult.narrationClips && visualResult.narrationClips[i]
         ? { provider: "Kokoro 82M (free local worker)", path: visualResult.narrationClips[i] }
-        : await generateNarration(storyboard.scenes[i].narration, audioPath, voiceState);
+        : await generateNarration(storyboard.scenes[i].narration, audioPath);
       voiceProviders.add(speech.provider);
       // Measure the actual generated speech before rendering so six-second scenes never silently chop words.
       const speechDuration = await getMediaDuration(speech.path);

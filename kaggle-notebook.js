@@ -156,13 +156,13 @@ function patchNotebookForBatchRun(source, options = {}) {
       '        urllib.request.urlopen(request, timeout=20).read()',
       '    except Exception:',
       '        pass',
-      '    time.sleep(10)'
+      '    time.sleep(5)'
     ].join(String.fromCharCode(10));
     const heartbeat = [
       "import subprocess, sys",
       'os.environ.setdefault("YT_AGENT_SERVER_URL", "https://ytagent-production-1038.up.railway.app")',
       "heartbeat_script = " + JSON.stringify(heartbeatScript),
-      'heartbeat_process = subprocess.Popen([sys.executable, "-u", "-c", heartbeat_script], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)'
+      'heartbeat_process = subprocess.Popen([sys.executable, "-u", "-c", heartbeat_script], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)'
     ].join(String.fromCharCode(10)) + String.fromCharCode(10);
     setupCell.source = heartbeat + setupText;
     const markdown = notebook.cells.filter(item => item.cell_type !== "code");

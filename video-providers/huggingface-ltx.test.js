@@ -12,7 +12,7 @@ test("LTX completion SSE extracts the Gradio video URL", () => {
 
 test("LTX error SSE becomes a provider error", () => {
   assert.throws(
-    () => parseSseResult("event: error\ndata: no GPU available"),
+    () => parseSseResult("event: error\ndata: null"),
     /LTX Space generation failed: no GPU available/
   );
 });
@@ -37,7 +37,7 @@ test("LTX prompt includes scene-specific physical action and topic", () => {
 
 test("LTX empty ZeroGPU error explains shared queue unavailability", () => {
   assert.throws(
-    () => parseSseResult("event: error\\ndata: null"),
+    () => parseSseResult("event: error\ndata: null"),
     /shared Space may be out of GPU capacity/
   );
 });

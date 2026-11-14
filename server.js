@@ -1497,13 +1497,13 @@ app.get("/api/diagnostics", async (req, res) => {
   const agnesQuotaConfirmation = String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase();
   const agnesFreeReady = Boolean(process.env.AGNES_API_KEY &&
     ["true", "1", "yes", "confirmed", "on"].includes(agnesQuotaConfirmation) &&
-    (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") === "agnes-video-2.5-flash");
+    (process.env.AGNES_VIDEO_MODEL || "agnes-video-v2.0") === "agnes-video-v2.0");
   add("Agnes free video route", agnesFreeReady ? "configured" : "warning",
     agnesFreeReady
-      ? "Agnes Video 2.5 Flash is enabled under the explicitly confirmed free-quota setting."
+      ? "Agnes Video v2.0 is configured using its frame-based text-to-video API."
       : "Agnes key: " + (process.env.AGNES_API_KEY ? "present" : "missing") +
         "; free-quota confirmation: " + (["true", "1", "yes", "confirmed", "on"].includes(agnesQuotaConfirmation) ? "confirmed" : "not confirmed") +
-        "; model: " + (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") + ". Confirm free quota or start the Kaggle GPU worker.");
+        "; model: " + (process.env.AGNES_VIDEO_MODEL || "agnes-video-v2.0") + ". Confirm free quota or start the Kaggle GPU worker.");
   add("GPU worker", "info", JSON.stringify(getGpuWorkerStatus()).slice(0, 500));
   if (req.session && req.session.tokens) {
     try {

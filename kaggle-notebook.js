@@ -145,11 +145,23 @@ function patchNotebookForBatchRun(source, options = {}) {
   });
   if (!setupCell) throw new Error("Kaggle worker notebook is missing its dependency setup cell.");
   const setupText = Array.isArray(setupCell.source) ? setupCell.source.join("") : setupCell.source;
+  const heartbeatScript = [
+    "import os, time, urllib.request",
+    "server = os.environ[\\"YT_AGENT_SERVER_URL\\"].rstrip(\\"/\\")",
+    "token = os.environ[\\"YT_AGENT_WORKER_TOKEN\\"]",
+    "while True:",
+    "    request = urllib.request.Request(server + \\"/api/worker/heartbeat\\", headers={\\"Authorization\\": \\"Bearer \\" + token})",
+    "    try:",
+    "        urllib.request.urlopen(request, timeout=20).read()",
+    "    except Exception:",
+    "        pass",
+    "    time.sleep(10)"
+  ].join("\\n");
   const heartbeat = [
-    "import subprocess, sys\\n",
-    "heartbeat_script = 'import os,time,urllib.request\\n' + 'server=os.environ[\\\"YT_AGENT_SERVER_URL\\\"].rstrip(\\\"/\\\")\\n' + 'token=os.environ[\\\"YT_AGENT_WORKER_TOKEN\\\"]\\n' + 'while True:\\n' + ' req=urllib.request.Request(server+\\\"/api/worker/heartbeat\\\",headers={\\\"Authorization\\\":\\\"Bearer \\\"+token})\\n' + ' urllib.request.urlopen(req,timeout=20).read()\\n' + ' time.sleep(10)\\n' + '\\n',\\n",
-    "heartbeat_process = subprocess.Popen([sys.executable, \\\"-u\\\", \\\"-c\\\", heartbeat_script], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\\n"
-  ].join("");
+    "import subprocess, sys",
+    "heartbeat_script = " + JSON.stringify(heartbeatScript),
+    "heartbeat_process = subprocess.Popen([sys.executable, \\"-u\\", \\"-c\\", heartbeat_script], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)"
+  ].join("\\n") + "\\n";
   setupCell.source = heartbeat + setupText;
   const markdown = notebook.cells.filter(item => item.cell_type !== "code");
   const code = notebook.cells.filter(item => item.cell_type === "code");
@@ -166,7 +178,10 @@ function patchNotebookForBatchRun(source, options = {}) {
     "os.environ[\"YT_AGENT_SERVER_URL\"] = \"https://ytagent-production-1038.up.railway.app\"\n",
     "print(\"Starting YTAgent GPU worker inside the Kaggle notebook kernel.\", flush=True)\n",
     "sys.argv = [\"app.py\", \"--run-once\", \"--wait-seconds\", \"2700\"]\n",
-    "runpy.run_path(\"app.py\", run_name=\"__main__\")\n",
+    "try:\\n",
+    "    runpy.run_path(\\"app.py\\", run_name=\\"__main__\\")\\n",
+    "finally:\\n",
+    "    if \\"heartbeat_process\\" in globals(): heartbeat_process.terminate()\\n",
     "print(\"YTAgent GPU job finished.\", flush=True)\n"
   ];
   return JSON.stringify(notebook);

@@ -80,7 +80,7 @@ async function generateOne(prompt, seed) {
   return parseSseResult(await result.text());
 }
 
-async function downloadAndNormalize(url, destination) {
+async function downloadAndNormalize(url, destination, durationSeconds = 6) {
   let parsed;
   try { parsed = new URL(url); } catch (_) { throw new Error("LTX Space returned an invalid video URL."); }
   if (parsed.protocol !== "https:") throw new Error("LTX Space returned a non-HTTPS video URL.");
@@ -94,7 +94,7 @@ async function downloadAndNormalize(url, destination) {
   await fs.promises.writeFile(source, bytes);
   await new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath, [
-      "-y", "-hide_banner", "-loglevel", "error", "-i", source, "-t", "6",
+      "-y", "-hide_banner", "-loglevel", "error", "-i", source, "-t", String(durationSeconds),
       "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1",
       "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
       "-pix_fmt", "yuv420p", "-movflags", "+faststart", destination
@@ -136,4 +136,11 @@ async function generateLtxSceneClips(scenes, topic, workDir, onProgress = () => 
   return clips;
 }
 
-module.exports = { generateLtxSceneClips, parseSseResult, buildPrompt };
+
+async function generateLtxFiveSecondShot(prompt, destination, seed) {
+  const url = await generateOne(prompt, seed);
+  await downloadAndNormalize(url, destination, 5);
+  return destination;
+}
+
+module.exports = { generateLtxSceneClips, generateLtxFiveSecondShot, parseSseResult, buildPrompt };

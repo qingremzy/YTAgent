@@ -332,50 +332,25 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
-  // Seedance is opt-in because video generation can consume paid quota.
-  // Enabling the route does not submit a task; a user-triggered render does.
+  // Paid Seedance remains explicitly opt-in and is never enabled by this route.
   const seedanceEnabled = ["true", "1", "yes", "on"].includes(String(process.env.ARK_SEEDANCE_ENABLED || "").trim().toLowerCase());
   if (seedanceEnabled && process.env.ARK_API_KEY) {
     const clips = await generateSeedanceSceneClips(scenes, topic, workDir, onProgress);
     return { clips, narrationClips: null, provider: "BytePlus ModelArk Dreamina Seedance 2.5" };
   }
 
-  // Use Agnes Video v2.0 with the current 2.5 Flash standard API contract.
-  const quotaConfirmation = String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase();
-  const useConfirmedAgnesFree = ["true", "1", "yes", "confirmed", "on"].includes(quotaConfirmation) &&
-    Boolean(process.env.AGNES_API_KEY) &&
-    (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") === "agnes-video-2.5-flash";
-
-  let agnesFailure = "";
-  if (useConfirmedAgnesFree) {
-    try {
-      const clips = await generateSceneClips(scenes, topic, workDir, onProgress);
-      return { clips, narrationClips: null, provider: "Agnes Video 2.5 Flash (free API route)" };
-    } catch (error) {
-      agnesFailure = String(error.message || error).slice(0, 350);
-      console.warn("Agnes free video route unavailable; trying public LTX before Kaggle:", agnesFailure);
+  // Six 10-second story beats are distributed across the confirmed Agnes API
+  // and the public LTX Space. LTX beats are assembled from two 5-second shots.
+  try {
+    const { generateMultiProviderTimelineClips } = require("./video-providers/multi-provider-orchestrator");
+    return await generateMultiProviderTimelineClips(scenes, topic, workDir, onProgress);
+  } catch (error) {
+    console.warn("Six-beat multi-provider route unavailable; falling back to the Kaggle Wan worker:", error.message || error);
+    if (!process.env.YT_AGENT_WORKER_TOKEN) {
+      throw new Error("The free multi-provider video route could not complete the film. " +
+        String(error.message || error).slice(0, 500) +
+        ". The Kaggle Wan fallback is not configured.");
     }
-  }
-
-  // Independent public inference fallback. This uses the community-accessible
-  // Hugging Face LTX Space, not paid Inference Providers or trial credits.
-  // It may be rate-limited or paused, so failure must never block the Kaggle route.
-  let ltxFailure = "";
-  if (String(process.env.HF_LTX_ENABLED || "true").trim().toLowerCase() !== "false") {
-    try {
-      const clips = await generateLtxSceneClips(scenes, topic, workDir, onProgress);
-      return { clips, narrationClips: null, provider: "Hugging Face LTX public Space (free shared queue)" };
-    } catch (error) {
-      ltxFailure = String(error.message || error).slice(0, 350);
-      console.warn("Public LTX fallback unavailable; trying Kaggle GPU worker:", ltxFailure);
-    }
-  }
-
-  if (!process.env.YT_AGENT_WORKER_TOKEN) {
-    throw new Error("No free video provider completed generation. " +
-      (agnesFailure ? "Agnes: " + agnesFailure + ". " : "") +
-      (ltxFailure ? "Hugging Face LTX: " + ltxFailure + ". " : "") +
-      "Configure the free Kaggle GPU worker or retry when public capacity returns.");
   }
 
   try {
@@ -383,7 +358,7 @@ async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJ
     if (Array.isArray(generated)) return { clips: generated, narrationClips: null, provider: "Wan 2.1 Free GPU Worker" };
     return { clips: generated.clips, narrationClips: generated.narrations, provider: "Wan 2.1 + Kokoro 82M Free GPU Worker" };
   } catch (error) {
-    throw new Error("The free video workers are unavailable: " + (error.message || error));
+    throw new Error("All free video providers were unavailable: " + (error.message || error));
   }
 }
 

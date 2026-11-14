@@ -6,7 +6,7 @@ const crypto = require("crypto");
 const { spawn } = require("child_process");
 const ffmpegPath = require("ffmpeg-static");
 const { generateSingleAgnesClip } = require("./agnes");
-const { generateLtxFiveSecondShot } = require("./huggingface-ltx");
+const { generateLtxFiveSecondShot, getZeroGpuQuota, LTX_MAX_BEATS_PER_FILM } = require("./huggingface-ltx");
 const { getVideoModelPool, getFreeHostedModelCandidates } = require("./video-model-registry");
 
 const BEAT_GROUPS = [[0,1],[2,3],[4,5],[6,7],[8],[9]];
@@ -73,7 +73,7 @@ async function generateAgnesBeat(prompt,workDir,beatIndex,onProgress=()=>{}) {
   });
 }
 function isCapacityUnavailable(error) {
-  return /queue.{0,30}full|full.{0,30}queue|zerogpu|zero.?gpu|capacity|http\s*(429|502|503|504)|temporarily unavailable|overloaded|timed?\s*out|timeout|rate.?limit/i
+  return /queue.{0,30}full|full.{0,30}queue|zerogpu|zero.?gpu|capacity|quota|http\s*(429|502|503|504)|temporarily unavailable|overloaded|timed?\s*out|timeout|rate.?limit/i
     .test(String(error&&error.message||error||""));
 }
 async function withProviderHeartbeat(provider,beatNumber,progress,task,onProgress) {
@@ -125,13 +125,26 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
   const prompts=buildSixBeatPrompts(scenes,topic);
   const agnesEnabled=Boolean(process.env.AGNES_API_KEY) &&
     ["true","1","yes","confirmed","on"].includes(String(process.env.AGNES_FREE_QUOTA_CONFIRMED||"").trim().toLowerCase());
-  const ltxEnabled=String(process.env.HF_LTX_ENABLED||"true").trim().toLowerCase()!=="false";
-  if(!agnesEnabled&&!ltxEnabled) throw new Error("No confirmed free cinematic video providers are enabled.");
+  const ltxRequested=String(process.env.HF_LTX_ENABLED||"true").trim().toLowerCase()!=="false";
+  let ltxQuota={available:false,reason:"LTX was disabled by configuration."};
+  if(ltxRequested) {
+    ltxQuota=await getZeroGpuQuota();
+    console.log("YTAgent Hugging Face ZeroGPU quota check:",ltxQuota.reason);
+    if(!ltxQuota.available) console.warn("YTAgent will skip LTX for this film to avoid exhausting or overcommitting shared ZeroGPU quota.");
+  }
+  const ltxEnabled=ltxRequested&&ltxQuota.available;
+  if(!agnesEnabled&&!ltxEnabled) throw new Error("No usable free cinematic video provider is currently available. " +
+    (ltxRequested&&!ltxQuota.available?ltxQuota.reason:"Confirm Agnes free quota or configure an eligible provider."));
   const beatClips=[],usedProviders=new Set(),disabledProviders=new Set();
+  let ltxBeatsUsed=0;
   for(let i=0;i<6;i++){
     try{onProgress(7+Math.round(i*2),"Preparing professional story beat "+(i+1)+" of 6 and selecting an available video AI.");}catch(_){}
-    const preferAgnes=(i%2===0);
-    const providers=(preferAgnes?["Agnes","LTX"]:["LTX","Agnes"]).filter(name=>(name==="Agnes"?agnesEnabled:ltxEnabled)&&!disabledProviders.has(name));
+    // Agnes is always attempted first. LTX is a quota-limited fallback, never
+    // the first choice, and is capped to two beats (four 60-second ZeroGPU calls).
+    const providers=["Agnes","LTX"].filter(name=>
+      (name==="Agnes"?agnesEnabled:(ltxEnabled&&ltxBeatsUsed<LTX_MAX_BEATS_PER_FILM)) &&
+      !disabledProviders.has(name)
+    );
     const failures=[];
     let completed=false;
     for(const provider of providers){
@@ -142,14 +155,23 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
             ? detail=>generateAgnesBeat(prompts[i],workDir,i,detail)
             : async detail=>generateLtxBeat(prompts[i],workDir,i),
           onProgress);
-        beatClips.push(clip);usedProviders.add(provider);completed=true;
+        beatClips.push(clip);usedProviders.add(provider);
+        if(provider==="LTX") ltxBeatsUsed++;
+        completed=true;
         try{onProgress(10+Math.round((i+1)*8),"Generated story beat "+(i+1)+" of 6 with "+provider+".");}catch(_){}
         break;
       }catch(error){
         failures.push(provider+": "+safe(error.message||error,220));
-        if(isCapacityUnavailable(error)) {
+        if(provider==="LTX" || isCapacityUnavailable(error)) {
           disabledProviders.add(provider);
-          console.warn("YTAgent disabling "+provider+" for the rest of this film after a capacity/timeout failure.");
+          console.warn("YTAgent disabling "+provider+" for the rest of this film after a failure to avoid wasting scarce provider quota.");
+        }
+        // Both public endpoints rely on shared hosted capacity. If Agnes is
+        // explicitly queue/capacity limited, do not immediately hammer LTX's
+        // shared ZeroGPU queue with the same workload.
+        if(provider==="Agnes" && isCapacityUnavailable(error)) {
+          disabledProviders.add("LTX");
+          console.warn("YTAgent skipping LTX after Agnes reported shared capacity exhaustion; falling back to the independent Kaggle worker.");
         }
         console.warn("YTAgent beat "+(i+1)+" provider "+provider+" failed:",error.message||error);
       }
@@ -164,7 +186,9 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
     beatClips,
     providers:Array.from(usedProviders),
     modelPoolCount:getVideoModelPool().length,
-    eligibleFreeHostedCandidates:getFreeHostedModelCandidates().map(item=>item.id)
+    eligibleFreeHostedCandidates:getFreeHostedModelCandidates().map(item=>item.id),
+    ltxQuotaRemainingSeconds:ltxQuota.remaining ?? null,
+    ltxBeatsUsed
   };
 }
 module.exports={BEAT_GROUPS,buildSixBeatPrompts,makeSixSecondTimelineClips,generateMultiProviderTimelineClips,isCapacityUnavailable};

@@ -243,7 +243,7 @@ async function splitIntoShots(source, firstPath, secondPath) {
   }
 }
 
-async function generateSceneClips(scenes, topic, workDir) {
+async function generateSceneClips(scenes, topic, workDir, onProgress = () => {}) {
   const apiKey = process.env.AGNES_API_KEY;
   if (!apiKey) {
     throw new Error("The temporary Kaggle worker has been removed. Add AGNES_API_KEY in Railway Variables to connect YTAgent to its hosted video-generation engine.");
@@ -277,7 +277,8 @@ async function generateSceneClips(scenes, topic, workDir) {
           /temporarily unavailable|rate.?limit|too many requests|network request failed|fetch failed|timeout/i.test(error.message);
         // Queue-full responses are transient. Wait with exponential backoff for up to
         // six retries rather than failing the entire film after two short waits.
-        const maxRetries = 6;
+        const configuredRetries = Number(process.env.AGNES_QUEUE_RETRIES || 2);
+        const maxRetries = Number.isInteger(configuredRetries) ? Math.min(3, Math.max(0, configuredRetries)) : 2;
         if (!retryable || attempts >= maxRetries) {
           if (queueFull) {
             throw new Error("Agnes video queue remained full after " + (attempts + 1) +
@@ -306,6 +307,7 @@ async function generateSceneClips(scenes, topic, workDir) {
     const secondPath = path.join(workDir, "generated-scene-" + (pairIndex * 2 + 1) + ".mp4");
     await splitIntoShots(source, firstPath, secondPath);
     outputClips.push(firstPath, secondPath);
+    try { onProgress(6 + (pairIndex + 1) * 12, "Generated cinematic video pair " + (pairIndex + 1) + " of 5."); } catch (_) {}
   }
   return outputClips;
 }

@@ -60,6 +60,7 @@ test("starts a secure heartbeat during Kaggle dependency setup without claiming 
   const code = patched.cells.filter(cell => cell.cell_type === "code");
   assert.match(code[0].source.join(""), /api\/worker\/bootstrap/);
   assert.match(code[1].source, /api\/worker\/heartbeat/);
+  assert.match(code[1].source, /start_new_session=True/);
   assert.match(code[1].source, /api\/worker\/heartbeat/);
   assert.match(code[2].source.join(""), /heartbeat_process.terminate/);
   assert.match(code[2].source.join(""), /runpy\.run_path/);

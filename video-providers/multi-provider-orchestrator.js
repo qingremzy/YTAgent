@@ -63,9 +63,32 @@ async function generateLtxBeat(prompt, workDir, beatIndex) {
   await joinFiveSecondShots(first,second,output);
   return output;
 }
-async function generateAgnesBeat(prompt,workDir,beatIndex) {
+async function generateAgnesBeat(prompt,workDir,beatIndex,onProgress=()=>{}) {
   const output=path.join(workDir,"beat-"+(beatIndex+1)+"-agnes-10s.mp4");
-  return generateSingleAgnesClip(prompt,output,10);
+  return generateSingleAgnesClip(prompt,output,10,{
+    timeoutMs:8*60*1000,
+    onProgress:(status,percent)=>{
+      try{onProgress("Agnes status: "+(status||"processing")+" ("+(Number(percent)||0)+"%).");}catch(_){}
+    }
+  });
+}
+function isCapacityUnavailable(error) {
+  return /queue.{0,30}full|full.{0,30}queue|zerogpu|zero.?gpu|capacity|http\s*(429|502|503|504)|temporarily unavailable|overloaded|timed?\s*out|timeout|rate.?limit/i
+    .test(String(error&&error.message||error||""));
+}
+async function withProviderHeartbeat(provider,beatNumber,progress,task,onProgress) {
+  const started=Date.now();
+  const heartbeat=setInterval(()=>{
+    const elapsed=Math.max(1,Math.round((Date.now()-started)/1000));
+    const message="Beat "+beatNumber+" of 6: "+provider+" is still processing ("+elapsed+"s elapsed). YTAgent is waiting for the result or will switch provider if it times out.";
+    console.log("YTAgent "+message);
+    try{onProgress(progress,message);}catch(_){}
+  },12000);
+  if(typeof heartbeat.unref==="function") heartbeat.unref();
+  try{return await task((detail)=>{
+    try{onProgress(progress,"Beat "+beatNumber+" of 6: "+provider+" "+detail);}catch(_){}
+  });}
+  finally{clearInterval(heartbeat);}
 }
 async function makeSixSecondTimelineClips(beatClips,workDir) {
   const output=[];
@@ -104,23 +127,30 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
     ["true","1","yes","confirmed","on"].includes(String(process.env.AGNES_FREE_QUOTA_CONFIRMED||"").trim().toLowerCase());
   const ltxEnabled=String(process.env.HF_LTX_ENABLED||"true").trim().toLowerCase()!=="false";
   if(!agnesEnabled&&!ltxEnabled) throw new Error("No confirmed free cinematic video providers are enabled.");
-  const beatClips=[],usedProviders=new Set();
+  const beatClips=[],usedProviders=new Set(),disabledProviders=new Set();
   for(let i=0;i<6;i++){
     try{onProgress(7+Math.round(i*2),"Preparing professional story beat "+(i+1)+" of 6 and selecting an available video AI.");}catch(_){}
     const preferAgnes=(i%2===0);
-    const providers=(preferAgnes?["Agnes","LTX"]:["LTX","Agnes"]).filter(name=>name==="Agnes"?agnesEnabled:ltxEnabled);
+    const providers=(preferAgnes?["Agnes","LTX"]:["LTX","Agnes"]).filter(name=>(name==="Agnes"?agnesEnabled:ltxEnabled)&&!disabledProviders.has(name));
     const failures=[];
     let completed=false;
     for(const provider of providers){
       try{
-        const clip=provider==="Agnes"
-          ? await generateAgnesBeat(prompts[i],workDir,i)
-          : await generateLtxBeat(prompts[i],workDir,i);
+        const progress=7+Math.round(i*2);
+        const clip=await withProviderHeartbeat(provider,i+1,progress,
+          provider==="Agnes"
+            ? detail=>generateAgnesBeat(prompts[i],workDir,i,detail)
+            : async detail=>generateLtxBeat(prompts[i],workDir,i),
+          onProgress);
         beatClips.push(clip);usedProviders.add(provider);completed=true;
         try{onProgress(10+Math.round((i+1)*8),"Generated story beat "+(i+1)+" of 6 with "+provider+".");}catch(_){}
         break;
       }catch(error){
         failures.push(provider+": "+safe(error.message||error,220));
+        if(isCapacityUnavailable(error)) {
+          disabledProviders.add(provider);
+          console.warn("YTAgent disabling "+provider+" for the rest of this film after a capacity/timeout failure.");
+        }
         console.warn("YTAgent beat "+(i+1)+" provider "+provider+" failed:",error.message||error);
       }
     }
@@ -137,4 +167,4 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
     eligibleFreeHostedCandidates:getFreeHostedModelCandidates().map(item=>item.id)
   };
 }
-module.exports={BEAT_GROUPS,buildSixBeatPrompts,makeSixSecondTimelineClips,generateMultiProviderTimelineClips};
+module.exports={BEAT_GROUPS,buildSixBeatPrompts,makeSixSecondTimelineClips,generateMultiProviderTimelineClips,isCapacityUnavailable};

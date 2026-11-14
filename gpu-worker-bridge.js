@@ -5,7 +5,8 @@ const path = require("path");
 const jobs = new Map();
 const pending = [];
 const JOB_TIMEOUT_MS = 90 * 60 * 1000;
-const CLAIM_TIMEOUT_MS = 45 * 60 * 1000;
+const CLAIM_TIMEOUT_MS = 12 * 60 * 1000;
+const QUEUE_HEARTBEAT_MS = 15000;
 const WORKER_HEARTBEAT_TIMEOUT_MS = 45 * 60 * 1000;
 const WORKER_HEARTBEAT_CHECK_MS = 15 * 1000;
 let lastWorkerPollAt = 0;
@@ -16,16 +17,31 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueue
   }
   const id = crypto.randomBytes(16).toString("hex");
   return new Promise((resolve, reject) => {
-    const job = { id, prompts, narrations, seed, workDir, onProgress, progress: 0, state: "queued", clips: new Array(10), audios: new Array(10), received: new Set(), audioReceived: new Set(), lastHeartbeatAt: Date.now(), heartbeatTimer: null, resolve, reject };
+    const job = { id, prompts, narrations, seed, workDir, onProgress, progress: 0, state: "queued", clips: new Array(10), audios: new Array(10), received: new Set(), audioReceived: new Set(), lastHeartbeatAt: Date.now(), heartbeatTimer: null, queueHeartbeatTimer: null, resolve, reject };
     job.timer = setTimeout(() => {
       if (job.state === "queued") {
+        if (job.queueHeartbeatTimer) clearInterval(job.queueHeartbeatTimer);
         jobs.delete(id);
-        reject(new Error("The free Kaggle GPU worker did not connect within 45 minutes. Kaggle may still be starting the GPU session, or the notebook's worker token may not be configured."));
+        reject(new Error("The Kaggle GPU notebook did not connect within 12 minutes. Its run may be queued, GPU capacity unavailable, or notebook startup failed. Check Kaggle run status and retry when a GPU is available."));
       } else {
         jobs.delete(id);
         reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may have disconnected or run out of GPU quota."));
       }
     }, claimTimeoutMs);
+    if (job.timer.unref) job.timer.unref();
+    job.queueHeartbeatTimer = setInterval(() => {
+      if (job.state !== "queued") return;
+      const elapsed = Math.max(1, Math.round((Date.now() - job.lastHeartbeatAt) / 1000));
+      const message = "Kaggle accepted the free GPU notebook. Waiting for its startup heartbeat (" + elapsed + "s). No scene has been rendered by the GPU worker yet.";
+      console.log("YTAgent " + message);
+      if (typeof job.onProgress === "function") {
+        try {
+          const pendingProgress = job.onProgress(19, message);
+          if (pendingProgress && typeof pendingProgress.catch === "function") pendingProgress.catch(() => {});
+        } catch (_) {}
+      }
+    }, QUEUE_HEARTBEAT_MS);
+    if (job.queueHeartbeatTimer.unref) job.queueHeartbeatTimer.unref();
     jobs.set(id, job);
     pending.push(id);
     if (typeof onQueued === "function") {
@@ -67,6 +83,7 @@ function claimNextGpuJob() {
     const job = jobs.get(id);
     if (!job || job.state !== "queued") continue;
     clearTimeout(job.timer);
+    if (job.queueHeartbeatTimer) clearInterval(job.queueHeartbeatTimer);
     job.state = "active";
     job.lastHeartbeatAt = Date.now();
     job.timer = setTimeout(() => {
@@ -141,6 +158,7 @@ function failGpuJob(id, message) {
   if (!job) return false;
   job.state = "failed";
   clearTimeout(job.timer);
+  if (job.queueHeartbeatTimer) clearInterval(job.queueHeartbeatTimer);
   if (job.heartbeatTimer) clearInterval(job.heartbeatTimer);
   jobs.delete(id);
   const safeMessage = String(message || "The free GPU worker failed.").replace(/[<>]/g, "").slice(0, 500);

@@ -80,8 +80,18 @@ async function pushNotebookWithKaggleCli({ identity, source, metadata = {} }) {
     ], { timeoutMs: 120000 });
     const combined = result.stdout + "\n" + result.stderr;
     const versionMatch = combined.match(/\bversion(?:Number)?\s*[:#]?\s*(\d+)/i);
+    // A successful push only proves Kaggle accepted the run request. Read the
+    // actual scheduler state separately so queued/error states are visible.
+    let runStatus = null;
+    try {
+      const statusResult = await runCommand("kaggle", ["kernels", "status", identity.slug], { timeoutMs: 30000 });
+      runStatus = statusResult.stdout.trim().slice(-1000) || statusResult.stderr.trim().slice(-500) || "status returned no text";
+    } catch (statusError) {
+      runStatus = "status check unavailable: " + String(statusError.message || statusError).slice(0, 350);
+    }
     return {
       versionNumber: versionMatch ? Number(versionMatch[1]) : null,
+      runStatus,
       cli: true,
       timeoutSeconds,
       machineShape,

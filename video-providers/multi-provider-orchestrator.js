@@ -105,6 +105,7 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
   if(!agnesEnabled&&!ltxEnabled) throw new Error("No confirmed free cinematic video providers are enabled.");
   const beatClips=[],usedProviders=new Set();
   for(let i=0;i<6;i++){
+    try{onProgress(7+Math.round(i*2),"Preparing professional story beat "+(i+1)+" of 6 and selecting an available video AI.");}catch(_){}
     const preferAgnes=(i%2===0);
     const providers=(preferAgnes?["Agnes","LTX"]:["LTX","Agnes"]).filter(name=>name==="Agnes"?agnesEnabled:ltxEnabled);
     const failures=[];

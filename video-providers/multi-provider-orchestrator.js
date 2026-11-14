@@ -8,6 +8,7 @@ const ffmpegPath = require("ffmpeg-static");
 const { generateSingleAgnesClip } = require("./agnes");
 const { generateLtxFiveSecondShot, getZeroGpuQuota, LTX_MAX_BEATS_PER_FILM } = require("./huggingface-ltx");
 const { getVideoModelPool, getFreeHostedModelCandidates } = require("./video-model-registry");
+const { getReadyPriorityQueue } = require("./forge-dag-scheduler");
 
 const BEAT_GROUPS = [[0,1],[2,3],[4,5],[6,7],[8],[9]];
 const BEAT_SECONDS = 10;
@@ -17,6 +18,39 @@ const TOTAL_SECONDS = 60;
 function safe(value, max = 600) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
 }
+function buildBeatDag(scenes) {
+  const dag = Object.fromEntries(BEAT_GROUPS.map((_, index) => ["beat-" + index, []]));
+  const sceneToBeat = new Map();
+  scenes.forEach((scene, index) => {
+    const id = scene && (scene.id || scene.scene_id);
+    if (id != null) sceneToBeat.set(String(id), Math.floor(index / 2));
+  });
+  let hasExplicitDependencies = false;
+  scenes.forEach((scene, index) => {
+    const dependencies = Array.isArray(scene.dependencies) ? scene.dependencies :
+      Array.isArray(scene.depends_on) ? scene.depends_on : [];
+    if (dependencies.length) hasExplicitDependencies = true;
+    for (const dependency of dependencies) {
+      const dependencyId = typeof dependency === "object" && dependency ? dependency.id : dependency;
+      const parentBeat = sceneToBeat.get(String(dependencyId));
+      const childBeat = Math.floor(index / 2);
+      if (parentBeat != null && parentBeat !== childBeat) {
+        const from = "beat-" + parentBeat;
+        const to = "beat-" + childBeat;
+        if (!dag[from].includes(to)) dag[from].push(to);
+      }
+    }
+  });
+  // Existing YTAgent storyboards are narrative sequences without explicit
+  // dependency metadata. Preserve their order instead of inventing parallelism.
+  if (!hasExplicitDependencies) {
+    for (let index = 0; index < BEAT_GROUPS.length - 1; index++) {
+      dag["beat-" + index].push("beat-" + (index + 1));
+    }
+  }
+  return dag;
+}
+
 function buildSixBeatPrompts(scenes, topic) {
   if (!Array.isArray(scenes) || scenes.length !== 10) throw new Error("Six-beat orchestration needs the ten-scene director storyboard.");
   return BEAT_GROUPS.map((group, index) => {
@@ -137,8 +171,14 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
     (ltxRequested&&!ltxQuota.available?ltxQuota.reason:"Confirm Agnes free quota or configure an eligible provider."));
   const beatClips=[],usedProviders=new Set(),disabledProviders=new Set();
   let ltxBeatsUsed=0;
-  for(let i=0;i<6;i++){
-    try{onProgress(7+Math.round(i*2),"Preparing professional story beat "+(i+1)+" of 6 and selecting an available video AI.");}catch(_){}
+  const beatDag = buildBeatDag(scenes);
+  const beatDurations = Object.fromEntries(BEAT_GROUPS.map((_, index) => ["beat-" + index, BEAT_SECONDS]));
+  const beatOrder = getReadyPriorityQueue(beatDag, beatDurations).map(item => Number(item.id.slice(5)));
+  // Keep generation serial on shared free queues and single-GPU workers.
+  // The DAG/CPM order is still used to respect scene dependencies and prioritize
+  // the longest remaining story path without risking VRAM exhaustion.
+  for(const i of beatOrder){
+    try{onProgress(7+Math.round(i*2),"Preparing professional story beat "+(i+1)+" of 6 using Forge CPM scheduling.");}catch(_){}
     // Agnes is always attempted first. LTX is a quota-limited fallback, never
     // the first choice, and is capped to two beats (four 60-second ZeroGPU calls).
     const providers=["Agnes","LTX"].filter(name=>
@@ -191,4 +231,4 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
     ltxBeatsUsed
   };
 }
-module.exports={BEAT_GROUPS,buildSixBeatPrompts,makeSixSecondTimelineClips,generateMultiProviderTimelineClips,isCapacityUnavailable};
+module.exports={BEAT_GROUPS,buildBeatDag,buildSixBeatPrompts,makeSixSecondTimelineClips,generateMultiProviderTimelineClips,isCapacityUnavailable};

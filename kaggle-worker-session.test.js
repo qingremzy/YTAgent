@@ -144,7 +144,6 @@ test("uses a one-time bootstrap token and sanitizes malformed markdown cells", a
 
 test("polls Kaggle's real scheduler state and reports terminal startup failures", async () => {
   const statuses = [];
-  const { manager } = makeManager();
   const managerWithPolling = createKaggleWorkerSessionManager({
     getGpuWorkerStatus: () => ({ online: false }),
     getNotebookIdentity: () => identity,

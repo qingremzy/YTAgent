@@ -42,14 +42,16 @@ function buildCinematicShotDirection(pairIndex = 0) {
 
 function buildPairPrompt(first, second, topic, pairIndex = 0) {
   return [
-    "Create one continuous 12-second vertical 9:16 photorealistic LIVE-ACTION documentary video shot, not an illustration or slideshow.",
+    "Create one continuous 12-second vertical 9:16 premium cinematic 3D ANIMATED FILM shot. This must look and move like a scene from a polished theatrical animated short, NOT live-action documentary footage, NOT a presentation, NOT a slideshow.",
     "Topic: " + safeText(topic, 180) + ".",
     "FIRST HALF, seconds 0-6: " + safeText(first.visual_direction, 420) + ".",
-    "SECOND HALF, seconds 6-12: transition naturally into this new visual action: " + safeText(second.visual_direction, 420) + ".",
-    "Make the midpoint transition visually clear through continuous camera movement, not a hard cut.",
+    "SECOND HALF, seconds 6-12: transition naturally into this new physical action: " + safeText(second.visual_direction, 420) + ".",
+    "Create continuous character and environmental motion throughout all 12 seconds: walking, turning, breathing, facial expressions, hands interacting with objects, moving vehicles, flowing fabric, environmental motion and motivated camera movement. The midpoint must feel like one continuous cinematic sequence, not two title cards.",
     "Camera and lens direction: " + buildCinematicShotDirection(pairIndex),
-    "VISUAL PRIORITY: show real human beings on camera whenever the topic allows. Use natural human faces, realistic skin, hands, expressions and body movement. Show people actively doing something relevant: scientists working in a real laboratory, doctors examining models, people reacting, walking, speaking, demonstrating, building or exploring. Use documentary cinematography, authentic locations, practical lighting, natural movement, realistic camera motion and human-scale perspective. Avoid plastic CGI people, game-engine renders, cartoon looks, still-image animation and repeated stock-looking compositions. For invisible science such as cells or atoms, use a brief realistic macro or scientific visualization only when necessary, then return to real people demonstrating or explaining the idea.",
-    "Keep the main subject large and centered for a 9:16 frame. No text, captions, labels, logos, watermarks, borders or split screens."
+    "ART DIRECTION: high-end stylized-realistic 3D character animation, expressive believable faces, detailed sculpted characters, natural anatomy, nuanced facial acting, physically based materials, detailed real-world environments, cinematic global illumination, realistic shadows, atmospheric depth, rich but restrained film colour grading, carefully staged compositions and fluid character animation. Aim for premium feature-animation quality, not toy-like plastic CGI, not low-poly game graphics and not flat 2D vector art.",
+    "CHARACTER CONTINUITY: when a human character recurs, preserve the same age, face shape, hairstyle, skin tone, body proportions and clothing in both halves. The main character must remain visually consistent. Show clear readable physical actions and emotions rather than a character standing still.",
+    "NO SLIDESHOW: never create posters, title cards, presentation layouts, split screens, static illustrations, floating text, infographic panels, UI mockups, geometric placeholder people, SVG-like figures or still images with camera zoom. Do not render captions, subtitles, labels, logos or watermarks inside the footage.",
+    "Keep the main character and action large and readable in the vertical 9:16 frame. Use real spatial depth, foreground/background separation and cinematic camera motion. The output must be actual temporally animated video, not a sequence of still compositions."
   ].join(" ");
 }
 

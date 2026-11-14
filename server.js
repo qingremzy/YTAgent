@@ -1480,6 +1480,13 @@ app.get("/api/diagnostics", async (req, res) => {
   } else {
     add("Kaggle MCP", "blocked", "Skipped because Kaggle credentials are not configured.");
   }
+  const agnesFreeReady = Boolean(process.env.AGNES_API_KEY &&
+    process.env.AGNES_FREE_QUOTA_CONFIRMED === "true" &&
+    (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") === "agnes-video-2.5-flash");
+  add("Agnes free video route", agnesFreeReady ? "configured" : "warning",
+    agnesFreeReady
+      ? "Agnes Video 2.5 Flash is enabled under the explicitly confirmed free-quota setting."
+      : "Free Agnes video is not enabled. Confirm its free quota and set AGNES_FREE_QUOTA_CONFIRMED=true, or start the Kaggle GPU worker.");
   add("GPU worker", "info", JSON.stringify(getGpuWorkerStatus()).slice(0, 500));
   if (req.session && req.session.tokens) {
     try {

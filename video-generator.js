@@ -332,7 +332,8 @@ async function requestStoryboard(topic) {
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
   // Prefer the explicitly confirmed free Agnes Flash quota. This avoids waiting
   // for a Kaggle GPU slot and removes the cold-start/model-download bottleneck.
-  const useConfirmedAgnesFree = process.env.AGNES_FREE_QUOTA_CONFIRMED === "true" &&
+  const quotaConfirmation = String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase();
+  const useConfirmedAgnesFree = ["true", "1", "yes", "confirmed", "on"].includes(quotaConfirmation) &&
     Boolean(process.env.AGNES_API_KEY) &&
     (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") === "agnes-video-2.5-flash";
 

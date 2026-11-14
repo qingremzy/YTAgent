@@ -1306,7 +1306,7 @@ function verifyWorkerBootstrapToken(token) {
     const expected = crypto.createHmac("sha256", workerSecret).update(payload).digest().subarray(0, 16);
     const issuedAt = payload.readUInt32BE(0) * 1000;
     const age = Date.now() - issuedAt;
-    return age >= 0 && age <= 30 * 60 * 1000 &&
+    return age >= 0 && age <= 60 * 60 * 1000 &&
       crypto.timingSafeEqual(supplied, expected);
   } catch (_) { return false; }
 }

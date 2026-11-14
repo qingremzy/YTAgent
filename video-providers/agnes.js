@@ -314,8 +314,34 @@ async function generateSceneClips(scenes, topic, workDir, onProgress = () => {})
   return outputClips;
 }
 
+
+async function generateSingleAgnesClip(prompt, destination, seconds = 10) {
+  const apiKey = process.env.AGNES_API_KEY;
+  const model = process.env.AGNES_VIDEO_MODEL || DEFAULT_MODEL;
+  const confirmed = ["true", "1", "yes", "confirmed", "on"].includes(String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase());
+  if (!apiKey || !confirmed || model !== "agnes-video-2.5-flash") throw new Error("Agnes is not enabled with confirmed free quota.");
+  if (![4, 5, 6, 8, 10, 12].includes(Number(seconds))) throw new Error("Unsupported Agnes clip duration.");
+  const started = await createVideoTask(apiKey, model, prompt, Math.floor(Math.random() * 2000000000), Number(seconds));
+  const videoId = getVideoId(started);
+  if (!videoId) throw new Error("Agnes accepted the beat but returned no task ID.");
+  const url = await waitForVideo(apiKey, model, videoId);
+  const source = destination.replace(/\.mp4$/i, "-source.mp4");
+  await downloadVideo(url, source);
+  await runFfmpeg([
+    "-y", "-hide_banner", "-loglevel", "error", "-i", source, "-t", String(seconds),
+    "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1",
+    "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+    "-pix_fmt", "yuv420p", "-movflags", "+faststart", destination
+  ]);
+  await fs.promises.unlink(source).catch(() => {});
+  const stat = await fs.promises.stat(destination);
+  if (stat.size < 20000) throw new Error("Agnes beat failed its MP4 integrity check.");
+  return destination;
+}
+
 module.exports = {
   generateSceneClips,
+  generateSingleAgnesClip,
   requestJson,
   buildPairPrompt,
   buildCinematicShotDirection,

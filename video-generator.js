@@ -8,7 +8,7 @@ const { compileBlueprint } = require("./video-compiler/blueprint");
 const { renderFilm } = require("./video-compiler/renderer");
 const { generateSceneClips } = require("./video-providers/agnes");
 const { generateLtxSceneClips } = require("./video-providers/huggingface-ltx");
-const { generateSeedanceSceneClips } = require("./video-providers/seedance");
+const { generateSeedanceSceneClips, isSeedanceEligible } = require("./video-providers/seedance");
 const { generateWanSceneClips } = require("./video-providers/wan-worker");
 const { generateFallbackSceneClips } = require("./video-providers/free-visual-fallback");
 const { createStudioProject } = require("./studio-project");
@@ -332,11 +332,13 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
-  // Paid Seedance remains explicitly opt-in and is never enabled by this route.
-  const seedanceEnabled = ["true", "1", "yes", "on"].includes(String(process.env.ARK_SEEDANCE_ENABLED || "").trim().toLowerCase());
-  if (seedanceEnabled && process.env.ARK_API_KEY) {
+  const seedanceRequested = ["true", "1", "yes", "on"].includes(String(process.env.ARK_SEEDANCE_ENABLED || "").trim().toLowerCase());
+  if (isSeedanceEligible(process.env)) {
     const clips = await generateSeedanceSceneClips(scenes, topic, workDir, onProgress);
     return { clips, narrationClips: null, provider: "BytePlus ModelArk Dreamina Seedance 2.5" };
+  }
+  if (seedanceRequested) {
+    console.warn("YTAgent skipped paid Seedance and will continue with free video providers. No paid API request was submitted.");
   }
 
   // First try the primary Agnes 2.5 + LTX six-beat route.

@@ -15,6 +15,14 @@ function enabled(value) {
 
 // Seedance through BytePlus ModelArk is a paid API. Never submit a generation
 // request in YTAgent's default $0 mode, even if an API key is present.
+function isSeedanceEligible(env = process.env) {
+  const zeroCostMode = String(env.YTAGENT_ZERO_COST_MODE || "true").trim().toLowerCase() !== "false";
+  return !zeroCostMode &&
+    enabled(env.ARK_ALLOW_PAID_VIDEO_APIS) &&
+    enabled(env.ARK_SEEDANCE_ENABLED) &&
+    Boolean(env.ARK_API_KEY);
+}
+
 function assertSeedanceBillingAllowed(env = process.env) {
   const zeroCostMode = String(env.YTAGENT_ZERO_COST_MODE || "true").trim().toLowerCase() !== "false";
   if (zeroCostMode) {
@@ -174,4 +182,4 @@ async function generateSeedanceSceneClips(scenes, topic, workDir, onProgress = (
   return clips;
 }
 
-module.exports = { generateSeedanceSceneClips, buildPrompt, requestJson, assertSeedanceBillingAllowed };
+module.exports = { generateSeedanceSceneClips, buildPrompt, requestJson, assertSeedanceBillingAllowed, isSeedanceEligible };

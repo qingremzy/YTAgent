@@ -8,7 +8,7 @@ const { compileBlueprint } = require("./video-compiler/blueprint");
 const { renderFilm } = require("./video-compiler/renderer");
 const { generateSceneClips } = require("./video-providers/agnes");
 const { generateLtxSceneClips } = require("./video-providers/huggingface-ltx");
-const { generateSeedanceSceneClips } = require("./video-providers/seedance");
+const { generateSeedanceSceneClips, isSeedanceEligible } = require("./video-providers/seedance");
 const { generateWanSceneClips } = require("./video-providers/wan-worker");
 const { generateFallbackSceneClips } = require("./video-providers/free-visual-fallback");
 const { createStudioProject } = require("./studio-project");
@@ -332,17 +332,13 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
-  // Seedance is paid. In the $0 configuration, skip it cleanly and continue
-  // to free providers rather than throwing from the paid adapter.
-  const seedanceEnabled = ["true", "1", "yes", "on"].includes(String(process.env.ARK_SEEDANCE_ENABLED || "").trim().toLowerCase());
-  const zeroCostMode = String(process.env.YTAGENT_ZERO_COST_MODE || "true").trim().toLowerCase() !== "false";
-  const paidSeedanceApproved = ["true", "1", "yes", "on"].includes(String(process.env.ARK_ALLOW_PAID_VIDEO_APIS || "").trim().toLowerCase());
-  if (seedanceEnabled && process.env.ARK_API_KEY && !zeroCostMode && paidSeedanceApproved) {
+  const seedanceRequested = ["true", "1", "yes", "on"].includes(String(process.env.ARK_SEEDANCE_ENABLED || "").trim().toLowerCase());
+  if (isSeedanceEligible(process.env)) {
     const clips = await generateSeedanceSceneClips(scenes, topic, workDir, onProgress);
     return { clips, narrationClips: null, provider: "BytePlus ModelArk Dreamina Seedance 2.5" };
   }
-  if (seedanceEnabled && (zeroCostMode || !paidSeedanceApproved)) {
-    console.warn("YTAgent skipped paid Seedance and will continue with free video providers. Zero-cost mode:", zeroCostMode, "Paid API approved:", paidSeedanceApproved);
+  if (seedanceRequested) {
+    console.warn("YTAgent skipped paid Seedance and will continue with free video providers. No paid API request was submitted.");
   }
 
   // First try the primary Agnes 2.5 + LTX six-beat route.

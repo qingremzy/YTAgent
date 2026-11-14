@@ -251,6 +251,32 @@ const analysisRateLimit = createRateLimiter({
   message: "You've reached the video-analysis limit. Please try again in about an hour."
 });
 
+function createGoogleOAuthState() {
+  const crypto = require("crypto");
+  const issuedAt = Date.now().toString(36);
+  const nonce = crypto.randomBytes(24).toString("hex");
+  const payload = issuedAt + "." + nonce;
+  const signature = crypto.createHmac("sha256", sessionSecret).update(payload).digest("base64url");
+  return payload + "." + signature;
+}
+function verifyGoogleOAuthState(state) {
+  try {
+    const crypto = require("crypto");
+    const parts = String(state || "").split(".");
+    if (parts.length !== 3) return false;
+    const [issuedAt, nonce, signature] = parts;
+    if (!/^[a-z0-9]+$/i.test(issuedAt) || !/^[a-f0-9]{48}$/i.test(nonce) || !/^[A-Za-z0-9_-]{43}$/.test(signature)) return false;
+    const age = Date.now() - parseInt(issuedAt, 36);
+    if (!Number.isFinite(age) || age < 0 || age > 10 * 60 * 1000) return false;
+    const payload = issuedAt + "." + nonce;
+    const expected = crypto.createHmac("sha256", sessionSecret).update(payload).digest();
+    const received = Buffer.from(signature, "base64url");
+    return received.length === expected.length && crypto.timingSafeEqual(received, expected);
+  } catch (_) {
+    return false;
+  }
+}
+
 function oauthClient() {
   const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = process.env;
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
@@ -702,8 +728,9 @@ async function analyzeVideo(file) {
 app.get("/auth/google", (req, res) => {
   try {
     const client = oauthClient();
-    const state = require("crypto").randomBytes(24).toString("hex");
-    req.session.oauthState = state;
+    // Signed, short-lived state avoids relying on a session cookie surviving
+    // Google's cross-site redirect or a Railway process restart.
+    const state = createGoogleOAuthState();
     const authUrl = client.generateAuthUrl({
       access_type: "offline",
       prompt: "consent",
@@ -711,20 +738,23 @@ app.get("/auth/google", (req, res) => {
       scope: ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"],
       state
     });
-    req.session.save(saveError => {
-      if (saveError) return res.status(500).send("Could not start YouTube connection. Please try again.");
-      res.redirect(authUrl);
-    });
+    res.redirect(authUrl);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.get("/auth/google/callback", async (req, res) => {
   try {
-    if (!req.query.state || req.query.state !== req.session.oauthState) return res.status(400).send("OAuth state check failed. Please try connecting again.");
-    delete req.session.oauthState;
-    const { tokens } = await oauthClient().getToken(String(req.query.code || ""));
+    if (!verifyGoogleOAuthState(req.query.state)) return res.status(400).send("OAuth state check failed or expired. Please restart the YouTube connection.");
+    if (!req.query.code) return res.status(400).send("Google did not return an authorization code. Please try connecting again.");
+    const { tokens } = await oauthClient().getToken(String(req.query.code));
     req.session.tokens = tokens;
-    res.redirect("/");
+    req.session.save(saveError => {
+      if (saveError) {
+        console.error("Could not save YouTube session:", saveError.message);
+        return res.status(500).send("YouTube authorized successfully, but YTAgent could not save the connection. Please try again.");
+      }
+      res.redirect("/");
+    });
   } catch (err) {
     console.error("OAuth callback failed:", err.message);
     res.status(500).send("YouTube connection failed. Check your OAuth settings and try again.");

@@ -1231,6 +1231,19 @@ app.get("/api/kaggle/cli-status", async (_req, res) => {
   }
 });
 
+app.get("/api/kaggle/cli-status/:version", async (req, res) => {
+  const version = Number(req.params.version);
+  if (!Number.isSafeInteger(version) || version < 1) return res.status(400).json({ error: "A valid notebook version is required." });
+  try {
+    const identity = kaggleNotebookIdentity();
+    const result = await getKaggleKernelStatus({ ...identity, slug: identity.slug + "/" + version });
+    res.set("Cache-Control", "no-store");
+    res.json({ notebookRef: identity.slug, version, ...result });
+  } catch (error) {
+    res.status(502).json({ error: String(error.message || error).slice(0, 500) });
+  }
+});
+
 app.get("/api/kaggle/status", async (_req, res) => {
   if (!process.env.KAGGLE_API_TOKEN) {
     return res.status(503).json({ connected: false, error: "Kaggle API token is not configured." });

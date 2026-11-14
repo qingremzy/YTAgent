@@ -340,17 +340,17 @@ async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJ
     return { clips, narrationClips: null, provider: "BytePlus ModelArk Dreamina Seedance 2.5" };
   }
 
-  // Use Agnes Video v2.0 with the documented frame-based API contract.
+  // Use Agnes Video v2.0 with the current 2.5 Flash standard API contract.
   const quotaConfirmation = String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase();
   const useConfirmedAgnesFree = ["true", "1", "yes", "confirmed", "on"].includes(quotaConfirmation) &&
     Boolean(process.env.AGNES_API_KEY) &&
-    (process.env.AGNES_VIDEO_MODEL || "agnes-video-v2.0") === "agnes-video-v2.0";
+    (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") === "agnes-video-2.5-flash";
 
   let agnesFailure = "";
   if (useConfirmedAgnesFree) {
     try {
       const clips = await generateSceneClips(scenes, topic, workDir, onProgress);
-      return { clips, narrationClips: null, provider: "Agnes Video v2.0 (free API route)" };
+      return { clips, narrationClips: null, provider: "Agnes Video 2.5 Flash (free API route)" };
     } catch (error) {
       agnesFailure = String(error.message || error).slice(0, 350);
       console.warn("Agnes free video route unavailable; trying public LTX before Kaggle:", agnesFailure);

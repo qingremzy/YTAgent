@@ -18,13 +18,22 @@ function parseSseResult(raw) {
     const event = block.match(/^event:\s*(\S+)/m);
     const data = block.match(/^data:\s*(.+)$/m);
     if (!event || !data) continue;
-    if (event[1] === "error") throw new Error("LTX Space generation failed: " + data[1].slice(0, 300));
+    if (event[1] === "error") {
+      let detail = data[1];
+      try { detail = JSON.stringify(JSON.parse(data[1])); } catch (_) {}
+      if (!detail || detail === "null" || detail === '""') {
+        throw new Error("LTX public ZeroGPU queue rejected the request with an empty error event. The shared Space may be out of GPU capacity or temporarily unavailable.");
+      }
+      throw new Error("LTX Space generation failed: " + String(detail).slice(0, 300));
+    }
     if (event[1] === "complete") {
       let payload;
       try { payload = JSON.parse(data[1]); } catch (_) { throw new Error("LTX Space returned malformed completion data."); }
       const videoField = Array.isArray(payload) ? payload[0] : payload;
-      const videoUrl = videoField?.video?.url || videoField?.url || videoField?.video_url;
-      if (!videoUrl) throw new Error("LTX Space completed without returning a video URL.");
+      const fileField = Array.isArray(videoField) ? videoField[0] : videoField;
+      const videoUrl = fileField?.video?.url || fileField?.url || fileField?.video_url ||
+        fileField?.path || fileField?.video?.path;
+      if (!videoUrl) throw new Error("LTX Space completed without a downloadable video file. Response shape: " + JSON.stringify(payload).slice(0, 260));
       return videoUrl;
     }
   }

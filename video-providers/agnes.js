@@ -4,7 +4,7 @@ const { spawn } = require("child_process");
 const ffmpegPath = require("ffmpeg-static");
 
 const BASE_URL = "https://apihub.agnes-ai.com";
-const DEFAULT_MODEL = "agnes-video-v2.0";
+const DEFAULT_MODEL = "agnes-video-2.5-flash";
 const CLIP_SECONDS = 12;
 const HALF_SECONDS = 6;
 const SUCCESS_STATUSES = new Set(["completed", "succeeded", "success"]);
@@ -137,13 +137,15 @@ async function createVideoTask(apiKey, model, prompt, seed) {
       Authorization: "Bearer " + apiKey,
       "Content-Type": "application/json"
     },
+    // Agnes retired the legacy v2.0 width/height/num_frames contract.
+    // Current 2.5 Flash uses mode/seconds/size/aspect_ratio.
     body: JSON.stringify({
       model,
       prompt,
-      width: 720,
-      height: 1280,
-      num_frames: 289,
-      frame_rate: 24,
+      mode: "text",
+      seconds: String(CLIP_SECONDS),
+      size: "720P",
+      aspect_ratio: "9:16",
       seed
     })
   }, "Agnes video submission", 60000);
@@ -154,7 +156,8 @@ async function waitForVideo(apiKey, model, videoId, onProgress) {
   let waitMs = 60000;
   while (Date.now() < deadline) {
     await delay(waitMs);
-    const url = BASE_URL + "/agnesapi?video_id=" + encodeURIComponent(videoId);
+    const url = BASE_URL + "/agnesapi?video_id=" + encodeURIComponent(videoId) +
+      "&model_name=" + encodeURIComponent(model);
     let payload;
     try {
       payload = await requestJson(url, {
@@ -251,8 +254,8 @@ async function generateSceneClips(scenes, topic, workDir, onProgress = () => {})
     throw new Error("The Agnes video engine requires exactly ten storyboard scenes.");
   }
   const model = process.env.AGNES_VIDEO_MODEL || DEFAULT_MODEL;
-  if (model !== "agnes-video-v2.0") {
-    throw new Error("YTAgent's zero-cost mode only permits the Agnes Video v2.0 free model.");
+  if (model !== "agnes-video-2.5-flash") {
+    throw new Error("YTAgent's zero-cost mode only permits the Agnes Video 2.5 Flash free model.");
   }
 
   const outputClips = [];

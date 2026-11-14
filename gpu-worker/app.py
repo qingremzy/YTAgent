@@ -144,7 +144,7 @@ while True:
             stdin=subprocess.DEVNULL,
             stdout=None,
             stderr=None,
-            start_new_session=False,
+            start_new_session=True,
             close_fds=True
         )
     except Exception as exc:

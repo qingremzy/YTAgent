@@ -6,7 +6,36 @@ const ffmpegPath = require("ffmpeg-static");
 const SPACE_BASE_URL = process.env.HF_LTX_SPACE_URL || "https://lightricks-ltx-video-distilled.hf.space";
 const API_NAME = "text_to_video";
 const REQUEST_TIMEOUT_MS = 4 * 60 * 1000;
+const LTX_GPU_SECONDS_PER_CALL = 60;
+const LTX_MAX_BEATS_PER_FILM = 2;
+const LTX_MIN_QUOTA_SECONDS_PER_FILM = LTX_GPU_SECONDS_PER_CALL * LTX_MAX_BEATS_PER_FILM * 2;
 
+async function getZeroGpuQuota() {
+  const token = String(process.env.HF_TOKEN || '').trim();
+  if (!token) return { available: false, remaining: null, reason: 'HF_TOKEN is not configured, so authenticated ZeroGPU quota cannot be checked.' };
+  let response;
+  try {
+    response = await fetch('https://huggingface.co/api/spaces/zero-gpu/quota', {
+      headers: { Authorization: 'Bearer ' + token },
+      signal: AbortSignal.timeout(10000)
+    });
+  } catch (error) {
+    return { available: false, remaining: null, reason: 'Could not check Hugging Face ZeroGPU quota: ' + (error.message || 'network error') };
+  }
+  if (!response.ok) return { available: false, remaining: null, reason: 'Hugging Face quota endpoint returned HTTP ' + response.status + '. The token may need Billing > Read billing usage and payment method status permission.' };
+  const payload = await response.json().catch(() => ({}));
+  const remaining = Number(payload.current ?? payload.remaining);
+  if (!Number.isFinite(remaining) || remaining < 0) return { available: false, remaining: null, reason: 'Hugging Face returned an unreadable ZeroGPU quota value.' };
+  return {
+    available: remaining >= LTX_MIN_QUOTA_SECONDS_PER_FILM,
+    remaining,
+    base: Number(payload.base) || null,
+    resetsAt: payload.resetsAt || null,
+    reason: remaining >= LTX_MIN_QUOTA_SECONDS_PER_FILM
+      ? 'Enough verified ZeroGPU quota for at most ' + LTX_MAX_BEATS_PER_FILM + ' LTX beats.'
+      : 'Only ' + Math.floor(remaining) + ' ZeroGPU seconds remain. This film needs at least ' + LTX_MIN_QUOTA_SECONDS_PER_FILM + ' seconds for its capped LTX fallback.'
+  };
+}
 function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function clean(value, max = 500) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -48,15 +77,15 @@ async function generateOne(prompt, seed) {
     "worst quality, blurry, distorted, watermark, text, subtitles",
     "",
     "",
-    896,
-    512,
+    640,
+    384,
     "text-to-video",
-    6,
+    5,
     9,
     seed,
     true,
     1,
-    true
+    false
   ];
   let response;
   try {
@@ -152,4 +181,4 @@ async function generateLtxFiveSecondShot(prompt, destination, seed) {
   return destination;
 }
 
-module.exports = { generateLtxSceneClips, generateLtxFiveSecondShot, parseSseResult, buildPrompt };
+module.exports = { generateLtxSceneClips, generateLtxFiveSecondShot, parseSseResult, buildPrompt, getZeroGpuQuota, LTX_GPU_SECONDS_PER_CALL, LTX_MAX_BEATS_PER_FILM, LTX_MIN_QUOTA_SECONDS_PER_FILM };

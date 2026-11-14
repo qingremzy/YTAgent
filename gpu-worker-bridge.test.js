@@ -61,6 +61,8 @@ test("outbound GPU worker rejects non-MP4 scene uploads", async () => {
 
 test("detects a worker heartbeat and fails jobs that are never claimed", async () => {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-bridge-offline-"));
+  // Keep the test process alive while the production timers remain unref'd.
+  const keepAlive = setInterval(() => {}, 10);
   try {
     noteGpuWorkerPoll();
     assert.equal(getGpuWorkerStatus().online, true);
@@ -78,6 +80,7 @@ test("detects a worker heartbeat and fails jobs that are never claimed", async (
     assert.ok(progressUpdates.some(item => item.progress === 19 && /Waiting for its startup heartbeat/.test(item.message)));
     await assert.rejects(queued, /did not connect within 12 minutes/);
   } finally {
+    clearInterval(keepAlive);
     await fs.promises.rm(workDir, { recursive: true, force: true });
   }
 });

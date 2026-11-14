@@ -339,16 +339,16 @@ async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJ
     return { clips, narrationClips: null, provider: "BytePlus ModelArk Dreamina Seedance 2.5" };
   }
 
-  // Prefer the explicitly confirmed free Agnes Flash quota.
+  // Use Agnes Video v2.0 with the documented frame-based API contract.
   const quotaConfirmation = String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase();
   const useConfirmedAgnesFree = ["true", "1", "yes", "confirmed", "on"].includes(quotaConfirmation) &&
     Boolean(process.env.AGNES_API_KEY) &&
-    (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") === "agnes-video-2.5-flash";
+    (process.env.AGNES_VIDEO_MODEL || "agnes-video-v2.0") === "agnes-video-v2.0";
 
   if (useConfirmedAgnesFree) {
     try {
       const clips = await generateSceneClips(scenes, topic, workDir, onProgress);
-      return { clips, narrationClips: null, provider: "Agnes Video 2.5 Flash (confirmed free quota)" };
+      return { clips, narrationClips: null, provider: "Agnes Video v2.0 (free API route)" };
     } catch (error) {
       if (!process.env.YT_AGENT_WORKER_TOKEN) {
         throw new Error("Agnes free video generation could not complete: " + (error.message || error));

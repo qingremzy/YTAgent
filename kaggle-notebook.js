@@ -146,7 +146,7 @@ function patchNotebookForBatchRun(source, options = {}) {
     "import os, sys, runpy\n",
     "os.environ[\"YT_AGENT_SERVER_URL\"] = \"https://ytagent-production-1038.up.railway.app\"\n",
     "print(\"Starting YTAgent GPU worker inside the Kaggle notebook kernel.\", flush=True)\n",
-    "sys.argv = [\"app.py\", \"--run-once\", \"--wait-seconds\", \"1200\"]\n",
+    "sys.argv = [\"app.py\", \"--run-once\", \"--wait-seconds\", \"2700\"]\n",
     "runpy.run_path(\"app.py\", run_name=\"__main__\")\n",
     "print(\"YTAgent GPU job finished.\", flush=True)\n"
   ];

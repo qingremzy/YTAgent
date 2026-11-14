@@ -339,20 +339,51 @@ async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJ
     return { clips, narrationClips: null, provider: "BytePlus ModelArk Dreamina Seedance 2.5" };
   }
 
-  // Six 10-second story beats are distributed across the confirmed Agnes API
-  // and the public LTX Space. LTX beats are assembled from two 5-second shots.
+  // First try the primary Agnes 2.5 + LTX six-beat route.
+  let hostedRouteError = null;
   try {
     const { generateMultiProviderTimelineClips } = require("./video-providers/multi-provider-orchestrator");
     return await generateMultiProviderTimelineClips(scenes, topic, workDir, onProgress);
   } catch (error) {
-    console.warn("Six-beat multi-provider route unavailable; falling back to the Kaggle Wan worker:", error.message || error);
-    if (!process.env.YT_AGENT_WORKER_TOKEN) {
-      throw new Error("The free multi-provider video route could not complete the film. " +
-        String(error.message || error).slice(0, 500) +
-        ". The Kaggle Wan fallback is not configured.");
-    }
+    hostedRouteError = error;
+    console.warn("Primary hosted video route unavailable:", error.message || error);
   }
 
+  // Optional adapter based on uglylee/free-video-generator. It calls the
+  // legacy Agnes Video v2.0 API directly. It shares Agnes infrastructure, so
+  // never retry it when the primary Agnes route reports queue/capacity failure.
+  try {
+    const { isCapacityUnavailable } = require("./video-providers/multi-provider-orchestrator");
+    const { generateAgnesV2TimelineClips, enabled } = require("./video-providers/agnes-v2-free-generator");
+    if (enabled(process.env.AGNES_V2_FALLBACK_ENABLED) &&
+        enabled(process.env.AGNES_V2_FREE_QUOTA_CONFIRMED) &&
+        !isCapacityUnavailable(hostedRouteError)) {
+      const generated = await generateAgnesV2TimelineClips(scenes, topic, workDir, onProgress);
+      return { clips: generated.clips, narrationClips: null, provider: generated.provider };
+    }
+  } catch (error) {
+    console.warn("Optional Agnes v2.0 fallback unavailable:", error.message || error);
+  }
+
+  // YumCut is an independent optional full-project fallback. Its adapter
+  // fails closed unless the user explicitly enables it, confirms licensing,
+  // supplies a token cap, and the API quotes a cost within that cap.
+  try {
+    const { generateYumCutSceneClips } = require("./video-providers/yumcut");
+    if (process.env.YUMCUT_FALLBACK_ENABLED === "true") {
+      const generated = await generateYumCutSceneClips(scenes, topic, workDir, onProgress);
+      return { clips: generated.clips, narrationClips: null, provider: generated.provider };
+    }
+  } catch (error) {
+    console.warn("Optional YumCut fallback unavailable:", error.message || error);
+  }
+
+  // The self-hosted Kaggle Wan worker remains the final GPU fallback.
+  if (!process.env.YT_AGENT_WORKER_TOKEN) {
+    throw new Error("All configured hosted video routes were unavailable. " +
+      String(hostedRouteError && hostedRouteError.message || "Primary video generation failed.").slice(0, 400) +
+      ". The Kaggle Wan fallback is not configured.");
+  }
   try {
     const generated = await generateWanSceneClips(scenes, topic, workDir, onProgress, onGpuJobQueued);
     if (Array.isArray(generated)) return { clips: generated, narrationClips: null, provider: "Wan 2.1 Free GPU Worker" };

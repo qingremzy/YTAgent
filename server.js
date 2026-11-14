@@ -1566,7 +1566,7 @@ if (process.env.KAGGLE_CANCEL_OLD_VERSION === "22") {
       const info = kaggleToolData(await callKaggleTool("get_notebook_info", { userName: identity.userName, kernelSlug: identity.kernelSlug }));
       const latest = Number(info?.metadata?.currentVersionNumber || info?.metadata?.current_version_number || 0);
       const status = await getKaggleKernelStatus({ ...identity, slug: identity.slug + "/22" });
-      if (latest === 23 && /KernelWorkerStatus\\.QUEUED/.test(status.status || "")) {
+      if (latest === 23 && String(status.status || "").includes("KernelWorkerStatus.QUEUED")) {
         const result = kaggleToolData(await callKaggleTool("cancel_notebook_session", { kernelSessionId: 22 }));
         console.log("YTAgent stale Kaggle version 22 cancellation response:", JSON.stringify(result).slice(0, 500));
       } else {

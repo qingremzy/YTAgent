@@ -64,14 +64,19 @@ test("detects a worker heartbeat and fails jobs that are never claimed", async (
   try {
     noteGpuWorkerPoll();
     assert.equal(getGpuWorkerStatus().online, true);
+    const progressUpdates = [];
     const queued = enqueueGpuJob({
       prompts: Array.from({ length: 10 }, () => "A detailed 3D scene with a distinct physical action"),
       narrations: Array.from({ length: 10 }, () => "A documentary narration line with enough words"),
       seed: 2,
       workDir,
-      claimTimeoutMs: 15
+      claimTimeoutMs: 45,
+      queueHeartbeatMs: 5,
+      onProgress: (progress, message) => progressUpdates.push({ progress, message })
     });
-    await assert.rejects(queued, /did not connect within 45 minutes/);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.ok(progressUpdates.some(item => item.progress === 19 && /Waiting for its startup heartbeat/.test(item.message)));
+    await assert.rejects(queued, /did not connect within 12 minutes/);
   } finally {
     await fs.promises.rm(workDir, { recursive: true, force: true });
   }

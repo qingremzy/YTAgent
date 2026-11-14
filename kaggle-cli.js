@@ -86,7 +86,7 @@ async function pushNotebookWithKaggleCli({ identity, source, metadata = {} }) {
       timeoutSeconds,
       machineShape,
       message: "Kaggle CLI accepted the notebook push with the maximum 9-hour execution timeout.",
-      runStatus,
+      submissionAccepted: true,
       output: combined.trim().slice(-1200)
     };
   } finally {

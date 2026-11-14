@@ -151,8 +151,8 @@ async function createVideoTask(apiKey, model, prompt, seed, seconds = CLIP_SECON
   }, "Agnes video submission", 60000);
 }
 
-async function waitForVideo(apiKey, model, videoId, onProgress) {
-  const deadline = Date.now() + 30 * 60 * 1000;
+async function waitForVideo(apiKey, model, videoId, onProgress, timeoutMs = 30 * 60 * 1000) {
+  const deadline = Date.now() + Math.max(60000, Number(timeoutMs) || 30 * 60 * 1000);
   let waitMs = 60000;
   while (Date.now() < deadline) {
     await delay(waitMs);
@@ -193,7 +193,7 @@ async function waitForVideo(apiKey, model, videoId, onProgress) {
       waitMs = 60000;
     }
   }
-  throw new Error("Agnes video generation timed out after 30 minutes. No incomplete video will be published.");
+  throw new Error("Agnes video generation timed out after " + Math.round(Math.max(60000, Number(timeoutMs) || 30 * 60 * 1000) / 60000) + " minutes. No incomplete video will be published.");
 }
 
 async function downloadVideo(url, destination) {
@@ -315,7 +315,7 @@ async function generateSceneClips(scenes, topic, workDir, onProgress = () => {})
 }
 
 
-async function generateSingleAgnesClip(prompt, destination, seconds = 10) {
+async function generateSingleAgnesClip(prompt, destination, seconds = 10, options = {}) {
   const apiKey = process.env.AGNES_API_KEY;
   const model = process.env.AGNES_VIDEO_MODEL || DEFAULT_MODEL;
   const confirmed = ["true", "1", "yes", "confirmed", "on"].includes(String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase());
@@ -324,7 +324,7 @@ async function generateSingleAgnesClip(prompt, destination, seconds = 10) {
   const started = await createVideoTask(apiKey, model, prompt, Math.floor(Math.random() * 2000000000), Number(seconds));
   const videoId = getVideoId(started);
   if (!videoId) throw new Error("Agnes accepted the beat but returned no task ID.");
-  const url = await waitForVideo(apiKey, model, videoId);
+  const url = await waitForVideo(apiKey, model, videoId, options.onProgress, options.timeoutMs || 8 * 60 * 1000);
   const source = destination.replace(/\.mp4$/i, "-source.mp4");
   await downloadVideo(url, source);
   await runFfmpeg([

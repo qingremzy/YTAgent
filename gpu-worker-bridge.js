@@ -20,7 +20,7 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueue
     job.timer = setTimeout(() => {
       if (job.state === "queued") {
         jobs.delete(id);
-        reject(new Error("The free Kaggle GPU worker did not connect within twenty minutes. Kaggle may still be starting the GPU session, or the notebook's worker token may not be configured."));
+        reject(new Error("The free Kaggle GPU worker did not connect within 45 minutes. Kaggle may still be starting the GPU session, or the notebook's worker token may not be configured."));
       } else {
         jobs.delete(id);
         reject(new Error("The free GPU worker did not finish within 90 minutes. Its notebook may have disconnected or run out of GPU quota."));

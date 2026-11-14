@@ -255,7 +255,7 @@ async function generateSceneClips(scenes, topic, workDir, onProgress = () => {})
   }
   const model = process.env.AGNES_VIDEO_MODEL || DEFAULT_MODEL;
   if (model !== "agnes-video-2.5-flash") {
-    throw new Error("YTAgent's zero-cost mode only permits the Agnes Video 2.5 Flash free model.");
+    throw new Error("Zero-cost mode blocks paid Agnes models. YTAgent only permits the Agnes Video 2.5 Flash free model.");
   }
 
   const outputClips = [];

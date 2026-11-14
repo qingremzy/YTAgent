@@ -12,15 +12,15 @@ test("LTX completion SSE extracts the Gradio video URL", () => {
 
 test("LTX error SSE becomes a provider error", () => {
   assert.throws(
-    () => parseSseResult("event: error\ndata: no GPU available"),
-    /LTX Space generation failed: no GPU available/
+    () => parseSseResult("event: error\ndata: null"),
+    /LTX/
   );
 });
 
 test("LTX completion without a video URL is rejected", () => {
   assert.throws(
     () => parseSseResult("event: complete\ndata: [{\"video\":{}},123]"),
-    /no video URL/
+    /downloadable video file/
   );
 });
 
@@ -33,4 +33,11 @@ test("LTX prompt includes scene-specific physical action and topic", () => {
   assert.match(prompt, /How honeybees communicate/);
   assert.match(prompt, /waggle dance/);
   assert.match(prompt, /Shot 3 of 10/);
+});
+
+test("LTX empty ZeroGPU error explains shared queue unavailability", () => {
+  assert.throws(
+    () => parseSseResult("event: error\ndata: null"),
+    /shared Space may be out of GPU capacity/
+  );
 });

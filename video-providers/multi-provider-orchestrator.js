@@ -7,6 +7,7 @@ const { spawn } = require("child_process");
 const ffmpegPath = require("ffmpeg-static");
 const { generateSingleAgnesClip } = require("./agnes");
 const { generateLtxFiveSecondShot } = require("./huggingface-ltx");
+const { getVideoModelPool, getFreeHostedModelCandidates } = require("./video-model-registry");
 
 const BEAT_GROUPS = [[0,1],[2,3],[4,5],[6,7],[8],[9]];
 const BEAT_SECONDS = 10;
@@ -127,6 +128,13 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
   }
   try{onProgress(62,"Joining six ten-second story beats into the ten-shot editing timeline.");}catch(_){}
   const clips=await makeSixSecondTimelineClips(beatClips,workDir);
-  return {clips,provider:"Six-beat multi-provider pipeline ("+Array.from(usedProviders).join(" + ")+")",beatClips,providers:Array.from(usedProviders)};
+  return {
+    clips,
+    provider:"Six-beat multi-provider pipeline ("+Array.from(usedProviders).join(" + ")+")",
+    beatClips,
+    providers:Array.from(usedProviders),
+    modelPoolCount:getVideoModelPool().length,
+    eligibleFreeHostedCandidates:getFreeHostedModelCandidates().map(item=>item.id)
+  };
 }
 module.exports={BEAT_GROUPS,buildSixBeatPrompts,makeSixSecondTimelineClips,generateMultiProviderTimelineClips};

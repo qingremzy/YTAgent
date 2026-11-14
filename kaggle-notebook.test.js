@@ -48,3 +48,19 @@ test("patches the notebook runner to execute the one-job worker in the Kaggle ke
   assert.match(runner.source.join(""), /--wait-seconds/);
   assert.equal(validateNotebookSource(JSON.stringify(patched)), JSON.stringify(patched));
 });
+
+test("starts a secure heartbeat during Kaggle dependency setup without claiming the job", () => {
+  const source = JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: {}, cells: [
+    { cell_type: "markdown", metadata: {}, source: ["# YTAgent"] },
+    { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["import os, subprocess, sys\\n", "print('Checking Kaggle's preinstalled Wan GPU runtime')"] },
+    { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["import os\\n", "worker_token = os.environ.get('YT_AGENT_WORKER_TOKEN')"] },
+    { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["print('--run-once')"] }
+  ]});
+  const patched = JSON.parse(patchNotebookForBatchRun(source, { bootstrapToken: "a".repeat(64) }));
+  const code = patched.cells.filter(cell => cell.cell_type === "code");
+  assert.match(code[0].source.join(""), /api\/worker\/bootstrap/);
+  assert.match(code[1].source, /api\/worker\/heartbeat/);
+  assert.match(code[1].source, /api\/worker\/heartbeat/);
+  assert.match(code[2].source.join(""), /heartbeat_process.terminate/);
+  assert.match(code[2].source.join(""), /runpy\.run_path/);
+});

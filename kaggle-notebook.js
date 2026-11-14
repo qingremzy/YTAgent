@@ -136,6 +136,41 @@ function patchNotebookForBatchRun(source, options = {}) {
     ];
   }
 
+  if (tokenCell) {
+    // Run the secure bootstrap cell before dependency setup, then keep a lightweight
+    // heartbeat alive while Kaggle prepares the GPU runtime and downloads packages.
+    const setupCell = notebook.cells.find(item => {
+      if (!item || item.cell_type !== "code" || item === tokenCell) return false;
+      const text = Array.isArray(item.source) ? item.source.join("") : item.source;
+      return typeof text === "string" && text.includes("Checking Kaggle's preinstalled Wan GPU runtime");
+    });
+    if (setupCell) {
+    const setupText = Array.isArray(setupCell.source) ? setupCell.source.join("") : setupCell.source;
+    const heartbeatScript = [
+      'import os, time, urllib.request',
+      'server = os.environ["YT_AGENT_SERVER_URL"].rstrip("/")',
+      'token = os.environ["YT_AGENT_WORKER_TOKEN"]',
+      'while True:',
+      '    request = urllib.request.Request(server + "/api/worker/heartbeat", headers={"Authorization": "Bearer " + token})',
+      '    try:',
+      '        urllib.request.urlopen(request, timeout=20).read()',
+      '    except Exception:',
+      '        pass',
+      '    time.sleep(10)'
+    ].join(String.fromCharCode(10));
+    const heartbeat = [
+      "import subprocess, sys",
+      'os.environ.setdefault("YT_AGENT_SERVER_URL", "https://ytagent-production-1038.up.railway.app")',
+      "heartbeat_script = " + JSON.stringify(heartbeatScript),
+      'heartbeat_process = subprocess.Popen([sys.executable, "-u", "-c", heartbeat_script], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)'
+    ].join(String.fromCharCode(10)) + String.fromCharCode(10);
+    setupCell.source = heartbeat + setupText;
+    const markdown = notebook.cells.filter(item => item.cell_type !== "code");
+    const code = notebook.cells.filter(item => item.cell_type === "code");
+    notebook.cells = [...markdown, ...code.filter(item => item === tokenCell), ...code.filter(item => item !== tokenCell)];
+    }
+  }
+
   const cell = notebook.cells.find(item => {
     if (!item || item.cell_type !== "code") return false;
     const cellSource = Array.isArray(item.source) ? item.source.join("") : item.source;
@@ -143,14 +178,16 @@ function patchNotebookForBatchRun(source, options = {}) {
   });
   if (!cell) throw new Error("Kaggle worker notebook is missing its one-job runner cell.");
   cell.source = [
-    "import os, sys, runpy\n",
-    "os.environ[\"YT_AGENT_SERVER_URL\"] = \"https://ytagent-production-1038.up.railway.app\"\n",
-    "print(\"Starting YTAgent GPU worker inside the Kaggle notebook kernel.\", flush=True)\n",
-    "sys.argv = [\"app.py\", \"--run-once\", \"--wait-seconds\", \"2700\"]\n",
-    "runpy.run_path(\"app.py\", run_name=\"__main__\")\n",
-    "print(\"YTAgent GPU job finished.\", flush=True)\n"
-  ];
-  return JSON.stringify(notebook);
+    'import os, sys, runpy\n',
+    'os.environ["YT_AGENT_SERVER_URL"] = "https://ytagent-production-1038.up.railway.app"\n',
+    'print("Starting YTAgent GPU worker inside the Kaggle notebook kernel.", flush=True)\n',
+    'sys.argv = ["app.py", "--run-once", "--wait-seconds", "2700"]\n',
+    'try:\n',
+    '    runpy.run_path("app.py", run_name="__main__")\n',
+    'finally:\n',
+    '    if "heartbeat_process" in globals(): heartbeat_process.terminate()\n',
+    'print("YTAgent GPU job finished.", flush=True)\n'
+  ];  return JSON.stringify(notebook);
 }
 
 module.exports = { validateNotebookSource, buildNotebookSaveRequest, patchNotebookForBatchRun, MAX_NOTEBOOK_BYTES };

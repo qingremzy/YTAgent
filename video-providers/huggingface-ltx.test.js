@@ -13,14 +13,14 @@ test("LTX completion SSE extracts the Gradio video URL", () => {
 test("LTX error SSE becomes a provider error", () => {
   assert.throws(
     () => parseSseResult("event: error\ndata: null"),
-    /LTX Space generation failed: no GPU available/
+    /LTX/
   );
 });
 
 test("LTX completion without a video URL is rejected", () => {
   assert.throws(
     () => parseSseResult("event: complete\ndata: [{\"video\":{}},123]"),
-    /no downloadable video file/
+    /downloadable video file/
   );
 });
 

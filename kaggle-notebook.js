@@ -160,6 +160,7 @@ function patchNotebookForBatchRun(source, options = {}) {
     ].join(String.fromCharCode(10));
     const heartbeat = [
       "import subprocess, sys",
+      'os.environ.setdefault("YT_AGENT_SERVER_URL", "https://ytagent-production-1038.up.railway.app")',
       "heartbeat_script = " + JSON.stringify(heartbeatScript),
       'heartbeat_process = subprocess.Popen([sys.executable, "-u", "-c", heartbeat_script], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)'
     ].join(String.fromCharCode(10)) + String.fromCharCode(10);

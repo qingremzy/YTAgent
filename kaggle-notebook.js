@@ -136,6 +136,25 @@ function patchNotebookForBatchRun(source, options = {}) {
     ];
   }
 
+  // Run the secure bootstrap cell before dependency setup, then keep a lightweight
+  // heartbeat alive while Kaggle prepares the GPU runtime and downloads packages.
+  const setupCell = notebook.cells.find(item => {
+    if (!item || item.cell_type !== "code" || item === tokenCell) return false;
+    const text = Array.isArray(item.source) ? item.source.join("") : item.source;
+    return typeof text === "string" && text.includes("Checking Kaggle's preinstalled Wan GPU runtime");
+  });
+  if (!setupCell) throw new Error("Kaggle worker notebook is missing its dependency setup cell.");
+  const setupText = Array.isArray(setupCell.source) ? setupCell.source.join("") : setupCell.source;
+  const heartbeat = [
+    "import subprocess, sys\\n",
+    "heartbeat_script = 'import os,time,urllib.request\\n' + 'server=os.environ[\\\"YT_AGENT_SERVER_URL\\\"].rstrip(\\\"/\\\")\\n' + 'token=os.environ[\\\"YT_AGENT_WORKER_TOKEN\\\"]\\n' + 'while True:\\n' + ' req=urllib.request.Request(server+\\\"/api/worker/heartbeat\\\",headers={\\\"Authorization\\\":\\\"Bearer \\\"+token})\\n' + ' urllib.request.urlopen(req,timeout=20).read()\\n' + ' time.sleep(10)\\n' + '\\n',\\n",
+    "heartbeat_process = subprocess.Popen([sys.executable, \\\"-u\\\", \\\"-c\\\", heartbeat_script], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\\n"
+  ].join("");
+  setupCell.source = heartbeat + setupText;
+  const markdown = notebook.cells.filter(item => item.cell_type !== "code");
+  const code = notebook.cells.filter(item => item.cell_type === "code");
+  notebook.cells = [...markdown, ...code.filter(item => item === tokenCell), ...code.filter(item => item !== tokenCell)];
+
   const cell = notebook.cells.find(item => {
     if (!item || item.cell_type !== "code") return false;
     const cellSource = Array.isArray(item.source) ? item.source.join("") : item.source;

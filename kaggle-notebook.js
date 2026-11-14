@@ -144,7 +144,7 @@ function patchNotebookForBatchRun(source, options = {}) {
       const text = Array.isArray(item.source) ? item.source.join("") : item.source;
       return typeof text === "string" && text.includes("Checking Kaggle's preinstalled Wan GPU runtime");
     });
-    if (!setupCell) return JSON.stringify(notebook);
+    if (setupCell) {
     const setupText = Array.isArray(setupCell.source) ? setupCell.source.join("") : setupCell.source;
     const heartbeatScript = [
       'import os, time, urllib.request',
@@ -168,6 +168,7 @@ function patchNotebookForBatchRun(source, options = {}) {
     const markdown = notebook.cells.filter(item => item.cell_type !== "code");
     const code = notebook.cells.filter(item => item.cell_type === "code");
     notebook.cells = [...markdown, ...code.filter(item => item === tokenCell), ...code.filter(item => item !== tokenCell)];
+    }
   }
 
   const cell = notebook.cells.find(item => {

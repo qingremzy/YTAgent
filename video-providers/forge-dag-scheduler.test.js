@@ -11,7 +11,7 @@ const { validateDag, computeCriticalPath, runDag } = require("./forge-dag-schedu
 
   const calls = [];
   const result = await runDag({
-    dag: { intro: ["action"], action: ["ending"], independent: [] },
+    dag: { intro: [], action: ["intro"], ending: ["action"], independent: [] },
     maxWorkers: 2,
     generateFn: async id => {
       calls.push(id);

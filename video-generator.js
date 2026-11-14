@@ -332,11 +332,17 @@ async function requestStoryboard(topic) {
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
-  // Paid Seedance remains explicitly opt-in and is never enabled by this route.
+  // Seedance is paid. In the $0 configuration, skip it cleanly and continue
+  // to free providers rather than throwing from the paid adapter.
   const seedanceEnabled = ["true", "1", "yes", "on"].includes(String(process.env.ARK_SEEDANCE_ENABLED || "").trim().toLowerCase());
-  if (seedanceEnabled && process.env.ARK_API_KEY) {
+  const zeroCostMode = String(process.env.YTAGENT_ZERO_COST_MODE || "true").trim().toLowerCase() !== "false";
+  const paidSeedanceApproved = ["true", "1", "yes", "on"].includes(String(process.env.ARK_ALLOW_PAID_VIDEO_APIS || "").trim().toLowerCase());
+  if (seedanceEnabled && process.env.ARK_API_KEY && !zeroCostMode && paidSeedanceApproved) {
     const clips = await generateSeedanceSceneClips(scenes, topic, workDir, onProgress);
     return { clips, narrationClips: null, provider: "BytePlus ModelArk Dreamina Seedance 2.5" };
+  }
+  if (seedanceEnabled && (zeroCostMode || !paidSeedanceApproved)) {
+    console.warn("YTAgent skipped paid Seedance and will continue with free video providers. Zero-cost mode:", zeroCostMode, "Paid API approved:", paidSeedanceApproved);
   }
 
   // First try the primary Agnes 2.5 + LTX six-beat route.

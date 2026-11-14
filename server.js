@@ -1502,6 +1502,11 @@ app.get("/api/diagnostics", async (req, res) => {
       : "Agnes key: " + (process.env.AGNES_API_KEY ? "present" : "missing") +
         "; free-quota confirmation: " + (["true", "1", "yes", "confirmed", "on"].includes(agnesQuotaConfirmation) ? "confirmed" : "not confirmed") +
         "; model: " + (process.env.AGNES_VIDEO_MODEL || "agnes-video-v2.0") + ". Confirm free quota or start the Kaggle GPU worker.");
+  const ltxEnabled = String(process.env.HF_LTX_ENABLED || "true").trim().toLowerCase() !== "false";
+  add("Hugging Face LTX fallback", ltxEnabled ? "configured" : "disabled",
+    ltxEnabled
+      ? "Public Lightricks LTX text-to-video Space is enabled as a no-key shared-queue fallback. Live generation is not guaranteed and may be rate-limited."
+      : "Public LTX fallback is disabled by HF_LTX_ENABLED.");
   add("GPU worker", "info", JSON.stringify(getGpuWorkerStatus()).slice(0, 500));
   if (req.session && req.session.tokens) {
     try {

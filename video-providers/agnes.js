@@ -154,8 +154,7 @@ async function waitForVideo(apiKey, model, videoId, onProgress) {
   let waitMs = 60000;
   while (Date.now() < deadline) {
     await delay(waitMs);
-    const url = BASE_URL + "/agnesapi?video_id=" + encodeURIComponent(videoId) +
-      "&model_name=" + encodeURIComponent(model);
+    const url = BASE_URL + "/agnesapi?video_id=" + encodeURIComponent(videoId);
     let payload;
     try {
       payload = await requestJson(url, {

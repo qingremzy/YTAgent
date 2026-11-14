@@ -1244,6 +1244,27 @@ app.get("/api/kaggle/cli-status/:version", async (req, res) => {
   }
 });
 
+app.post("/api/kaggle/maintenance/cancel-queued/:version", async (req, res) => {
+  const expected = String(process.env.KAGGLE_MAINTENANCE_TOKEN || "");
+  const supplied = String(req.get("authorization") || "").replace(/^Bearer\\s+/i, "");
+  if (!expected || supplied !== expected) return res.status(401).json({ cancelled: false, error: "Unauthorized." });
+  const version = Number(req.params.version);
+  if (!Number.isSafeInteger(version) || version < 1) return res.status(400).json({ cancelled: false, error: "Invalid version." });
+  try {
+    const identity = kaggleNotebookIdentity();
+    const info = kaggleToolData(await callKaggleTool("get_notebook_info", { userName: identity.userName, kernelSlug: identity.kernelSlug }));
+    const latest = Number(info?.metadata?.currentVersionNumber || info?.metadata?.current_version_number || 0);
+    if (!latest || version >= latest) return res.status(400).json({ cancelled: false, error: "Only an older queued version may be cancelled." });
+    const status = await getKaggleKernelStatus({ ...identity, slug: identity.slug + "/" + version });
+    if (!/KernelWorkerStatus\\.QUEUED/.test(status.status || "")) return res.status(409).json({ cancelled: false, status: status.status, error: "Version is not queued." });
+    const result = kaggleToolData(await callKaggleTool("cancel_notebook_session", { kernelSessionId: version }));
+    res.set("Cache-Control", "no-store");
+    res.json({ cancelled: true, version, result });
+  } catch (error) {
+    res.status(502).json({ cancelled: false, error: String(error.message || error).slice(0, 500) });
+  }
+});
+
 app.get("/api/kaggle/status", async (_req, res) => {
   if (!process.env.KAGGLE_API_TOKEN) {
     return res.status(503).json({ connected: false, error: "Kaggle API token is not configured." });

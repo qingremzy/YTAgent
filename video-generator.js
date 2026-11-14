@@ -7,6 +7,7 @@ const ffmpegPath = require("ffmpeg-static");
 const { compileBlueprint } = require("./video-compiler/blueprint");
 const { renderFilm } = require("./video-compiler/renderer");
 const { generateSceneClips } = require("./video-providers/agnes");
+const { generateLtxSceneClips } = require("./video-providers/huggingface-ltx");
 const { generateSeedanceSceneClips } = require("./video-providers/seedance");
 const { generateWanSceneClips } = require("./video-providers/wan-worker");
 const { generateFallbackSceneClips } = require("./video-providers/free-visual-fallback");
@@ -345,20 +346,36 @@ async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJ
     Boolean(process.env.AGNES_API_KEY) &&
     (process.env.AGNES_VIDEO_MODEL || "agnes-video-v2.0") === "agnes-video-v2.0";
 
+  let agnesFailure = "";
   if (useConfirmedAgnesFree) {
     try {
       const clips = await generateSceneClips(scenes, topic, workDir, onProgress);
       return { clips, narrationClips: null, provider: "Agnes Video v2.0 (free API route)" };
     } catch (error) {
-      if (!process.env.YT_AGENT_WORKER_TOKEN) {
-        throw new Error("Agnes free video generation could not complete: " + (error.message || error));
-      }
-      console.warn("Agnes free video route unavailable; falling back to the Kaggle GPU worker:", error.message || error);
+      agnesFailure = String(error.message || error).slice(0, 350);
+      console.warn("Agnes free video route unavailable; trying public LTX before Kaggle:", agnesFailure);
+    }
+  }
+
+  // Independent public inference fallback. This uses the community-accessible
+  // Hugging Face LTX Space, not paid Inference Providers or trial credits.
+  // It may be rate-limited or paused, so failure must never block the Kaggle route.
+  let ltxFailure = "";
+  if (String(process.env.HF_LTX_ENABLED || "true").trim().toLowerCase() !== "false") {
+    try {
+      const clips = await generateLtxSceneClips(scenes, topic, workDir, onProgress);
+      return { clips, narrationClips: null, provider: "Hugging Face LTX public Space (free shared queue)" };
+    } catch (error) {
+      ltxFailure = String(error.message || error).slice(0, 350);
+      console.warn("Public LTX fallback unavailable; trying Kaggle GPU worker:", ltxFailure);
     }
   }
 
   if (!process.env.YT_AGENT_WORKER_TOKEN) {
-    throw new Error("No video engine is currently available. Enable Seedance, confirm Agnes free quota, or start the Kaggle GPU worker.");
+    throw new Error("No free video provider completed generation. " +
+      (agnesFailure ? "Agnes: " + agnesFailure + ". " : "") +
+      (ltxFailure ? "Hugging Face LTX: " + ltxFailure + ". " : "") +
+      "Configure the free Kaggle GPU worker or retry when public capacity returns.");
   }
 
   try {

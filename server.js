@@ -969,6 +969,12 @@ function requireGpuWorker(req, res, next) {
   next();
 }
 
+// A startup heartbeat proves the Kaggle batch is alive while its runtime installs dependencies.
+app.get("/api/worker/heartbeat", requireGpuWorker, (_req, res) => {
+  noteGpuWorkerPoll();
+  res.json({ ok: true, workerOnline: true });
+});
+
 // The GPU notebook polls this app over outbound HTTPS. No temporary tunnel is needed.
 app.get("/api/worker/next", requireGpuWorker, (_req, res) => {
   noteGpuWorkerPoll();

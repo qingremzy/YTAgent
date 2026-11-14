@@ -18,7 +18,7 @@ const { createObjectStorage } = require("./object-storage");
 const { createKaggleWorkerSessionManager } = require("./kaggle-worker-session");
 const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
 const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
-const { pushNotebookWithKaggleCli, getKaggleQuota } = require("./kaggle-cli");
+const { pushNotebookWithKaggleCli, getKaggleKernelStatus, getKaggleQuota } = require("./kaggle-cli");
 const { claimNextGpuJob, noteGpuWorkerPoll, getGpuWorkerStatus, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
 
 const app = express();
@@ -1217,6 +1217,17 @@ app.get("/api/kaggle/session-status", async (_req, res) => {
     });
   } catch (error) {
     res.status(502).json({ error: String(error.message || error).slice(0, 400) });
+  }
+});
+
+app.get("/api/kaggle/cli-status", async (_req, res) => {
+  try {
+    const identity = kaggleNotebookIdentity();
+    const result = await getKaggleKernelStatus(identity);
+    res.set("Cache-Control", "no-store");
+    res.json({ notebookRef: identity.slug, ...result });
+  } catch (error) {
+    res.status(502).json({ error: String(error.message || error).slice(0, 500) });
   }
 });
 

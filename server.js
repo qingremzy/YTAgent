@@ -1559,22 +1559,4 @@ if (objectStorage.configured) {
 } else {
   console.warn("R2 is not configured. Generated videos and studio projects use temporary local storage and expire after six hours.");
 }
-if (process.env.KAGGLE_CANCEL_OLD_VERSION === "22") {
-  setTimeout(async () => {
-    try {
-      const identity = kaggleNotebookIdentity();
-      const info = kaggleToolData(await callKaggleTool("get_notebook_info", { userName: identity.userName, kernelSlug: identity.kernelSlug }));
-      const latest = Number(info?.metadata?.currentVersionNumber || info?.metadata?.current_version_number || 0);
-      const status = await getKaggleKernelStatus({ ...identity, slug: identity.slug + "/22" });
-      if (latest === 23 && String(status.status || "").includes("KernelWorkerStatus.QUEUED")) {
-        const result = kaggleToolData(await callKaggleTool("cancel_notebook_session", { kernelSessionId: 22 }));
-        console.log("YTAgent stale Kaggle version 22 cancellation response:", JSON.stringify(result).slice(0, 500));
-      } else {
-        console.log("YTAgent skipped stale Kaggle cancellation. Latest:", latest, "Status:", status.status);
-      }
-    } catch (error) {
-      console.error("YTAgent stale Kaggle cancellation failed:", String(error.message || error).slice(0, 500));
-    }
-  }, 8000);
-}
 app.listen(PORT, () => console.log("YTAgent running on port " + PORT));

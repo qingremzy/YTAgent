@@ -1283,16 +1283,34 @@ function kaggleToolData(result) {
   return result;
 }
 
-const workerBootstrapTokens = new Map();
-
+// Stateless, replica-safe one-time bootstrap token. Railway may route the
+// notebook's bootstrap request to a different replica, so an in-memory Map is
+// not a valid token store. The 32-byte token encodes issue time + nonce + HMAC.
 function issueWorkerBootstrapToken() {
-  const now = Date.now();
-  for (const [token, expiresAt] of workerBootstrapTokens) {
-    if (expiresAt <= now) workerBootstrapTokens.delete(token);
-  }
-  const token = require("crypto").randomBytes(32).toString("hex");
-  workerBootstrapTokens.set(token, now + 10 * 60 * 1000);
-  return token;
+  const crypto = require("crypto");
+  const workerSecret = String(process.env.YT_AGENT_WORKER_TOKEN || "");
+  if (!workerSecret) throw new Error("YT_AGENT_WORKER_TOKEN is not configured.");
+  const payload = Buffer.alloc(16);
+  payload.writeUInt32BE(Math.floor(Date.now() / 1000), 0);
+  crypto.randomBytes(12).copy(payload, 4);
+  const signature = crypto.createHmac("sha256", workerSecret).update(payload).digest().subarray(0, 16);
+  return Buffer.concat([payload, signature]).toString("hex");
+}
+
+function verifyWorkerBootstrapToken(token) {
+  try {
+    const crypto = require("crypto");
+    const workerSecret = String(process.env.YT_AGENT_WORKER_TOKEN || "");
+    if (!workerSecret || !/^[a-f0-9]{64}$/i.test(String(token || ""))) return false;
+    const bytes = Buffer.from(token, "hex");
+    const payload = bytes.subarray(0, 16);
+    const supplied = bytes.subarray(16, 32);
+    const expected = crypto.createHmac("sha256", workerSecret).update(payload).digest().subarray(0, 16);
+    const issuedAt = payload.readUInt32BE(0) * 1000;
+    const age = Date.now() - issuedAt;
+    return age >= 0 && age <= 30 * 60 * 1000 &&
+      crypto.timingSafeEqual(supplied, expected);
+  } catch (_) { return false; }
 }
 
 async function getCanonicalKaggleNotebookSource(identity) {
@@ -1320,15 +1338,11 @@ const kaggleWorkerSessionManager = createKaggleWorkerSessionManager({
 app.post("/api/worker/bootstrap", (req, res) => {
   const authorization = String(req.get("authorization") || "");
   const match = authorization.match(/^Bearer ([a-f0-9]{64})$/i);
-  if (!match) return res.status(401).json({ error: "Worker bootstrap token is invalid or expired." });
-  const expiresAt = workerBootstrapTokens.get(match[1]);
-  if (!expiresAt || expiresAt <= Date.now()) {
-    workerBootstrapTokens.delete(match[1]);
+  if (!match || !verifyWorkerBootstrapToken(match[1])) {
     return res.status(401).json({ error: "Worker bootstrap token is invalid or expired." });
   }
   const workerToken = process.env.YT_AGENT_WORKER_TOKEN;
   if (!workerToken) return res.status(503).json({ error: "YTAgent worker authentication is not configured." });
-  workerBootstrapTokens.delete(match[1]);
   res.set("Cache-Control", "no-store");
   return res.json({ token: workerToken });
 });

@@ -63,3 +63,12 @@ YTAgent's default production mode is strict zero-cost:
 - Hosted text-to-speech fallbacks are disabled. Narration must come from local Kokoro in the GPU worker.
 - If a free provider is unavailable or its quota is exhausted, the job stops with an error instead of switching to a paid provider.
 - Never add prepaid credits or enable paid fallbacks for YTAgent.
+
+
+### Kaggle GPU startup diagnostics (November 2026)
+
+The Kaggle push API identifier `NvidiaTeslaT4` requests Kaggle's current free **GPU T4 ×2** pool. Do not change it to guessed identifiers such as `NvidiaTeslaT4x2`. Kaggle staff confirmed the identifier in [kaggle-cli issue #1196](https://github.com/Kaggle/kaggle-cli/issues/1196).
+
+The worker now performs a CUDA preflight immediately after the notebook starts and before installing optional packages. It reports the PyTorch/CUDA build, assigned GPU names, VRAM, and compute capability, and writes `/kaggle/working/ytagent-gpu-preflight.json`. If CUDA is not assigned, it stops before spending time installing dependencies. The CUDA allocator also uses expandable segments to reduce memory fragmentation on shared T4 memory.
+
+**Important:** this improves startup diagnostics and memory allocation after Kaggle assigns a machine. It cannot force Kaggle to allocate a GPU or jump the shared scheduler queue. Kaggle documents that free GPU availability is limited, and recent reports confirm T4 jobs can remain queued for long periods. Repeatedly pushing duplicate versions does not create more GPU capacity and can make diagnosis harder.

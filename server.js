@@ -1557,7 +1557,23 @@ if (redisEnabled) {
       const details = await generateEducationalVideo(job.data.topic, job.data.outputPath, async (progress, message) => {
         await job.updateProgress(Math.max(0, Math.min(99, Number(progress) || 0)));
         await job.updateData({ ...job.data, message: String(message || "").slice(0, 180) });
-      }, { studioProjectRoot });
+      }, {
+        studioProjectRoot,
+        // The Redis/BullMQ path must start the same free Kaggle GPU worker as
+        // the local-job path when Agnes is unavailable and the GPU job is queued.
+        // Without this callback, the bridge waits for a worker that was never
+        // started by this job after the Agnes fallback.
+        onGpuJobQueued: async ({ jobId: gpuJobId } = {}) => {
+          if (!process.env.KAGGLE_API_TOKEN) {
+            throw new Error("KAGGLE_API_TOKEN is missing. Configure Kaggle access before starting the free GPU worker.");
+          }
+          const result = await kaggleWorkerSessionManager.ensure();
+          if (result.started) {
+            console.log("YTAgent launched the Kaggle GPU batch for queued Redis job:", gpuJobId, result.notebookRef);
+          }
+          return result;
+        }
+      });
       const durableDetails = await persistGenerationArtifacts(job.data.outputPath, details);
       await job.updateProgress(100);
       scheduleGeneratedFileExpiry(job.data.outputPath);

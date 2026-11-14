@@ -84,9 +84,10 @@ async function waitForTask(apiKey, taskId, pairIndex, onProgress) {
       if (!url) throw new Error("Seedance completed task " + taskId + " without returning a video URL.");
       return url;
     }
-    if (["failed", "error", "cancelled", "canceled"].includes(status)) {
-      const detail = payload.error?.message || payload.error?.detail || payload.message || "The Seedance task failed.";
-      throw new Error("Seedance task failed: " + String(detail).slice(0, 350));
+    if (["failed", "error", "cancelled", "canceled", "expired"].includes(status)) {
+      const detail = payload.error?.message || payload.error?.detail || payload.message || (status === "expired" ? "ModelArk expired the task before generation completed." : "The Seedance task failed.");
+      const code = payload.error?.code ? " [" + String(payload.error.code).slice(0, 80) + "]" : "";
+      throw new Error("Seedance task " + status + code + ": " + String(detail).slice(0, 350));
     }
     await wait(POLL_MS);
   }

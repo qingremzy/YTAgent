@@ -1052,11 +1052,9 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
         removeOnComplete: { age: 86400, count: 200 },
         removeOnFail: { age: 86400, count: 200 }
       });
-      if (process.env.KAGGLE_API_TOKEN) {
-        kaggleWorkerSessionManager.ensure().then(result => {
-          if (result.started) console.log("YTAgent launched the Kaggle batch GPU worker:", result.notebookRef, result.machineShape);
-        }).catch(error => console.warn("Kaggle GPU worker auto-start failed:", error.message));
-      }
+      // Do not consume the free Kaggle GPU session before the primary hosted
+      // provider has been attempted. The Redis worker starts Kaggle on demand
+      // through generateEducationalVideo's onGpuJobQueued fallback callback.
       return res.status(202).json({ success: true, queued: true, jobId: String(job.id) });
     } catch (error) {
       console.error("Could not queue AI video generation:", error.message);

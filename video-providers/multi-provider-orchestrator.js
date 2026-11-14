@@ -73,7 +73,7 @@ async function generateAgnesBeat(prompt,workDir,beatIndex,onProgress=()=>{}) {
   });
 }
 function isCapacityUnavailable(error) {
-  return /queue.{0,30}full|full.{0,30}queue|zerogpu|zero.?gpu|capacity|http\s*(429|502|503|504)|temporarily unavailable|overloaded|timed?\s*out|timeout|rate.?limit/i
+  return /queue.{0,30}full|full.{0,30}queue|zerogpu|zero.?gpu|capacity|quota|http\s*(429|502|503|504)|temporarily unavailable|overloaded|timed?\s*out|timeout|rate.?limit/i
     .test(String(error&&error.message||error||""));
 }
 async function withProviderHeartbeat(provider,beatNumber,progress,task,onProgress) {
@@ -165,6 +165,13 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
         if(provider==="LTX" || isCapacityUnavailable(error)) {
           disabledProviders.add(provider);
           console.warn("YTAgent disabling "+provider+" for the rest of this film after a failure to avoid wasting scarce provider quota.");
+        }
+        // Both public endpoints rely on shared hosted capacity. If Agnes is
+        // explicitly queue/capacity limited, do not immediately hammer LTX's
+        // shared ZeroGPU queue with the same workload.
+        if(provider==="Agnes" && isCapacityUnavailable(error)) {
+          disabledProviders.add("LTX");
+          console.warn("YTAgent skipping LTX after Agnes reported shared capacity exhaustion; falling back to the independent Kaggle worker.");
         }
         console.warn("YTAgent beat "+(i+1)+" provider "+provider+" failed:",error.message||error);
       }

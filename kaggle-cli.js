@@ -93,6 +93,12 @@ async function pushNotebookWithKaggleCli({ identity, source, metadata = {} }) {
   }
 }
 
+async function getKaggleKernelStatus(identity) {
+  if (!process.env.KAGGLE_API_TOKEN) throw new Error("KAGGLE_API_TOKEN is not configured.");
+  const result = await runCommand("kaggle", ["kernels", "status", identity.slug], { timeoutMs: 30000 });
+  return { status: result.stdout.trim().slice(-2000), details: result.stderr.trim().slice(-1000) };
+}
+
 async function getKaggleQuota() {
   if (!process.env.KAGGLE_API_TOKEN) throw new Error("Kaggle API token is not configured.");
   const result = await runCommand("kaggle", ["quota", "--format", "json"], { timeoutMs: 20000 });
@@ -100,4 +106,4 @@ async function getKaggleQuota() {
   try { return JSON.parse(output); } catch (_) { return output; }
 }
 
-module.exports = { pushNotebookWithKaggleCli, getKaggleQuota };
+module.exports = { pushNotebookWithKaggleCli, getKaggleKernelStatus, getKaggleQuota };

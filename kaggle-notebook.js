@@ -144,7 +144,7 @@ function patchNotebookForBatchRun(source, options = {}) {
       const text = Array.isArray(item.source) ? item.source.join("") : item.source;
       return typeof text === "string" && text.includes("Checking Kaggle's preinstalled Wan GPU runtime");
     });
-    if (!setupCell) throw new Error("Kaggle worker notebook is missing its dependency setup cell.");
+    if (!setupCell) return JSON.stringify(notebook);
     const setupText = Array.isArray(setupCell.source) ? setupCell.source.join("") : setupCell.source;
     const heartbeatScript = [
       'import os, time, urllib.request',

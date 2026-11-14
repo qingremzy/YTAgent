@@ -4,7 +4,7 @@ const { spawn } = require("child_process");
 const ffmpegPath = require("ffmpeg-static");
 
 const BASE_URL = "https://apihub.agnes-ai.com";
-const DEFAULT_MODEL = "agnes-video-2.5-flash";
+const DEFAULT_MODEL = "agnes-video-v2.0";
 const CLIP_SECONDS = 12;
 const HALF_SECONDS = 6;
 const SUCCESS_STATUSES = new Set(["completed", "succeeded", "success"]);
@@ -140,18 +140,18 @@ async function createVideoTask(apiKey, model, prompt, seed) {
     body: JSON.stringify({
       model,
       prompt,
-      mode: "text",
-      seconds: String(CLIP_SECONDS),
-      size: "720P",
-      aspect_ratio: "9:16",
+      width: 720,
+      height: 1280,
+      num_frames: 289,
+      frame_rate: 24,
       seed
     })
   }, "Agnes video submission", 60000);
 }
 
 async function waitForVideo(apiKey, model, videoId, onProgress) {
-  const deadline = Date.now() + 15 * 60 * 1000;
-  let waitMs = 12000;
+  const deadline = Date.now() + 30 * 60 * 1000;
+  let waitMs = 60000;
   while (Date.now() < deadline) {
     await delay(waitMs);
     const url = BASE_URL + "/agnesapi?video_id=" + encodeURIComponent(videoId) +
@@ -166,7 +166,7 @@ async function waitForVideo(apiKey, model, videoId, onProgress) {
         isQueueFullError(error) ||
         /rate.?limit|too many|temporarily unavailable|network request failed|fetch failed|timeout/i.test(error.message);
       if (!retryable) throw error;
-      waitMs = Math.min(30000, Math.max(12000, error.retryAfterMs || waitMs * 2));
+      waitMs = Math.min(120000, Math.max(30000, error.retryAfterMs || waitMs));
       continue;
     }
     const status = getTaskStatus(payload);
@@ -183,15 +183,15 @@ async function waitForVideo(apiKey, model, videoId, onProgress) {
     if (data.error || data.code) {
       const detail = data.error?.message || data.message || data.code;
       if (isQueueFullError({ message: String(detail), providerCode: data.code }) || /rate.?limit|too many/i.test(String(detail))) {
-        waitMs = Math.min(30000, waitMs * 2);
+        waitMs = Math.min(120000, waitMs * 2);
       } else {
         throw new Error("Agnes video status error: " + String(detail).slice(0, 260));
       }
     } else {
-      waitMs = 10000;
+      waitMs = 60000;
     }
   }
-  throw new Error("Agnes video generation timed out after 15 minutes. No incomplete video will be published.");
+  throw new Error("Agnes video generation timed out after 30 minutes. No incomplete video will be published.");
 }
 
 async function downloadVideo(url, destination) {
@@ -252,8 +252,8 @@ async function generateSceneClips(scenes, topic, workDir, onProgress = () => {})
     throw new Error("The Agnes video engine requires exactly ten storyboard scenes.");
   }
   const model = process.env.AGNES_VIDEO_MODEL || DEFAULT_MODEL;
-  if (model !== "agnes-video-2.5-flash") {
-    throw new Error("YTAgent's zero-cost mode blocks paid Agnes models. Use the free visual fallback instead.");
+  if (model !== "agnes-video-v2.0") {
+    throw new Error("YTAgent's zero-cost mode only permits the Agnes Video v2.0 free model.");
   }
 
   const outputClips = [];

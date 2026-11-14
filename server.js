@@ -1495,13 +1495,13 @@ app.get("/api/diagnostics", async (req, res) => {
   const agnesQuotaConfirmation = String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase();
   const agnesFreeReady = Boolean(process.env.AGNES_API_KEY &&
     ["true", "1", "yes", "confirmed", "on"].includes(agnesQuotaConfirmation) &&
-    (process.env.AGNES_VIDEO_MODEL || "agnes-video-v2.0") === "agnes-video-v2.0");
+    (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") === "agnes-video-2.5-flash");
   add("Agnes free video route", agnesFreeReady ? "configured" : "warning",
     agnesFreeReady
-      ? "Agnes Video v2.0 is configured using its frame-based text-to-video API."
+      ? "Agnes Video 2.5 Flash is configured using its standard text-to-video API."
       : "Agnes key: " + (process.env.AGNES_API_KEY ? "present" : "missing") +
         "; free-quota confirmation: " + (["true", "1", "yes", "confirmed", "on"].includes(agnesQuotaConfirmation) ? "confirmed" : "not confirmed") +
-        "; model: " + (process.env.AGNES_VIDEO_MODEL || "agnes-video-v2.0") + ". Confirm free quota or start the Kaggle GPU worker.");
+        "; model: " + (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") + ". Confirm free quota or start the Kaggle GPU worker.");
   const ltxEnabled = String(process.env.HF_LTX_ENABLED || "true").trim().toLowerCase() !== "false";
   add("Hugging Face LTX fallback", ltxEnabled ? "configured" : "disabled",
     ltxEnabled

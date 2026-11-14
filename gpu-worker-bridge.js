@@ -11,7 +11,7 @@ const WORKER_HEARTBEAT_TIMEOUT_MS = 45 * 60 * 1000;
 const WORKER_HEARTBEAT_CHECK_MS = 15 * 1000;
 let lastWorkerPollAt = 0;
 
-function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueued, claimTimeoutMs = CLAIM_TIMEOUT_MS }) {
+function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueued, claimTimeoutMs = CLAIM_TIMEOUT_MS, queueHeartbeatMs = QUEUE_HEARTBEAT_MS }) {
   if (!Array.isArray(prompts) || prompts.length !== 10 || !Array.isArray(narrations) || narrations.length !== 10) {
     return Promise.reject(new Error("The free GPU worker requires exactly ten scene prompts."));
   }
@@ -40,7 +40,7 @@ function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueue
           if (pendingProgress && typeof pendingProgress.catch === "function") pendingProgress.catch(() => {});
         } catch (_) {}
       }
-    }, QUEUE_HEARTBEAT_MS);
+    }, Math.max(5, Number(queueHeartbeatMs) || QUEUE_HEARTBEAT_MS));
     if (job.queueHeartbeatTimer.unref) job.queueHeartbeatTimer.unref();
     jobs.set(id, job);
     pending.push(id);

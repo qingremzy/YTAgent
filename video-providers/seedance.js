@@ -56,6 +56,7 @@ async function createTask(apiKey, prompt) {
       generate_audio: false,
       ratio: "9:16",
       duration: PAIR_SECONDS,
+      resolution: process.env.ARK_VIDEO_RESOLUTION || "480p",
       watermark: true
     })
   });

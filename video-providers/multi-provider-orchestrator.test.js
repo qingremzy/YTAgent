@@ -18,3 +18,5 @@ assert.equal(isCapacityUnavailable(new Error("Agnes video queue is full")), true
 assert.equal(isCapacityUnavailable(new Error("HTTP 503 service unavailable")), true);
 assert.equal(isCapacityUnavailable(new Error("Invalid API key")), false);
 console.log("Six-beat multi-provider orchestration tests passed.");
+
+assert.equal(isCapacityUnavailable(new Error("Hugging Face ZeroGPU quota exceeded")), true);

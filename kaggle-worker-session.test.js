@@ -59,7 +59,7 @@ test("deduplicates simultaneous notebook start requests", async () => {
   assert.equal(calls.filter(call => call.name === "save_notebook").length, 1);
 });
 
-test("refuses to start a notebook without a configured GPU machine shape", async () => {
+test("does not submit a duplicate Kaggle run while the previous run may still be queued", async () => {\n  const { manager, calls } = makeManager();\n  const first = await manager.ensure();\n  const second = await manager.ensure();\n  assert.equal(first.started, true);\n  assert.equal(second.started, false);\n  assert.equal(second.alreadyRunning, true);\n  assert.ok(second.retryAfterMs > 0);\n  assert.equal(calls.filter(call => call.name === "save_notebook").length, 1);\n});\n\ntest("refuses to start a notebook without a configured GPU machine shape", async () => {
   const { manager } = makeManager({ machineShape: "" });
   await assert.rejects(manager.ensure(), /GPU machine shape/);
 });

@@ -130,7 +130,7 @@ async function requestJson(url, options, label, timeoutMs) {
   return data;
 }
 
-async function createVideoTask(apiKey, model, prompt, seed) {
+async function createVideoTask(apiKey, model, prompt, seed, seconds = CLIP_SECONDS) {
   return requestJson(BASE_URL + "/v1/videos", {
     method: "POST",
     headers: {
@@ -143,7 +143,7 @@ async function createVideoTask(apiKey, model, prompt, seed) {
       model,
       prompt,
       mode: "text",
-      seconds: String(CLIP_SECONDS),
+      seconds: String(seconds),
       size: "720P",
       aspect_ratio: "9:16",
       seed

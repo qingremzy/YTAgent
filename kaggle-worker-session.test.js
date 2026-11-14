@@ -140,3 +140,51 @@ test("uses a one-time bootstrap token and sanitizes malformed markdown cells", a
   assert.match(tokenCell.source.join(""), new RegExp(bootstrapToken));
   assert.doesNotMatch(tokenCell.source.join(""), /get_secret/);
 });
+
+
+test("polls Kaggle's real scheduler state and reports terminal startup failures", async () => {
+  const statuses = [];
+  const { manager } = makeManager();
+  const managerWithPolling = createKaggleWorkerSessionManager({
+    getGpuWorkerStatus: () => ({ online: false }),
+    getNotebookIdentity: () => identity,
+    getNotebookSource: async () => notebookSource(),
+    pushNotebookWithCli: async () => ({ cli: true, versionNumber: 10, runStatus: 'has status "KernelWorkerStatus.QUEUED"' }),
+    getKaggleKernelStatus: async () => 'samsonbamigboye/notebook477419e21e has status "KernelWorkerStatus.ERROR"',
+    statusPollIntervalMs: 5000,
+    callKaggleTool: async name => {
+      if (name === "get_notebook_info") return { metadata: { machineShape: "NvidiaTeslaT4", enableGpu: true, enableInternet: true } };
+      throw new Error("Unexpected Kaggle tool " + name);
+    }
+  });
+  const result = await managerWithPolling.ensure({
+    onStatus: status => statuses.push(status)
+  });
+  assert.equal(result.started, true);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(statuses.length, 1);
+  assert.equal(statuses[0].state, "ERROR");
+  assert.equal(statuses[0].terminal, true);
+  managerWithPolling.stopStatusMonitor();
+});
+
+test("recognizes queued Kaggle status as non-terminal and keeps monitoring", async () => {
+  const statuses = [];
+  const manager = createKaggleWorkerSessionManager({
+    getGpuWorkerStatus: () => ({ online: false }),
+    getNotebookIdentity: () => identity,
+    getNotebookSource: async () => notebookSource(),
+    pushNotebookWithCli: async () => ({ cli: true, versionNumber: 11 }),
+    getKaggleKernelStatus: async () => 'has status "KernelWorkerStatus.QUEUED"',
+    statusPollIntervalMs: 5000,
+    callKaggleTool: async name => {
+      if (name === "get_notebook_info") return { metadata: { machineShape: "NvidiaTeslaT4", enableGpu: true, enableInternet: true } };
+      throw new Error("Unexpected Kaggle tool " + name);
+    }
+  });
+  await manager.ensure({ onStatus: status => statuses.push(status) });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(statuses[0].state, "QUEUED");
+  assert.equal(statuses[0].terminal, false);
+  manager.stopStatusMonitor();
+});

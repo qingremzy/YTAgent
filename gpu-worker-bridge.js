@@ -114,9 +114,14 @@ async function receiveGpuScene(id, index, bytes) {
   if (!Buffer.isBuffer(bytes) || bytes.length < 20000 || bytes.subarray(4, 8).toString() !== "ftyp") {
     throw new Error("The GPU worker uploaded an invalid or incomplete MP4 scene.");
   }
-  if (job.received.has(index)) throw new Error("This scene was already received.");
-  job.lastHeartbeatAt = Date.now();
   const filename = path.join(job.workDir, "wan-scene-" + String(index + 1).padStart(2, "0") + ".mp4");
+  if (job.received.has(index)) {
+    const existing = await fs.promises.readFile(filename);
+    if (!existing.equals(bytes)) throw new Error("A different MP4 was already received for this scene.");
+    job.lastHeartbeatAt = Date.now();
+    return { received: job.received.size, completed: false, duplicate: true };
+  }
+  job.lastHeartbeatAt = Date.now();
   await fs.promises.writeFile(filename, bytes);
   job.clips[index] = filename;
   job.received.add(index);
@@ -138,9 +143,14 @@ async function receiveGpuAudio(id, index, bytes) {
   if (!Buffer.isBuffer(bytes) || bytes.length < 1000 || bytes.subarray(0, 4).toString() !== "RIFF" || bytes.subarray(8, 12).toString() !== "WAVE") {
     throw new Error("The GPU worker uploaded an invalid WAV narration file.");
   }
-  if (job.audioReceived.has(index)) throw new Error("This narration was already received.");
-  job.lastHeartbeatAt = Date.now();
   const filename = path.join(job.workDir, "narration-" + String(index + 1).padStart(2, "0") + ".wav");
+  if (job.audioReceived.has(index)) {
+    const existing = await fs.promises.readFile(filename);
+    if (!existing.equals(bytes)) throw new Error("A different WAV was already received for this narration.");
+    job.lastHeartbeatAt = Date.now();
+    return { received: job.audioReceived.size, completed: false, duplicate: true };
+  }
+  job.lastHeartbeatAt = Date.now();
   await fs.promises.writeFile(filename, bytes);
   job.audios[index] = filename;
   job.audioReceived.add(index);

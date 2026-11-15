@@ -330,6 +330,37 @@ app.get("/api/compute/status", requireQingCloudOwner, async (_req, res) => {
   }
 });
 
+app.post("/api/compute/gpu-test", requireQingCloudOwner, async (req, res) => {
+  try {
+    const matrixSize = req.body?.matrix_size === undefined ? 1024 : Number(req.body.matrix_size);
+    const requiredGpuVramMb = req.body?.required_gpu_vram_mb === undefined ? 512 : Number(req.body.required_gpu_vram_mb);
+    const job = await qingCloudClient().createGpuSmokeTest({
+      matrix_size: matrixSize,
+      required_gpu_vram_mb: requiredGpuVramMb
+    });
+    res.set("Cache-Control", "private, no-store");
+    res.status(202).json({
+      accepted: true,
+      provider: "QingCloud Compute",
+      job_id: job.job_id,
+      status_url: "/api/compute/jobs/" + encodeURIComponent(job.job_id),
+      note: "This is a bounded CUDA matrix-multiply smoke test, not video generation."
+    });
+  } catch (error) {
+    res.status(502).json({ accepted: false, error: String(error.message || error).slice(0, 300) });
+  }
+});
+
+app.get("/api/compute/jobs/:jobId", requireQingCloudOwner, async (req, res) => {
+  try {
+    const job = await qingCloudClient().getJob(req.params.jobId);
+    res.set("Cache-Control", "private, no-store");
+    res.json(job);
+  } catch (error) {
+    res.status(502).json({ error: String(error.message || error).slice(0, 300) });
+  }
+});
+
 app.post("/api/compute/invitations", requireQingCloudOwner, async (req, res) => {
   try {
     const expiresInHours = req.body?.expires_in_hours === undefined ? 24 : Number(req.body.expires_in_hours);

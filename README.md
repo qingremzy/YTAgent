@@ -26,11 +26,12 @@ AI-generated facts and metadata can contain mistakes. Review before publishing. 
 
 ## QingCloud Compute integration
 
-YTAgent can connect to a QingCloud Compute coordinator as its first external compute customer. Configure `QINGCLOUD_URL`, `QINGCLOUD_ADMIN_TOKEN`, and `QINGCLOUD_OWNER_CHANNEL_ID` only in the YTAgent server environment. The owner channel ID must exactly match the authorized YouTube channel ID shown by `GET /api/status`. All compute controls verify the connected YouTube channel against this allowlist before forwarding requests. The dashboard can inspect provider inventory and approve/reject enrolled machines without exposing the coordinator token to the browser. Remote coordinators must use HTTPS. The admin token never goes to the browser.
+YTAgent can connect to a QingCloud Compute coordinator as its first external compute customer. Configure `QINGCLOUD_URL`, `QINGCLOUD_ADMIN_TOKEN`, and `QINGCLOUD_OWNER_CHANNEL_ID` only in the YTAgent server environment. The owner channel ID must exactly match the authorized YouTube channel ID shown by `GET /api/status`. All compute controls verify the connected YouTube channel against this allowlist before forwarding requests. The dashboard can create one-time provider invitations, inspect provider inventory and approve/reject enrolled machines without exposing the coordinator token to the browser. Invitation plaintext is displayed once and is not saved in browser storage. Remote coordinators must use HTTPS. The admin token never goes to the browser.
 
 After connecting a YouTube account, the authenticated YTAgent API exposes:
 
 - `GET /api/compute/status` — checks the QingCloud health endpoint and retrieves the protected provider/job overview.
+- `POST /api/compute/invitations` — create a one-time, 24-hour provider enrollment invitation.
 - `GET /api/compute/providers` and `PUT /api/compute/providers/:workerId/approval` — list enrolled workers and approve, reject or return them to pending review from the owner-only dashboard.
 - `POST /api/compute/test` — submits a bounded distributed CPU sum task (defaults to 1–1,000 in chunks of 100). It returns a task ID immediately.
 - `GET /api/compute/tasks/:taskId` — retrieves queued/running/completed/failed task status and the coordinator-verified result.

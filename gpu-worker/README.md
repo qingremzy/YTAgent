@@ -9,6 +9,7 @@ This worker runs the open Wan 2.1 T2V 1.3B Diffusers model on a temporary Kaggle
 - No need to update `VIDEO_WORKER_URL` whenever a notebook restarts.
 - The worker claims a job from Railway, generates ten real video clips, and securely uploads each MP4 over HTTPS.
 - It then creates ten natural male documentary narration tracks locally with Kokoro 82M, without a paid TTS API or Groq rate limits.
+- The worker uses OpenCV to sample generated scene frames before upload, rejecting unreadable or almost-entirely-black clips and flagging possible near-static scenes for review.
 - The Railway app validates every MP4 and WAV before assembling the final film.
 
 ## Requirements and limits

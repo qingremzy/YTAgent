@@ -45,6 +45,53 @@ const qingCloudStatus = document.getElementById("qingCloudStatus");
 const qingCloudTaskStatus = document.getElementById("qingCloudTaskStatus");
 const checkQingCloudButton = document.getElementById("checkQingCloud");
 const runQingCloudTestButton = document.getElementById("runQingCloudTest");
+const createQingCloudInviteButton = document.getElementById("createQingCloudInvite");
+const qingCloudInvitation = document.getElementById("qingCloudInvitation");
+
+if (createQingCloudInviteButton) createQingCloudInviteButton.addEventListener("click", async () => {
+  createQingCloudInviteButton.disabled = true;
+  createQingCloudInviteButton.textContent = "Creating invitation…";
+  qingCloudInvitation.classList.add("hidden");
+  try {
+    const response = await fetch("/api/compute/invitations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expires_in_hours: 24 })
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "Could not create provider invitation.");
+    qingCloudInvitation.replaceChildren();
+    const label = document.createElement("p");
+    label.textContent = "One-time invitation · expires " + new Date(data.expires_at).toLocaleString();
+    const token = document.createElement("input");
+    token.type = "text";
+    token.readOnly = true;
+    token.value = data.invitation_token;
+    token.setAttribute("aria-label", "One-time QingCloud provider invitation token");
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "button secondary";
+    copy.textContent = "Copy invitation";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(token.value);
+        copy.textContent = "Copied";
+      } catch (_) {
+        token.select();
+        copy.textContent = "Select and copy the token";
+      }
+    });
+    const warning = document.createElement("small");
+    warning.textContent = "Shown once. Send privately to the provider. It enrolls one worker and does not grant admin access.";
+    qingCloudInvitation.append(label, token, copy, warning);
+    qingCloudInvitation.classList.remove("hidden");
+  } catch (error) {
+    qingCloudTaskStatus.textContent = error.message;
+  } finally {
+    createQingCloudInviteButton.disabled = false;
+    createQingCloudInviteButton.textContent = "Create one-time provider invitation";
+  }
+});
 
 async function refreshQingCloudStatus() {
   if (!qingCloudStatus) return;

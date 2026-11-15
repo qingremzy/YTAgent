@@ -24,6 +24,18 @@ AI-generated facts and metadata can contain mistakes. Review before publishing. 
 - Optional free Kaggle GPU notebook for Wan 2.1 video generation and Kokoro narration. See [GPU worker setup](gpu-worker/README.md).
 - Optional Agnes API key only if a verified no-charge quota is available.
 
+## QingCloud Compute integration
+
+YTAgent can connect to a QingCloud Compute coordinator as its first external compute customer. Configure `QINGCLOUD_URL` and `QINGCLOUD_ADMIN_TOKEN` only in the YTAgent server environment. Remote coordinators must use HTTPS. The admin token never goes to the browser.
+
+After connecting a YouTube account, the authenticated YTAgent API exposes:
+
+- `GET /api/compute/status` — checks the QingCloud health endpoint and retrieves the protected provider/job overview.
+- `POST /api/compute/test` — submits a bounded distributed CPU sum task (defaults to 1–1,000 in chunks of 100). It returns a task ID immediately.
+- `GET /api/compute/tasks/:taskId` — retrieves queued/running/completed/failed task status and the coordinator-verified result.
+
+The test task runs on enrolled, approved QingCloud workers that are online and have opted in to the built-in safe job runtime (`--enable-jobs`). If no eligible worker is connected, the task remains queued. This is the first authenticated YTAgent-to-QingCloud control-plane integration and proves distributed CPU task submission/status retrieval. It does **not yet offload Wan video generation, narration, FFmpeg rendering, or GPU inference**. The existing Kaggle Wan worker remains the video-generation path until a dedicated, sandboxed YTAgent GPU worker adapter is implemented and tested.
+
 ## Environment variables
 
 Set these in the hosting provider. Never commit keys or OAuth secrets.

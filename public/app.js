@@ -62,6 +62,7 @@ async function refreshQingCloudStatus() {
       " · " + (overview.online_workers || 0) + " online providers · " +
       (overview.queued_jobs || 0) + " queued jobs · " +
       (overview.running_jobs || 0) + " running jobs.";
+    await refreshQingCloudProviders();
   } catch (error) {
     qingCloudStatus.textContent = "QingCloud: " + error.message;
   }

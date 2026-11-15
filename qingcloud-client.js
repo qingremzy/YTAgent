@@ -71,6 +71,21 @@ function createQingCloudClient(env = process.env, fetchImpl = globalThis.fetch) 
         body: { start, end, chunk_size }
       });
     },
+    listProviders() {
+      return request("/v1/providers");
+    },
+    updateProviderApproval(workerId, status, note = "") {
+      if (!/^[a-f0-9-]{36}$/i.test(String(workerId || ""))) {
+        throw new Error("Invalid QingCloud worker ID.");
+      }
+      if (!["pending", "approved", "rejected"].includes(status)) {
+        throw new Error("Provider approval status must be pending, approved or rejected.");
+      }
+      return request("/v1/workers/" + encodeURIComponent(workerId) + "/approval", {
+        method: "PUT",
+        body: { status, note: String(note || "").slice(0, 500) }
+      });
+    },
     getDistributedSum(taskId) {
       if (!/^[a-f0-9-]{16,64}$/i.test(String(taskId || ""))) {
         throw new Error("Invalid QingCloud task ID.");

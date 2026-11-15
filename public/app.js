@@ -37,6 +37,79 @@ async function refreshStatus() {
     disconnectButton.classList.toggle("hidden", !data.connected);
   } catch { statusText.textContent = "Could not check connection."; }
 }
+
+let activeQingCloudTaskId = null;
+const qingCloudStatus = document.getElementById("qingCloudStatus");
+const qingCloudTaskStatus = document.getElementById("qingCloudTaskStatus");
+const checkQingCloudButton = document.getElementById("checkQingCloud");
+const runQingCloudTestButton = document.getElementById("runQingCloudTest");
+
+async function refreshQingCloudStatus() {
+  if (!qingCloudStatus) return;
+  qingCloudStatus.textContent = "Checking QingCloud coordinator and provider inventory…";
+  try {
+    const response = await fetch("/api/compute/status", { cache: "no-store" });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "QingCloud is not reachable.");
+    if (!data.configured) {
+      qingCloudStatus.textContent = "QingCloud is not configured on the YTAgent server yet.";
+      return;
+    }
+    const overview = data.overview || {};
+    qingCloudStatus.textContent = (data.connected ? "CONNECTED" : "NOT CONNECTED") +
+      " · " + (overview.online_workers || 0) + " online providers · " +
+      (overview.queued_jobs || 0) + " queued jobs · " +
+      (overview.running_jobs || 0) + " running jobs.";
+  } catch (error) {
+    qingCloudStatus.textContent = "QingCloud: " + error.message;
+  }
+}
+
+async function refreshQingCloudTask() {
+  if (!activeQingCloudTaskId) {
+    qingCloudTaskStatus.textContent = "No QingCloud test task has been submitted in this session.";
+    return;
+  }
+  try {
+    const response = await fetch("/api/compute/tasks/" + encodeURIComponent(activeQingCloudTaskId), { cache: "no-store" });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "Could not retrieve task status.");
+    qingCloudTaskStatus.textContent = "Task " + activeQingCloudTaskId + " · " + data.status +
+      (data.status === "succeeded" ? " · verified total: " + data.total : "") +
+      (data.status === "failed" ? " · " + (data.error || "task failed") : "");
+  } catch (error) {
+    qingCloudTaskStatus.textContent = error.message;
+  }
+}
+
+if (checkQingCloudButton) checkQingCloudButton.addEventListener("click", async () => {
+  checkQingCloudButton.disabled = true;
+  await refreshQingCloudStatus();
+  await refreshQingCloudTask();
+  checkQingCloudButton.disabled = false;
+});
+
+if (runQingCloudTestButton) runQingCloudTestButton.addEventListener("click", async () => {
+  runQingCloudTestButton.disabled = true;
+  qingCloudTaskStatus.textContent = "Submitting a 1,000-integer distributed CPU test…";
+  try {
+    const response = await fetch("/api/compute/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start: 1, end: 1000, chunk_size: 100 })
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "Could not submit the QingCloud test.");
+    activeQingCloudTaskId = data.task_id;
+    qingCloudTaskStatus.textContent = "Accepted by QingCloud · " + data.chunk_count +
+      " chunks queued. Expected result: 500500. Waiting for approved workers…";
+    await refreshQingCloudTask();
+  } catch (error) {
+    qingCloudTaskStatus.textContent = error.message;
+  } finally {
+    runQingCloudTestButton.disabled = false;
+  }
+});
 videoInput.addEventListener("change", event => {
   document.getElementById("fileLabel").textContent = event.target.files[0]?.name || "Choose video from your device";
   analysisStatus.textContent = "";

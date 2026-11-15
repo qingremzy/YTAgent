@@ -165,25 +165,43 @@ def stop_remote_progress_heartbeat(process):
             pass
 
 
+def _post_bytes_with_retry(url, data, timeout, label, max_attempts=5):
+    """Retry transient upload failures. Server-side uploads are content-idempotent."""
+    headers = {"Authorization": "Bearer " + TOKEN, "Content-Type": "application/octet-stream"}
+    last_error = None
+    for attempt in range(max_attempts):
+        request = urllib.request.Request(url, data=data, method="POST", headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                body = response.read().decode("utf-8")
+                return json.loads(body or "{}")
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code not in (408, 425, 429, 500, 502, 503, 504):
+                detail = exc.read().decode("utf-8", errors="replace")[:240]
+                raise RuntimeError(f"{label} upload rejected (HTTP {exc.code}): {detail}") from exc
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
+            last_error = exc
+
+        if attempt + 1 < max_attempts:
+            delay = min(20, 2 ** attempt)
+            print(f"{label} upload attempt {attempt + 1}/{max_attempts} failed; retrying in {delay}s: {str(last_error)[:180]}", flush=True)
+            time.sleep(delay)
+
+    raise RuntimeError(f"{label} upload failed after {max_attempts} attempts: {str(last_error)[:300]}") from last_error
+
+
 def send_scene_to_server(remote_job_id, index, clip_path):
     url = f"{SERVER_URL}/api/worker/jobs/{remote_job_id}/scenes/{index}"
     data = Path(clip_path).read_bytes()
-    request = urllib.request.Request(
-        url, data=data, method="POST",
-        headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/octet-stream"}
-    )
-    with urllib.request.urlopen(request, timeout=180) as response:
-        return json.loads(response.read().decode("utf-8") or "{}")
+    return _post_bytes_with_retry(url, data, 180, f"Scene {index + 1}")
+
 
 def send_audio_to_server(remote_job_id, index, audio_path):
     url = f"{SERVER_URL}/api/worker/jobs/{remote_job_id}/audio/{index}"
     data = Path(audio_path).read_bytes()
-    request = urllib.request.Request(
-        url, data=data, method="POST",
-        headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/octet-stream"}
-    )
-    with urllib.request.urlopen(request, timeout=90) as response:
-        return json.loads(response.read().decode("utf-8") or "{}")
+    return _post_bytes_with_retry(url, data, 90, f"Narration {index + 1}")
+
 
 def ensure_kokoro_runtime():
     """Install narration dependencies only after Wan has finished using the GPU."""

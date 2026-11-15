@@ -55,7 +55,7 @@ test("distributed sum submission validates input and sends admin-authenticated r
   const result = await client.createDistributedSum({ start: 1, end: 1000, chunk_size: 100, source: "ytagent" });
   assert.equal(result.chunk_count, 10);
   assert.equal(seen[0].options.method, "POST");
-  assert.deepEqual(JSON.parse(seen[0].options.body), { start: 1, end: 1000, chunk_size: 100 });
+  assert.deepEqual(JSON.parse(seen[0].options.body), { start: 1, end: 1000, chunk_size: 100, source: "ytagent" });
   assert.equal(seen[0].options.headers["X-QingCloud-Admin-Token"], "private");
   assert.throws(() => client.createDistributedSum({ start: 10, end: 1 }), /valid inclusive/);
   assert.throws(() => client.createDistributedSum({ start: 1, end: 1000001 }), /cannot exceed/);

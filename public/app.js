@@ -41,10 +41,12 @@ async function refreshStatus() {
 }
 
 let activeQingCloudTaskId = null;
+let activeQingCloudGpuJobId = null;
 const qingCloudStatus = document.getElementById("qingCloudStatus");
 const qingCloudTaskStatus = document.getElementById("qingCloudTaskStatus");
 const checkQingCloudButton = document.getElementById("checkQingCloud");
 const runQingCloudTestButton = document.getElementById("runQingCloudTest");
+const runQingCloudGpuTestButton = document.getElementById("runQingCloudGpuTest");
 const createQingCloudInviteButton = document.getElementById("createQingCloudInvite");
 const qingCloudInvitation = document.getElementById("qingCloudInvitation");
 
@@ -211,6 +213,7 @@ if (checkQingCloudButton) checkQingCloudButton.addEventListener("click", async (
   checkQingCloudButton.disabled = true;
   await refreshQingCloudStatus();
   await refreshQingCloudTask();
+  await refreshQingCloudGpuJob();
   checkQingCloudButton.disabled = false;
 });
 
@@ -233,6 +236,42 @@ if (runQingCloudTestButton) runQingCloudTestButton.addEventListener("click", asy
     qingCloudTaskStatus.textContent = error.message;
   } finally {
     runQingCloudTestButton.disabled = false;
+  }
+});
+
+async function refreshQingCloudGpuJob() {
+  if (!activeQingCloudGpuJobId) return;
+  try {
+    const response = await fetch("/api/compute/jobs/" + encodeURIComponent(activeQingCloudGpuJobId), { cache: "no-store" });
+    const job = await readJsonResponse(response);
+    if (!response.ok) throw new Error(job.error || "Could not retrieve GPU job status.");
+    const gpu = job.result || {};
+    qingCloudTaskStatus.textContent = "GPU job " + activeQingCloudGpuJobId + " · " + job.state +
+      (job.state === "succeeded" ? " · " + gpu.device_name + " · " + gpu.elapsed_ms + " ms · checksum " + gpu.checksum : "") +
+      (job.state === "failed" ? " · " + (job.error || "GPU job failed") : "");
+  } catch (error) {
+    qingCloudTaskStatus.textContent = error.message;
+  }
+}
+
+if (runQingCloudGpuTestButton) runQingCloudGpuTestButton.addEventListener("click", async () => {
+  runQingCloudGpuTestButton.disabled = true;
+  qingCloudTaskStatus.textContent = "Submitting a bounded CUDA matrix-multiply smoke test. Requires an approved NVIDIA worker with CUDA-enabled PyTorch…";
+  try {
+    const response = await fetch("/api/compute/gpu-test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ matrix_size: 1024, required_gpu_vram_mb: 512 })
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "Could not submit the GPU smoke test.");
+    activeQingCloudGpuJobId = data.job_id;
+    qingCloudTaskStatus.textContent = "GPU smoke test queued. It will run only on an approved CUDA-enabled provider. This is not video generation.";
+    await refreshQingCloudGpuJob();
+  } catch (error) {
+    qingCloudTaskStatus.textContent = error.message;
+  } finally {
+    runQingCloudGpuTestButton.disabled = false;
   }
 });
 videoInput.addEventListener("change", event => {

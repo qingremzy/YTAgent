@@ -73,3 +73,25 @@ test("task status rejects malformed IDs and reports coordinator errors safely", 
   assert.throws(() => client.getDistributedSum("../secrets"), /Invalid QingCloud task ID/);
   await assert.rejects(client.getDistributedSum("12345678-1234-1234-1234-123456789abc"), /HTTP 401: Invalid admin token/);
 });
+
+
+test("provider inventory and approval use authenticated coordinator endpoints", async () => {
+  const seen = [];
+  const base = "https://compute.example.com";
+  const workerId = "12345678-1234-1234-1234-123456789abc";
+  const client = createQingCloudClient({
+    QINGCLOUD_URL: base, QINGCLOUD_ADMIN_TOKEN: "private"
+  }, fakeFetch({
+    [base + "/v1/providers"]: { body: { providers: [{ worker_id: workerId, approval_status: "pending" }] } },
+    [base + "/v1/workers/" + workerId + "/approval"]: { body: { worker_id: workerId, approval_status: "approved" } }
+  }, seen));
+  const providers = await client.listProviders();
+  assert.equal(providers.providers[0].approval_status, "pending");
+  const result = await client.updateProviderApproval(workerId, "approved", "Verified owner machine");
+  assert.equal(result.approval_status, "approved");
+  assert.equal(seen[1].options.method, "PUT");
+  assert.deepEqual(JSON.parse(seen[1].options.body), { status: "approved", note: "Verified owner machine" });
+  assert.equal(seen[1].options.headers["X-QingCloud-Admin-Token"], "private");
+  assert.throws(() => client.updateProviderApproval("bad-id", "approved"), /worker ID/);
+  assert.throws(() => client.updateProviderApproval(workerId, "maybe"), /approval status/);
+});

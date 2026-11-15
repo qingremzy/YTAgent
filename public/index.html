@@ -38,11 +38,12 @@
     <section class="card" id="qingCloudCard">
       <div class="eyebrow">00 // DISTRIBUTED COMPUTE</div>
       <h2>QingCloud Compute</h2>
-      <p class="muted">YTAgent's connected compute network. Check enrolled providers and submit a safe distributed CPU test.</p>
+      <p class="muted">YTAgent's connected compute network. Run a distributed CPU test or a bounded CUDA GPU smoke test on an approved provider.</p>
       <p id="qingCloudStatus" class="muted" aria-live="polite">Checking QingCloud connection…</p>
       <div class="command">
         <button class="button secondary" id="checkQingCloud" type="button">Check network</button>
-        <button class="button primary" id="runQingCloudTest" type="button">Run compute test</button>
+        <button class="button primary" id="runQingCloudTest" type="button">Run CPU test</button>
+        <button class="button secondary" id="runQingCloudGpuTest" type="button">Run GPU smoke test</button>
       </div>
       <p id="qingCloudTaskStatus" class="muted" aria-live="polite"></p>
       <button class="button secondary" id="createQingCloudInvite" type="button">Create one-time provider invitation</button>

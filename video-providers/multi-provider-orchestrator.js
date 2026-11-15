@@ -124,7 +124,18 @@ async function withProviderHeartbeat(provider,beatNumber,progress,task,onProgres
   });}
   finally{clearInterval(heartbeat);}
 }
+function placeBeatClip(beatClips, beatIndex, clip) {
+  if (!Array.isArray(beatClips) || !Number.isInteger(beatIndex) || beatIndex < 0 || beatIndex >= BEAT_GROUPS.length) {
+    throw new Error("A generated clip was assigned to an invalid story beat.");
+  }
+  if (typeof clip !== "string" || !clip) throw new Error("Story beat " + (beatIndex + 1) + " returned no video clip.");
+  beatClips[beatIndex] = clip;
+  return beatClips;
+}
 async function makeSixSecondTimelineClips(beatClips,workDir) {
+  if (!Array.isArray(beatClips) || beatClips.length !== BEAT_GROUPS.length || beatClips.some(clip => typeof clip !== "string" || !clip)) {
+    throw new Error("The six-beat timeline is incomplete. Every story beat must have a generated video clip.");
+  }
   const output=[];
   for(let scene=0;scene<10;scene++){
     const start=scene*EDIT_SECONDS, end=start+EDIT_SECONDS;
@@ -195,7 +206,7 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
             ? detail=>generateAgnesBeat(prompts[i],workDir,i,detail)
             : async detail=>generateLtxBeat(prompts[i],workDir,i),
           onProgress);
-        beatClips.push(clip);usedProviders.add(provider);
+        placeBeatClip(beatClips,i,clip);usedProviders.add(provider);
         if(provider==="LTX") ltxBeatsUsed++;
         completed=true;
         try{onProgress(10+Math.round((i+1)*8),"Generated story beat "+(i+1)+" of 6 with "+provider+".");}catch(_){}
@@ -231,4 +242,4 @@ async function generateMultiProviderTimelineClips(scenes,topic,workDir,onProgres
     ltxBeatsUsed
   };
 }
-module.exports={BEAT_GROUPS,buildBeatDag,buildSixBeatPrompts,makeSixSecondTimelineClips,generateMultiProviderTimelineClips,isCapacityUnavailable};
+module.exports={BEAT_GROUPS,buildBeatDag,buildSixBeatPrompts,placeBeatClip,makeSixSecondTimelineClips,generateMultiProviderTimelineClips,isCapacityUnavailable};

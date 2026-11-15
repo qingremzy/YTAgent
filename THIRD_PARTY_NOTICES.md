@@ -21,3 +21,11 @@ YTAgent embeds the open-source `@clipkit/editor` React timeline UI from [clipkit
 - Clipkit's editor and runtime are used as npm dependencies. Their upstream source code is not copied into YTAgent.
 
 Review the upstream [licensing terms](https://github.com/clipkit-video/clipkit/blob/main/LICENSING.md) before changing the deployment's usage pattern or monthly production volume.
+
+
+## OpenCV visual preflight
+
+YTAgent's free GPU worker uses the `opencv-python-headless` distribution of OpenCV to sample generated scene videos before upload, reject scenes that are almost entirely black or cannot be decoded, and report possible near-static scenes for review. No OpenCV source files are copied into this repository.
+
+- Upstream project: https://github.com/opencv/opencv
+- License: Apache License 2.0 (see the upstream `LICENSE` file).

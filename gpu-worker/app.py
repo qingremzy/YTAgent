@@ -17,6 +17,7 @@ from typing import List
 from fastapi import FastAPI, BackgroundTasks, Header, HTTPException
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
+from visual_quality import inspect_video_quality
 
 app = FastAPI(title="YTAgent Wan GPU Worker", version="1.0.0")
 ROOT = Path(os.environ.get("YT_WORKER_DIR", "/tmp/ytagent-wan-worker"))
@@ -410,6 +411,10 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
             frames = result.frames[0]
             clip_path = work / f"scene-{index:02d}.mp4"
             export_to_video(frames, str(clip_path), fps=int(os.environ.get("WAN_FPS", "8")))
+            visual_report = inspect_video_quality(clip_path)
+            print(f"OpenCV scene {index + 1} visual preflight: {json.dumps(visual_report)}", flush=True)
+            if visual_report.get("motion_warning"):
+                print(f"Scene {index + 1} appears nearly static in sampled frames; retaining it for human review.", flush=True)
             clips.append(clip_path)
             if remote_job_id:
                 send_scene_to_server(remote_job_id, index, clip_path)

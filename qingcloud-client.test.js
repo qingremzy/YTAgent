@@ -26,7 +26,7 @@ test("unconfigured client reports disabled without making a request", async () =
     configured: false, connected: false,
     message: "QingCloud connection is not configured."
   });
-  await assert.rejects(client.getDistributedSum("12345678-1234-1234"), /not configured/);
+  await assert.rejects(client.getDistributedSum("12345678-1234-1234-1234-123456789abc"), /not configured/);
 });
 
 test("status authenticates overview and reports provider inventory", async () => {
@@ -50,7 +50,7 @@ test("distributed sum submission validates input and sends admin-authenticated r
   const client = createQingCloudClient({
     QINGCLOUD_URL: base, QINGCLOUD_ADMIN_TOKEN: "private"
   }, fakeFetch({
-    [base + "/v1/distributed/sum"]: { body: { task_id: "12345678-1234-1234", chunk_count: 10 } }
+    [base + "/v1/distributed/sum"]: { body: { task_id: "12345678-1234-1234-1234-123456789abc", chunk_count: 10 } }
   }, seen));
   const result = await client.createDistributedSum({ start: 1, end: 1000, chunk_size: 100 });
   assert.equal(result.chunk_count, 10);
@@ -66,10 +66,10 @@ test("task status rejects malformed IDs and reports coordinator errors safely", 
   const client = createQingCloudClient({
     QINGCLOUD_URL: base, QINGCLOUD_ADMIN_TOKEN: "private"
   }, fakeFetch({
-    [base + "/v1/distributed/sum/12345678-1234-1234"]: {
+    [base + "/v1/distributed/sum/12345678-1234-1234-1234-123456789abc"]: {
       status: 401, body: { detail: "Invalid admin token" }
     }
   }));
   await assert.rejects(client.getDistributedSum("../secrets"), /Invalid QingCloud task ID/);
-  await assert.rejects(client.getDistributedSum("12345678-1234-1234"), /HTTP 401: Invalid admin token/);
+  await assert.rejects(client.getDistributedSum("12345678-1234-1234-1234-123456789abc"), /HTTP 401: Invalid admin token/);
 });

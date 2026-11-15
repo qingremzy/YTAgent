@@ -330,6 +330,17 @@ app.get("/api/compute/status", requireQingCloudOwner, async (_req, res) => {
   }
 });
 
+app.post("/api/compute/invitations", requireQingCloudOwner, async (req, res) => {
+  try {
+    const expiresInHours = req.body?.expires_in_hours === undefined ? 24 : Number(req.body.expires_in_hours);
+    const result = await qingCloudClient().createInvitation(expiresInHours);
+    res.set("Cache-Control", "no-store");
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(400).json({ error: String(error.message || error).slice(0, 300) });
+  }
+});
+
 app.get("/api/compute/providers", requireQingCloudOwner, async (_req, res) => {
   try {
     const result = await qingCloudClient().listProviders();

@@ -51,19 +51,11 @@ Kokoro model, voice samples and license: https://huggingface.co/hexgrad/Kokoro-8
 
 ### Backup: Google Colab free GPU
 
-Open `YTAgent_Colab_Free_GPU_Worker.ipynb` in Google Colab if Kaggle has no GPU available. Select a GPU runtime if Colab offers one, then add `YT_AGENT_WORKER_TOKEN` to Colab Secrets (key icon) and allow notebook access. Run the cells in order.
+Open `YTAgent_Colab_Free_GPU_Worker.ipynb` in Google Colab if you want to use Colab's free GPU instead of waiting for Kaggle. Select a GPU runtime, then add `YT_AGENT_WORKER_TOKEN` to Colab Secrets (key icon) and enable notebook access. The value must match the private token already configured on the Railway YTAgent service.
 
-Colab's free GPU is a useful backup, not a guaranteed replacement: hardware, session duration and availability change dynamically. The free tier is intended for interactive notebook use. Do not purchase compute units or upgrade for this project.
+Run the notebook cells from top to bottom and leave the final worker cell running. It sends an authenticated heartbeat to Railway and waits for one queued film job. Submit the topic from the YTAgent dashboard in another tab. The worker generates ten Wan 2.1 scenes and ten Kokoro narration tracks, then uploads them to Railway automatically. YTAgent assembles and quality-checks the complete MP4. You do not need to stitch clips or upload the video manually.
 
-## Zero-cost provider policy
-
-YTAgent's default production mode is strict zero-cost:
-- Story generation uses only an OpenRouter model ID ending in `:free`.
-- Hosted video-generation APIs are not called.
-- Hosted text-to-speech fallbacks are disabled. Narration must come from local Kokoro in the GPU worker.
-- If a free provider is unavailable or its quota is exhausted, the job stops with an error instead of switching to a paid provider.
-- Never add prepaid credits or enable paid fallbacks for YTAgent.
-
+The Colab worker waits up to 20 minutes for a job. If none arrives, rerun its final cell. It processes one film per run. If the session disconnects, reconnect and rerun the notebook. Colab's free GPU availability and session duration are not guaranteed. Do not purchase compute units or upgrade for this project.
 
 ### Kaggle GPU startup diagnostics (November 2026)
 

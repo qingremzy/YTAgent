@@ -95,3 +95,21 @@ test("provider inventory and approval use authenticated coordinator endpoints", 
   assert.throws(() => client.updateProviderApproval("bad-id", "approved"), /worker ID/);
   assert.throws(() => client.updateProviderApproval(workerId, "maybe"), /approval status/);
 });
+
+
+test("provider invitations are created with bounded expiry and private admin auth", async () => {
+  const seen = [];
+  const base = "https://compute.example.com";
+  const client = createQingCloudClient({
+    QINGCLOUD_URL: base, QINGCLOUD_ADMIN_TOKEN: "private"
+  }, fakeFetch({
+    [base + "/v1/invitations"]: { body: { invitation_token: "one-time-secret", expires_in_hours: 24 } }
+  }, seen));
+  const invitation = await client.createInvitation(24);
+  assert.equal(invitation.invitation_token, "one-time-secret");
+  assert.equal(seen[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(seen[0].options.body), { expires_in_hours: 24 });
+  assert.equal(seen[0].options.headers["X-QingCloud-Admin-Token"], "private");
+  assert.throws(() => client.createInvitation(0), /between 1 and 168/);
+  assert.throws(() => client.createInvitation(169), /between 1 and 168/);
+});

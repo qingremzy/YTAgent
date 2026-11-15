@@ -26,6 +26,9 @@ test("outbound GPU worker returns ten MP4 scenes and ten Kokoro narration tracks
       const result = await receiveGpuScene(claimed.job_id, index, mp4);
       assert.equal(result.received, index + 1);
       assert.equal(result.completed, false);
+      const retry = await receiveGpuScene(claimed.job_id, index, mp4);
+      assert.equal(retry.received, index + 1);
+      assert.equal(retry.duplicate, true);
     }
     for (let index = 0; index < 10; index++) {
       const wav = Buffer.alloc(4096);
@@ -34,6 +37,11 @@ test("outbound GPU worker returns ten MP4 scenes and ten Kokoro narration tracks
       const result = await receiveGpuAudio(claimed.job_id, index, wav);
       assert.equal(result.received, index + 1);
       assert.equal(result.completed, index === 9);
+      if (index < 9) {
+        const retry = await receiveGpuAudio(claimed.job_id, index, wav);
+        assert.equal(retry.received, index + 1);
+        assert.equal(retry.duplicate, true);
+      }
     }
     const result = await completed;
     assert.equal(result.clips.length, 10);

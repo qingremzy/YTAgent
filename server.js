@@ -294,8 +294,29 @@ function qingCloudClient() {
   return createQingCloudClient(process.env);
 }
 
+async function requireQingCloudOwner(req, res, next) {
+  if (!req.session?.tokens) return res.status(401).json({ error: "Connect your YouTube account first." });
+  const allowedChannelId = String(process.env.QINGCLOUD_OWNER_CHANNEL_ID || "").trim();
+  if (!allowedChannelId) {
+    return res.status(503).json({ error: "QINGCLOUD_OWNER_CHANNEL_ID is not configured. QingCloud controls remain locked." });
+  }
+  try {
+    const auth = oauthClient();
+    auth.setCredentials(req.session.tokens);
+    const yt = google.youtube({ version: "v3", auth });
+    const response = await yt.channels.list({ part: ["id"], mine: true });
+    const channel = response.data.items && response.data.items[0];
+    if (!channel || channel.id !== allowedChannelId) {
+      return res.status(403).json({ error: "This YouTube channel is not authorized to control QingCloud." });
+    }
+    next();
+  } catch (_) {
+    res.status(503).json({ error: "Could not verify the authorized YouTube owner channel." });
+  }
+}
+
 // YTAgent is a QingCloud customer: these routes keep coordinator credentials server-side.
-app.get("/api/compute/status", requireAuth, async (_req, res) => {
+app.get("/api/compute/status", requireQingCloudOwner, async (_req, res) => {
   try {
     const status = await qingCloudClient().status();
     res.set("Cache-Control", "private, no-store");
@@ -309,7 +330,7 @@ app.get("/api/compute/status", requireAuth, async (_req, res) => {
   }
 });
 
-app.post("/api/compute/test", requireAuth, async (req, res) => {
+app.post("/api/compute/test", requireQingCloudOwner, async (req, res) => {
   try {
     const start = req.body?.start === undefined ? 1 : Number(req.body.start);
     const end = req.body?.end === undefined ? 1000 : Number(req.body.end);
@@ -329,7 +350,7 @@ app.post("/api/compute/test", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/compute/tasks/:taskId", requireAuth, async (req, res) => {
+app.get("/api/compute/tasks/:taskId", requireQingCloudOwner, async (req, res) => {
   try {
     const task = await qingCloudClient().getDistributedSum(req.params.taskId);
     res.set("Cache-Control", "private, no-store");
@@ -910,7 +931,7 @@ app.get("/api/status", async (req, res) => {
     const yt = google.youtube({ version: "v3", auth });
     const response = await yt.channels.list({ part: ["snippet"], mine: true });
     const channel = response.data.items && response.data.items[0];
-    res.json({ connected: true, channel: channel ? channel.snippet.title : "YouTube channel connected" });
+    res.json({ connected: true, channel: channel ? channel.snippet.title : "YouTube channel connected", channelId: channel ? channel.id : null });
   } catch (err) {
     console.error("Status check failed:", err.message);
     res.json({ connected: false, error: "Your connection may have expired. Reconnect your account." });

@@ -1578,6 +1578,20 @@ app.get("/api/diagnostics", async (req, res) => {
   add("GPU worker", "info", JSON.stringify(getGpuWorkerStatus()).slice(0, 500));
   if (req.session && req.session.tokens) {
     try {
+      const compute = await qingCloudClient().status();
+      add("QingCloud Compute", compute.connected ? "passed" : "warning",
+        compute.connected
+          ? (compute.overview.online_workers || 0) + " online provider(s); " + (compute.overview.queued_jobs || 0) + " queued job(s)."
+          : "QingCloud is configured but did not return a healthy coordinator response.");
+    } catch (error) {
+      add("QingCloud Compute", process.env.QINGCLOUD_URL && process.env.QINGCLOUD_ADMIN_TOKEN ? "failed" : "warning",
+        String(error.message || error).slice(0, 240));
+    }
+  } else {
+    add("QingCloud Compute", "not_connected", "Connect YouTube to run authenticated YTAgent compute checks.");
+  }
+  if (req.session && req.session.tokens) {
+    try {
       const auth = oauthClient();
       auth.setCredentials(req.session.tokens);
       const yt = google.youtube({ version: "v3", auth });

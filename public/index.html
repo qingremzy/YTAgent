@@ -35,6 +35,17 @@
       <a class="button" id="connect" href="/auth/google">Connect YouTube</a>
       <button class="button secondary hidden" id="disconnect">Disconnect</button>
     </section>
+    <section class="card" id="qingCloudCard">
+      <div class="eyebrow">00 // DISTRIBUTED COMPUTE</div>
+      <h2>QingCloud Compute</h2>
+      <p class="muted">YTAgent's connected compute network. Check enrolled providers and submit a safe distributed CPU test.</p>
+      <p id="qingCloudStatus" class="muted" aria-live="polite">Checking QingCloud connection…</p>
+      <div class="command">
+        <button class="button secondary" id="checkQingCloud" type="button">Check network</button>
+        <button class="button primary" id="runQingCloudTest" type="button">Run compute test</button>
+      </div>
+      <p id="qingCloudTaskStatus" class="muted" aria-live="polite"></p>
+    </section>
     <section class="card generator-card">
       <div class="eyebrow">01 // CREATION ENGINE</div>
       <h2>AI video generator</h2>

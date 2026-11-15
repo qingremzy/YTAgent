@@ -42,7 +42,7 @@ unset QCLOUD_INVITATION_TOKEN
 python -m worker_agent.agent --enable-jobs --interval 60
 ```
 
-The built-in worker runtime only executes bounded `diagnostic`, `echo`, `sha256`, and `sum_range` tasks. It does not execute arbitrary Python or shell commands.
+The built-in worker runtime executes bounded `diagnostic`, `echo`, `sha256`, and `sum_range` tasks. It also has one bounded `gpu_matrix_multiply` CUDA smoke test. It does not execute arbitrary Python or shell commands.
 
 ## 4. Approve and test the worker
 
@@ -50,7 +50,13 @@ Refresh the provider list in YTAgent. A new provider starts as `pending`. Verify
 
 Press **Run compute test**. YTAgent submits a 1,000-integer distributed sum with ten chunks. The expected verified total is **500500**. If no eligible worker is online and opted into `--enable-jobs`, the task stays queued.
 
-## 5. What this launch proves
+## 5. Run a real GPU smoke test
+
+The QingCloud panel now includes **Run GPU smoke test**. This submits a bounded matrix multiplication (default 1024 × 1024) and requires at least 512 MB reported free VRAM plus the `gpu_execution=cuda_torch` capability label. Only an approved, online worker advertising CUDA-enabled PyTorch can claim it. The worker uses the physical GPU index assigned by the coordinator and returns the GPU model, elapsed time, and checksum.
+
+The provider owner must install a PyTorch build compatible with the installed NVIDIA driver before enrolling. The worker agent does not install drivers or CUDA libraries. If no matching provider is online, the job remains queued. The smoke test is not a video-generation job.
+
+## 6. What this launch proves
 
 - YTAgent securely reaches the QingCloud coordinator using a server-side admin token.
 - The owner-only YTAgent panel can create one-time provider invitations, inspect enrolled providers, and approve/reject them.
@@ -59,7 +65,7 @@ Press **Run compute test**. YTAgent submits a 1,000-integer distributed sum with
 
 ## Not yet delivered
 
-- Wan 2.1 video generation on QingCloud GPU workers.
+- Wan 2.1 video generation on QingCloud GPU workers. The new GPU smoke test is only a CUDA execution check, not model inference.
 - Kokoro narration or FFmpeg rendering on QingCloud.
 - Shared media/object storage or cross-worker artifact transfer.
 - OS/container sandboxing and hardware-enforced CPU/RAM/VRAM isolation.

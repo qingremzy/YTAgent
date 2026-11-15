@@ -71,6 +71,15 @@ function createQingCloudClient(env = process.env, fetchImpl = globalThis.fetch) 
         body: { start, end, chunk_size, source: "ytagent" }
       });
     },
+    createInvitation(expiresInHours = 24) {
+      if (!Number.isInteger(expiresInHours) || expiresInHours < 1 || expiresInHours > 168) {
+        throw new Error("Invitation expiry must be between 1 and 168 hours.");
+      }
+      return request("/v1/invitations", {
+        method: "POST",
+        body: { expires_in_hours: expiresInHours }
+      });
+    },
     listProviders() {
       return request("/v1/providers");
     },

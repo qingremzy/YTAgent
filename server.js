@@ -330,6 +330,28 @@ app.get("/api/compute/status", requireQingCloudOwner, async (_req, res) => {
   }
 });
 
+app.get("/api/compute/providers", requireQingCloudOwner, async (_req, res) => {
+  try {
+    const result = await qingCloudClient().listProviders();
+    res.set("Cache-Control", "private, no-store");
+    res.json(result);
+  } catch (error) {
+    res.status(502).json({ error: String(error.message || error).slice(0, 300) });
+  }
+});
+
+app.put("/api/compute/providers/:workerId/approval", requireQingCloudOwner, async (req, res) => {
+  try {
+    const result = await qingCloudClient().updateProviderApproval(
+      req.params.workerId, req.body?.status, req.body?.note
+    );
+    res.set("Cache-Control", "private, no-store");
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: String(error.message || error).slice(0, 300) });
+  }
+});
+
 app.post("/api/compute/test", requireQingCloudOwner, async (req, res) => {
   try {
     const start = req.body?.start === undefined ? 1 : Number(req.body.start);

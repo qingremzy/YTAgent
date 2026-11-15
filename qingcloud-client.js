@@ -71,6 +71,33 @@ function createQingCloudClient(env = process.env, fetchImpl = globalThis.fetch) 
         body: { start, end, chunk_size, source: "ytagent" }
       });
     },
+    createGpuSmokeTest({ matrix_size = 1024, required_gpu_vram_mb = 512 } = {}) {
+      if (!Number.isInteger(matrix_size) || matrix_size < 32 || matrix_size > 2048) {
+        throw new Error("GPU matrix size must be between 32 and 2048.");
+      }
+      if (!Number.isInteger(required_gpu_vram_mb) || required_gpu_vram_mb < 1 || required_gpu_vram_mb > 1048576) {
+        throw new Error("GPU VRAM requirement must be between 1 and 1,048,576 MB.");
+      }
+      return request("/v1/jobs", {
+        method: "POST",
+        body: {
+          kind: "gpu_matrix_multiply",
+          source: "ytagent",
+          payload: { matrix_size },
+          required_gpu_vram_mb,
+          required_cpu_cores: 1,
+          required_ram_mb: 256,
+          required_labels: { gpu_execution: "cuda_torch" },
+          max_attempts: 1
+        }
+      });
+    },
+    getJob(jobId) {
+      if (!/^[a-f0-9-]{36}$/i.test(String(jobId || ""))) {
+        throw new Error("Invalid QingCloud job ID.");
+      }
+      return request("/v1/jobs/" + encodeURIComponent(jobId));
+    },
     createInvitation(expiresInHours = 24) {
       if (!Number.isInteger(expiresInHours) || expiresInHours < 1 || expiresInHours > 168) {
         throw new Error("Invitation expiry must be between 1 and 168 hours.");

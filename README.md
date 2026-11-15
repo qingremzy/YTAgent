@@ -26,6 +26,7 @@ AI-generated facts and metadata can contain mistakes. Review before publishing. 
 
 ## QingCloud Compute integration
 
+See [the QingCloud launch checklist](docs/QINGCLOUD_LAUNCH.md) for the end-to-end coordinator, owner-channel, invitation, worker approval and compute-test setup.
 YTAgent can connect to a QingCloud Compute coordinator as its first external compute customer. Configure `QINGCLOUD_URL`, `QINGCLOUD_ADMIN_TOKEN`, and `QINGCLOUD_OWNER_CHANNEL_ID` only in the YTAgent server environment. The owner channel ID must exactly match the authorized YouTube channel ID shown by `GET /api/status`. All compute controls verify the connected YouTube channel against this allowlist before forwarding requests. The dashboard can create one-time provider invitations, inspect provider inventory and approve/reject enrolled machines without exposing the coordinator token to the browser. Invitation plaintext is displayed once and is not saved in browser storage. Remote coordinators must use HTTPS. The admin token never goes to the browser.
 
 After connecting a YouTube account, the authenticated YTAgent API exposes:

@@ -1,0 +1,35 @@
+name: GPU worker visual quality tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gpu-worker/visual_quality.py"
+      - "gpu-worker/test_visual_quality.py"
+      - ".github/workflows/gpu-worker-quality.yml"
+  pull_request:
+    paths:
+      - "gpu-worker/visual_quality.py"
+      - "gpu-worker/test_visual_quality.py"
+      - ".github/workflows/gpu-worker-quality.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visual-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install lightweight test dependencies
+        run: python -m pip install --disable-pip-version-check numpy opencv-python-headless
+      - name: Run scene preflight regression tests
+        working-directory: gpu-worker
+        run: python -m unittest -v test_visual_quality.py

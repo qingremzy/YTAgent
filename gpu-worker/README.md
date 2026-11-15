@@ -41,6 +41,16 @@ Do not print, commit, or share the worker token. If a fresh notebook session is 
 Official model code and hardware guidance: https://github.com/Wan-Video/Wan2.1
 Kokoro model, voice samples and license: https://huggingface.co/hexgrad/Kokoro-82M
 
+## Regression tests
+
+After installing `gpu-worker/requirements.txt`, run the OpenCV preflight tests from the `gpu-worker` directory:
+
+```bash
+python -m unittest -v test_visual_quality.py
+```
+
+The tests create tiny temporary videos and verify that unreadable and almost-black clips are rejected, normal moving footage passes, and static footage is flagged without being rejected. They do not download models or consume GPU time.
+
 ## Troubleshooting
 
 - If the notebook says the token is missing, load the existing Kaggle Secret named `YT_AGENT_WORKER_TOKEN`.

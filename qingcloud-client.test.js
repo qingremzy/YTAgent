@@ -52,7 +52,7 @@ test("distributed sum submission validates input and sends admin-authenticated r
   }, fakeFetch({
     [base + "/v1/distributed/sum"]: { body: { task_id: "12345678-1234-1234-1234-123456789abc", chunk_count: 10 } }
   }, seen));
-  const result = await client.createDistributedSum({ start: 1, end: 1000, chunk_size: 100 });
+  const result = await client.createDistributedSum({ start: 1, end: 1000, chunk_size: 100, source: "ytagent" });
   assert.equal(result.chunk_count, 10);
   assert.equal(seen[0].options.method, "POST");
   assert.deepEqual(JSON.parse(seen[0].options.body), { start: 1, end: 1000, chunk_size: 100 });

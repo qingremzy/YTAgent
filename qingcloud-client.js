@@ -68,7 +68,7 @@ function createQingCloudClient(env = process.env, fetchImpl = globalThis.fetch) 
       }
       return request("/v1/distributed/sum", {
         method: "POST",
-        body: { start, end, chunk_size }
+        body: { start, end, chunk_size, source: "ytagent" }
       });
     },
     listProviders() {

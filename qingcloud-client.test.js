@@ -113,3 +113,36 @@ test("provider invitations are created with bounded expiry and private admin aut
   assert.throws(() => client.createInvitation(0), /between 1 and 168/);
   assert.throws(() => client.createInvitation(169), /between 1 and 168/);
 });
+
+
+test("GPU smoke-test submission is bounded and requires CUDA-labelled provider", async () => {
+  const seen = [];
+  const base = "https://compute.example.com";
+  const client = createQingCloudClient({
+    QINGCLOUD_URL: base, QINGCLOUD_ADMIN_TOKEN: "private"
+  }, fakeFetch({
+    [base + "/v1/jobs"]: { body: { job_id: "12345678-1234-1234-1234-123456789abc", kind: "gpu_matrix_multiply" } }
+  }, seen));
+  const result = await client.createGpuSmokeTest({ matrix_size: 512, required_gpu_vram_mb: 1024 });
+  assert.equal(result.kind, "gpu_matrix_multiply");
+  const body = JSON.parse(seen[0].options.body);
+  assert.equal(body.kind, "gpu_matrix_multiply");
+  assert.equal(body.source, "ytagent");
+  assert.deepEqual(body.required_labels, { gpu_execution: "cuda_torch" });
+  assert.equal(body.required_gpu_vram_mb, 1024);
+  assert.throws(() => client.createGpuSmokeTest({ matrix_size: 4096 }), /between 32 and 2048/);
+  assert.throws(() => client.createGpuSmokeTest({ required_gpu_vram_mb: 0 }), /VRAM requirement/);
+});
+
+test("GPU job status validates job IDs and retrieves coordinator result", async () => {
+  const base = "https://compute.example.com";
+  const jobId = "12345678-1234-1234-1234-123456789abc";
+  const client = createQingCloudClient({
+    QINGCLOUD_URL: base, QINGCLOUD_ADMIN_TOKEN: "private"
+  }, fakeFetch({
+    [base + "/v1/jobs/" + jobId]: { body: { job_id: jobId, state: "succeeded" } }
+  }));
+  assert.throws(() => client.getJob("../secrets"), /Invalid QingCloud job ID/);
+  const job = await client.getJob(jobId);
+  assert.equal(job.state, "succeeded");
+});

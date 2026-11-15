@@ -70,6 +70,6 @@ test("task status rejects malformed IDs and reports coordinator errors safely", 
       status: 401, body: { detail: "Invalid admin token" }
     }
   }));
-  await assert.rejects(client.getDistributedSum("../secrets"), /Invalid QingCloud task ID/);
+  assert.throws(() => client.getDistributedSum("../secrets"), /Invalid QingCloud task ID/);
   await assert.rejects(client.getDistributedSum("12345678-1234-1234-1234-123456789abc"), /HTTP 401: Invalid admin token/);
 });

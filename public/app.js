@@ -67,6 +67,81 @@ async function refreshQingCloudStatus() {
   }
 }
 
+async function refreshQingCloudProviders() {
+  const root = document.getElementById("qingCloudProviders");
+  if (!root) return;
+  root.replaceChildren();
+  const heading = document.createElement("h3");
+  heading.textContent = "Enrolled providers";
+  root.appendChild(heading);
+  try {
+    const response = await fetch("/api/compute/providers", { cache: "no-store" });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "Could not load providers.");
+    if (!Array.isArray(data.providers) || !data.providers.length) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "No providers have enrolled yet.";
+      root.appendChild(empty);
+      return;
+    }
+    for (const provider of data.providers) {
+      const card = document.createElement("div");
+      card.className = "qingcloud-provider";
+      const details = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = (provider.name || provider.hostname || "Unnamed provider") + " · " + provider.state;
+      const meta = document.createElement("small");
+      meta.textContent = "Approval: " + provider.approval_status +
+        " · CPU: " + provider.cpu_cores + " cores · RAM: " + provider.ram_mb + " MB · GPUs: " + provider.gpu_count +
+        " · Running jobs: " + provider.running_jobs + "/" + provider.max_concurrent_jobs;
+      details.append(title, meta);
+      card.appendChild(details);
+      const actions = document.createElement("div");
+      actions.className = "qingcloud-provider-actions";
+      const addAction = (label, status) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "button secondary";
+        button.textContent = label;
+        button.addEventListener("click", async () => {
+          button.disabled = true;
+          try {
+            const update = await fetch("/api/compute/providers/" + encodeURIComponent(provider.worker_id) + "/approval", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status, note: "Updated by the YTAgent owner control panel." })
+            });
+            const result = await readJsonResponse(update);
+            if (!update.ok) throw new Error(result.error || "Provider approval update failed.");
+            await refreshQingCloudProviders();
+            await refreshQingCloudStatus();
+          } catch (error) {
+            qingCloudTaskStatus.textContent = error.message;
+            button.disabled = false;
+          }
+        });
+        actions.appendChild(button);
+      };
+      if (provider.approval_status === "pending") {
+        addAction("Approve", "approved");
+        addAction("Reject", "rejected");
+      } else if (provider.approval_status === "approved") {
+        addAction("Revoke approval", "pending");
+      } else {
+        addAction("Return to pending", "pending");
+      }
+      card.appendChild(actions);
+      root.appendChild(card);
+    }
+  } catch (error) {
+    const message = document.createElement("p");
+    message.className = "muted";
+    message.textContent = "Provider inventory: " + error.message;
+    root.appendChild(message);
+  }
+}
+
 async function refreshQingCloudTask() {
   if (!activeQingCloudTaskId) {
     qingCloudTaskStatus.textContent = "No QingCloud test task has been submitted in this session.";

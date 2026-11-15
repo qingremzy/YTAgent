@@ -20,6 +20,7 @@ const { listKaggleTools, callKaggleTool } = require("./kaggle-mcp");
 const { validateNotebookSource, buildNotebookSaveRequest } = require("./kaggle-notebook");
 const { pushNotebookWithKaggleCli, getKaggleKernelStatus, getKaggleQuota } = require("./kaggle-cli");
 const { claimNextGpuJob, noteGpuWorkerPoll, getGpuWorkerStatus, updateGpuJobProgress, receiveGpuScene, receiveGpuAudio, failGpuJob } = require("./gpu-worker-bridge");
+const { createQingCloudClient } = require("./qingcloud-client");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -288,6 +289,55 @@ function requireAuth(req, res, next) {
   if (!req.session.tokens) return res.status(401).json({ error: "Connect your YouTube account first." });
   next();
 }
+
+function qingCloudClient() {
+  return createQingCloudClient(process.env);
+}
+
+// YTAgent is a QingCloud customer: these routes keep coordinator credentials server-side.
+app.get("/api/compute/status", requireAuth, async (_req, res) => {
+  try {
+    const status = await qingCloudClient().status();
+    res.set("Cache-Control", "private, no-store");
+    res.json(status);
+  } catch (error) {
+    res.status(503).json({
+      configured: Boolean(process.env.QINGCLOUD_URL && process.env.QINGCLOUD_ADMIN_TOKEN),
+      connected: false,
+      error: String(error.message || error).slice(0, 300)
+    });
+  }
+});
+
+app.post("/api/compute/test", requireAuth, async (req, res) => {
+  try {
+    const start = req.body?.start === undefined ? 1 : Number(req.body.start);
+    const end = req.body?.end === undefined ? 1000 : Number(req.body.end);
+    const chunk_size = req.body?.chunk_size === undefined ? 100 : Number(req.body.chunk_size);
+    const task = await qingCloudClient().createDistributedSum({ start, end, chunk_size });
+    res.set("Cache-Control", "private, no-store");
+    res.status(202).json({
+      accepted: true,
+      provider: "QingCloud Compute",
+      task_id: task.task_id,
+      chunk_count: task.chunk_count,
+      integer_count: task.integer_count,
+      status_url: "/api/compute/tasks/" + encodeURIComponent(task.task_id)
+    });
+  } catch (error) {
+    res.status(502).json({ accepted: false, error: String(error.message || error).slice(0, 300) });
+  }
+});
+
+app.get("/api/compute/tasks/:taskId", requireAuth, async (req, res) => {
+  try {
+    const task = await qingCloudClient().getDistributedSum(req.params.taskId);
+    res.set("Cache-Control", "private, no-store");
+    res.json(task);
+  } catch (error) {
+    res.status(502).json({ error: String(error.message || error).slice(0, 300) });
+  }
+});
 
 app.get("/api/studio/projects/:projectId", requireAuth, async (req, res) => {
   try {

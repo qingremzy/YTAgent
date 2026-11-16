@@ -75,3 +75,8 @@ The Kaggle push API identifier `NvidiaTeslaT4` requests Kaggle's current free **
 The worker now performs a CUDA preflight immediately after the notebook starts and before installing optional packages. It reports the PyTorch/CUDA build, assigned GPU names, VRAM, and compute capability, and writes `/kaggle/working/ytagent-gpu-preflight.json`. If CUDA is not assigned, it stops before spending time installing dependencies. The CUDA allocator also uses expandable segments to reduce memory fragmentation on shared T4 memory.
 
 **Important:** this improves startup diagnostics and memory allocation after Kaggle assigns a machine. It cannot force Kaggle to allocate a GPU or jump the shared scheduler queue. Kaggle documents that free GPU availability is limited, and recent reports confirm T4 jobs can remain queued for long periods. Repeatedly pushing duplicate versions does not create more GPU capacity and can make diagnosis harder.
+
+
+### Additional option: Lightning AI free GPU Studio
+
+If Kaggle or Colab cannot allocate a GPU, YTAgent now has a setup guide for running the same outbound-polling Wan worker on Lightning AI. Its free offer advertises up to 80 initial GPU hours without a credit card, subject to phone verification, regional eligibility and available free credits. This is a finite starting grant, not unlimited monthly compute. Follow [`LIGHTNING_AI_SETUP.md`](./LIGHTNING_AI_SETUP.md). The dedicated dependency file preserves Lightning's CUDA-enabled PyTorch build.

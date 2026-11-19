@@ -1206,6 +1206,34 @@ app.post("/api/worker/jobs/:jobId/fail", requireGpuWorker, (req, res) => {
 
 const { generateEducationalVideo } = require("./video-generator");
 
+app.get("/api/research", requireAuth, async (req, res) => {
+  const topic = String(req.query.topic || "").trim().slice(0, 120);
+  if (topic.length < 3) return res.status(400).json({ error: "Enter a niche or topic to research." });
+  try {
+    const auth = oauthClient();
+    auth.setCredentials(req.session.tokens);
+    const yt = google.youtube({ version: "v3", auth });
+    const search = await yt.search.list({ part: ["snippet"], q: topic, type: ["video"], order: "viewCount", maxResults: 10, videoDuration: "any" });
+    const ids = (search.data.items || []).map(item => item.id && item.id.videoId).filter(Boolean);
+    if (!ids.length) return res.json({ topic, sampleSize: 0, videos: [], channels: [], note: "No public videos were returned for this query." });
+    const videosResponse = await yt.videos.list({ part: ["snippet", "statistics", "contentDetails"], id: ids });
+    const videos = (videosResponse.data.items || []).map(video => {
+      const duration = String(video.contentDetails?.duration || "");
+      const match = duration.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+      const seconds = match ? Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0) : 0;
+      return { id: video.id, title: video.snippet?.title || "", channelId: video.snippet?.channelId || "", channelTitle: video.snippet?.channelTitle || "", views: Number(video.statistics?.viewCount || 0), likes: Number(video.statistics?.likeCount || 0), publishedAt: video.snippet?.publishedAt || "", durationSeconds: seconds, url: "https://www.youtube.com/watch?v=" + video.id };
+    });
+    const channelIds = Array.from(new Set(videos.map(video => video.channelId).filter(Boolean))).slice(0, 50);
+    const channelResponse = channelIds.length ? await yt.channels.list({ part: ["snippet", "statistics"], id: channelIds }) : { data: { items: [] } };
+    const channels = (channelResponse.data.items || []).map(channel => ({ id: channel.id, title: channel.snippet?.title || "", subscribers: Number(channel.statistics?.subscriberCount || 0), totalViews: Number(channel.statistics?.viewCount || 0), videoCount: Number(channel.statistics?.videoCount || 0) }));
+    const average = key => videos.length ? Math.round(videos.reduce((sum, item) => sum + item[key], 0) / videos.length) : 0;
+    res.json({ topic, sampleSize: videos.length, averageViews: average("views"), averageDurationSeconds: average("durationSeconds"), videos, channels, note: "Public YouTube Data API results sorted by view count. Search results are a sample, not a guarantee of future performance. Earnings are not estimated because public data cannot verify creator RPM or revenue." });
+  } catch (error) {
+    console.error("YouTube niche research failed:", error.message);
+    res.status(500).json({ error: error.message.includes("quota") ? "YouTube research quota reached. Try again after quota resets." : "Research failed. Connect YouTube again and verify the Google API setup." });
+  }
+});
+
 app.get("/api/ideas", (req, res) => {
   res.set("Cache-Control", "no-store");
   res.json({ ideas: [

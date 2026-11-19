@@ -118,7 +118,7 @@ test("prefers Kaggle MCP SaveAndRunAll with the full session timeout", async () 
   assert.equal(session.args.machineShape, "NvidiaTeslaT4");
   assert.equal(session.args.enableInternet, true);
   assert.equal(save.args.sessionTimeoutSeconds, 32400);
-  assert.equal(save.args.kernelExecutionType, "SaveAndRunAll");
+  assert.equal(save.args.kernelExecutionType, "InterActive");
   assert.equal(save.args.machineShape, "NvidiaTeslaT4");
   assert.match(save.args.text, /runpy\.run_path/);
 });

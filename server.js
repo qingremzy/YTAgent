@@ -1869,7 +1869,7 @@ if (redisEnabled) {
       const durableDetails = await persistGenerationArtifacts(job.data.outputPath, details);
       await job.updateProgress(100);
       scheduleGeneratedFileExpiry(job.data.outputPath);
-      if (details.thumbnail_path) scheduleGeneratedFileExpiry(details.thumbnail_path);
+      scheduleGeneratedFileExpiry(job.data.outputPath.replace(/\.mp4$/i, "-thumbnail.jpg"));
       if (durableDetails.studioProjectId) scheduleStudioProjectExpiry(durableDetails.studioProjectId);
       return { ...durableDetails, downloadUrl: "/api/generated/" + job.data.filename };
     } catch (error) {

@@ -86,7 +86,7 @@ test("uses the canonical GitHub notebook instead of a stale Kaggle-saved copy", 
   assert.doesNotMatch(calls[1].args.text, /# YTAgent/);
 });
 
-test("uses the Kaggle CLI runner when available instead of the short MCP save call", async () => {
+test("prefers Kaggle MCP SaveAndRunAll with the full session timeout", async () => {
   const cliCalls = [];
   const toolCalls = [];
   const manager = createKaggleWorkerSessionManager({
@@ -101,17 +101,20 @@ test("uses the Kaggle CLI runner when available instead of the short MCP save ca
     callKaggleTool: async (name, args) => {
       toolCalls.push({ name, args });
       if (name === "get_notebook_info") return { metadata: { machineShape: "NvidiaTeslaT4", enableGpu: true, enableInternet: true } };
+      if (name === "save_notebook") return { versionNumber: 8 };
       throw new Error("Unexpected Kaggle tool " + name);
     }
   });
   const result = await manager.ensure();
   assert.equal(result.started, true);
   assert.equal(result.versionNumber, 8);
-  assert.equal(cliCalls.length, 1);
-  assert.equal(cliCalls[0].identity.slug, identity.slug);
-  assert.match(cliCalls[0].source, /runpy\.run_path/);
-  assert.equal(cliCalls[0].metadata.machineShape, "NvidiaTeslaT4");
-  assert.deepEqual(toolCalls.map(call => call.name), ["get_notebook_info"]);
+  assert.equal(cliCalls.length, 0);
+  const save = toolCalls.find(call => call.name === "save_notebook");
+  assert.ok(save);
+  assert.equal(save.args.sessionTimeoutSeconds, 32400);
+  assert.equal(save.args.kernelExecutionType, "SaveAndRunAll");
+  assert.equal(save.args.machineShape, "NvidiaTeslaT4");
+  assert.match(save.args.text, /runpy\\.run_path/);
 });
 
 test("uses a one-time bootstrap token and sanitizes malformed markdown cells", async () => {

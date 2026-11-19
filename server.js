@@ -1136,7 +1136,7 @@ app.post("/api/generated/:filename/publish", requireAuth, async (req, res) => {
     const thumbnailPath = filePath.replace(/\.mp4$/i, "-thumbnail.jpg");
     if (fs.existsSync(thumbnailPath)) {
       try {
-        await yt.thumbnails.set({ videoId: response.data.id, media: { body: fs.createReadStream(thumbnailPath) } });
+        await yt.thumbnails.set({ videoId: response.data.id, media: { mimeType: "image/jpeg", body: fs.createReadStream(thumbnailPath) } });
       } catch (error) {
         thumbnailError = String(error.message || error).slice(0, 220);
         console.warn("Video published but custom thumbnail upload failed:", thumbnailError);

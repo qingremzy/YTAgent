@@ -531,8 +531,8 @@ function sceneArtwork(scene, index, total) {
 }
 
 async function createFilmThumbnail(videoPath, title, durationSeconds) {
-  const thumbnailPath = videoPath.replace(/\\.mp4$/i, "-thumbnail.jpg");
-  const framePath = videoPath.replace(/\\.mp4$/i, "-thumbnail-source.jpg");
+  const thumbnailPath = videoPath.replace(/\.mp4$/i, "-thumbnail.jpg");
+  const framePath = videoPath.replace(/\.mp4$/i, "-thumbnail-source.jpg");
   const frameTime = Math.max(1, Math.min(Number(durationSeconds) - 1, Math.round(Number(durationSeconds) * 0.28)));
   await run(ffmpegPath, ["-y", "-hide_banner", "-loglevel", "error", "-ss", String(frameTime), "-i", videoPath, "-frames:v", "1", "-q:v", "2", framePath]);
   const frameMeta = await sharp(framePath).metadata();

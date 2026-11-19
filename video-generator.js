@@ -342,7 +342,12 @@ async function generateTutorialClips(scenes, topic, workDir, onProgress = () => 
     try {
       const clips = [];
       let previousDirection = "";
+      let lastAgnesSubmissionAt = 0;
       for (let i = 0; i < scenes.length; i++) {
+        if (lastAgnesSubmissionAt) {
+          const waitForProvider = 65000 - (Date.now() - lastAgnesSubmissionAt);
+          if (waitForProvider > 0) await new Promise(resolve => setTimeout(resolve, waitForProvider));
+        }
         const scene = scenes[i];
         const prompt = [
           "Generate one complete ten-second vertical 9:16 animated video clip. Flat 2D illustrated characters composited into a fully dimensional, shaded stylized 3D environment. Characters remain flat illustrated cels with simple faces, bold dark outlines, thin line limbs and flat clothing colors. Never use realistic humans, 3D character models, slideshows or text cards.",
@@ -360,6 +365,7 @@ async function generateTutorialClips(scenes, topic, workDir, onProgress = () => 
             try { onProgress(6 + Math.round(((i + Math.max(0, Number(progress) || 0) / 100) / scenes.length) * 58), "Generating ten-second clip " + (i + 1) + " of " + scenes.length + " (" + (status || "working") + ")."); } catch (_) {}
           }
         });
+        lastAgnesSubmissionAt = Date.now();
         clips.push(destination);
         previousDirection = scene.visual_direction;
       }

@@ -86,7 +86,7 @@ test("uses the canonical GitHub notebook instead of a stale Kaggle-saved copy", 
   assert.doesNotMatch(calls[2].args.text, /# YTAgent/);
 });
 
-test("prefers Kaggle MCP SaveAndRunAll with the full session timeout", async () => {
+test("uses interactive execution after creating a persistent Kaggle GPU session", async () => {
   const cliCalls = [];
   const toolCalls = [];
   const manager = createKaggleWorkerSessionManager({

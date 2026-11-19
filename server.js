@@ -1164,8 +1164,26 @@ app.post("/api/worker/jobs/:jobId/fail", requireGpuWorker, (req, res) => {
 
 const { generateEducationalVideo } = require("./video-generator");
 
+app.get("/api/ideas", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({ ideas: [
+    { title: "What If Your Shadow Quit?", hook: "One morning, a teenager's shadow refuses to copy him and starts living its own life." },
+    { title: "The Backpack That Steals Gravity", hook: "Every object placed inside a schoolbag becomes weightless, until the whole city begins floating." },
+    { title: "What If Every Lie Made You Smaller?", hook: "A harmless lie shrinks a young man's body, forcing him to choose between pride and the truth." },
+    { title: "The Vending Machine That Accepts Memories", hook: "A mysterious machine trades snacks for precious memories, and one customer regrets the price." },
+    { title: "What If Clouds Followed Your Mood?", hook: "A quiet student's emotions begin controlling the weather above an entire neighbourhood." },
+    { title: "The Door That Opens Ten Minutes Ahead", hook: "A bedroom door reveals the same room ten minutes in the future, including one impossible warning." },
+    { title: "What If Nobody Could Say Your Name?", hook: "Everyone forgets how to pronounce one boy's name, and reality slowly forgets he exists." },
+    { title: "The Last Working Streetlight", hook: "When every light in town goes dark, one streetlamp begins revealing things hiding in plain sight." },
+    { title: "What If Your Reflection Was Late?", hook: "A girl's reflection starts moving seconds after she does, then begins making choices of its own." },
+    { title: "The Clock That Pauses One Person", hook: "A broken wristwatch freezes one person at a time, but each pause steals a minute from its owner." }
+  ]});
+});
+
 app.post("/api/generate", generationRateLimit, async (req, res) => {
   const topic = String(req.body?.topic || "").trim();
+  const durationSeconds = Number(req.body?.durationSeconds === undefined ? 60 : req.body.durationSeconds);
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 30 || durationSeconds > 600 || durationSeconds % 10 !== 0) return res.status(400).json({ error: "Choose a duration from 30 to 600 seconds in 10-second increments." });
   if (topic.length < 8) return res.status(400).json({ error: "Enter a video topic with at least 8 characters." });
   if (topic.length > 180) return res.status(400).json({ error: "Keep the topic under 180 characters." });
   if (generationQueue) {
@@ -1188,7 +1206,7 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
 
   if (generationQueue) {
     try {
-      const job = await generationQueue.add("generate-film", { topic, outputPath, filename }, {
+      const job = await generationQueue.add("generate-film", { topic, durationSeconds, outputPath, filename }, {
         attempts: 1,
         removeOnComplete: { age: 86400, count: 200 },
         removeOnFail: { age: 86400, count: 200 }
@@ -1217,6 +1235,7 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
         if (message) job.message = String(message).slice(0, 180);
         persistGenerationJobs();
       }, {
+        durationSeconds,
         studioProjectRoot,
         onGpuJobQueued: async ({ jobId: gpuJobId } = {}) => {
           if (!process.env.KAGGLE_API_TOKEN) {
@@ -1714,6 +1733,7 @@ if (redisEnabled) {
         await job.updateProgress(Math.max(0, Math.min(99, Number(progress) || 0)));
         await job.updateData({ ...job.data, message: String(message || "").slice(0, 180) });
       }, {
+        durationSeconds: job.data.durationSeconds || 60,
         studioProjectRoot,
         // The Redis/BullMQ path must start the same free Kaggle GPU worker as
         // the local-job path when Agnes is unavailable and the GPU job is queued.

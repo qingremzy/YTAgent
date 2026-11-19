@@ -26,7 +26,8 @@ assert.equal(blueprint.format, "ytagent.video-blueprint.v1");
 assert.equal(blueprint.duration_seconds, TOTAL_DURATION_SECONDS);
 assert.equal(blueprint.scenes.length, SCENE_COUNT);
 assert.equal(blueprint.scenes[0].start_seconds, 0);
-assert.equal(blueprint.scenes[9].end_seconds, 60);
+assert.equal(blueprint.scenes[9].end_seconds, 100);
+assert.equal(blueprint.scenes[0].duration_seconds, 10);
 assert.equal(blueprint.scenes[3].world.camera, "orbit_left");
 assert.equal(blueprint.timeline, "single_continuous_film");
 assert.equal(blueprint.audio.narrator.required, true);
@@ -38,7 +39,7 @@ assert.equal(blueprint.audio.music.required, false);
 assert.equal(blueprint.audio.sound_effects.enabled, false);
 assert.equal(blueprint.audio.mix.target_loudness_lufs, null);
 
-assert.throws(() => compileBlueprint({ scenes: [] }), /exactly 10 scenes/);
+assert.throws(() => compileBlueprint({ scenes: [] }), /exactly 10 ten-second scenes/);
 assert.throws(() => compileBlueprint({
   scenes: Array.from({ length: SCENE_COUNT }, () => ({
     visual_direction: "A scene"
@@ -46,3 +47,17 @@ assert.throws(() => compileBlueprint({
 }), /narration is required/);
 
 console.log("Video compiler blueprint tests passed.");
+
+const shortBlueprint = compileBlueprint({
+  title: "Short film",
+  scenes: Array.from({ length: 3 }, (_, index) => ({
+    title: "Beat " + index,
+    narration: "A short narration for this scene.",
+    caption: "A scene",
+    visual_direction: "A character walks through a softly lit room and opens a mysterious door."
+  }))
+}, { durationSeconds: 30 });
+assert.equal(shortBlueprint.duration_seconds, 30);
+assert.equal(shortBlueprint.scene_count, 3);
+assert.equal(shortBlueprint.scenes[2].end_seconds, 30);
+assert.throws(() => compileBlueprint(storyboard, { durationSeconds: 35 }), /30–600 seconds/);

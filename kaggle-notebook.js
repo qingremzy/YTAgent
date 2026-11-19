@@ -196,6 +196,8 @@ function patchNotebookForBatchRun(source, options = {}) {
     'try:\n',
     '    runpy.run_path("app.py", run_name="__main__")\n',
     'finally:\n',
+    '    if "heartbeat_stop" in globals(): heartbeat_stop.set()\n',
+    '    if "heartbeat_thread" in globals(): heartbeat_thread.join(timeout=2)\n',
     '    if "heartbeat_process" in globals(): heartbeat_process.terminate()\n',
     'print("YTAgent GPU job finished.", flush=True)\n'
   ];  return JSON.stringify(notebook);

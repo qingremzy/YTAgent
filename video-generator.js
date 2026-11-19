@@ -335,35 +335,63 @@ async function requestStoryboard(topic, durationSeconds = 60) {
   throw new Error("Storyboard generation failed. " + failures.join(" | "));
 }
 
-async function generateTutorialClips(scenes, topic, workDir, onProgress = () => {}, continuityGuide = "") {
+async function generateTutorialClips(scenes, topic, workDir, onProgress = () => {}, continuityGuide = "", onGpuJobQueued) {
   const confirmed = ["true", "1", "yes", "confirmed", "on"].includes(String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase());
-  if (!process.env.AGNES_API_KEY || !confirmed || (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") !== "agnes-video-2.5-flash") {
-    throw new Error("The 10-second clip engine is not enabled with confirmed free quota. Set AGNES_API_KEY, AGNES_VIDEO_MODEL=agnes-video-2.5-flash and AGNES_FREE_QUOTA_CONFIRMED=true only after verifying that the provider account has free quota. No paid provider was contacted.");
-  }
-  const clips = [];
-  let previousDirection = "";
-  for (let i = 0; i < scenes.length; i++) {
-    const scene = scenes[i];
-    const prompt = [
-      "Generate one complete ten-second vertical 9:16 animated video clip. Flat 2D illustrated characters composited into a fully dimensional, shaded stylized 3D environment. Characters remain flat illustrated cels with simple faces, bold dark outlines, thin line limbs and flat clothing colors. Never use realistic humans, 3D character models, slideshows or text cards.",
-      "Story premise: " + cleanText(topic, 180),
-      "Continuity bible: " + cleanText(continuityGuide, 1200),
-      "This is clip " + (i + 1) + " of " + scenes.length + ".",
-      "Previous clip ending/action context: " + cleanText(previousDirection || "Opening shot.", 500),
-      "Current action and camera: " + cleanText(scene.visual_direction, 900),
-      "Preserve exact character silhouette, face, hair, clothing colors, props, spatial layout, palette and lighting. Continue the same action and world. Do not add titles, captions, logos or watermarks."
-    ].join("\n");
-    const destination = path.join(workDir, "tutorial-clip-" + String(i + 1).padStart(2, "0") + ".mp4");
-    await generateSingleAgnesClip(prompt, destination, 10, {
-      timeoutMs: Number(process.env.AGNES_CLIP_TIMEOUT_MS || 12 * 60 * 1000),
-      onProgress: (status, progress) => {
-        try { onProgress(6 + Math.round(((i + Math.max(0, Number(progress) || 0) / 100) / scenes.length) * 80), "Generating ten-second clip " + (i + 1) + " of " + scenes.length + " (" + (status || "working") + ")."); } catch (_) {}
+  let agnesFailure = null;
+  if (process.env.AGNES_API_KEY && confirmed && (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") === "agnes-video-2.5-flash") {
+    try {
+      const clips = [];
+      let previousDirection = "";
+      for (let i = 0; i < scenes.length; i++) {
+        const scene = scenes[i];
+        const prompt = [
+          "Generate one complete ten-second vertical 9:16 animated video clip. Flat 2D illustrated characters composited into a fully dimensional, shaded stylized 3D environment. Characters remain flat illustrated cels with simple faces, bold dark outlines, thin line limbs and flat clothing colors. Never use realistic humans, 3D character models, slideshows or text cards.",
+          "Story premise: " + cleanText(topic, 180),
+          "Continuity bible: " + cleanText(continuityGuide, 1200),
+          "This is clip " + (i + 1) + " of " + scenes.length + ".",
+          "Previous clip action context: " + cleanText(previousDirection || "Opening shot.", 500),
+          "Current action and camera: " + cleanText(scene.visual_direction, 900),
+          "Preserve exact character silhouette, face, hair, clothing colors, props, spatial layout, palette and lighting. Continue the same action and world. Do not add titles, captions, logos or watermarks."
+        ].join("\n");
+        const destination = path.join(workDir, "tutorial-clip-" + String(i + 1).padStart(2, "0") + ".mp4");
+        await generateSingleAgnesClip(prompt, destination, 10, {
+          timeoutMs: Number(process.env.AGNES_CLIP_TIMEOUT_MS || 12 * 60 * 1000),
+          onProgress: (status, progress) => {
+            try { onProgress(6 + Math.round(((i + Math.max(0, Number(progress) || 0) / 100) / scenes.length) * 58), "Generating ten-second clip " + (i + 1) + " of " + scenes.length + " (" + (status || "working") + ")."); } catch (_) {}
+          }
+        });
+        clips.push(destination);
+        previousDirection = scene.visual_direction;
       }
-    });
-    clips.push(destination);
-    previousDirection = scene.visual_direction;
+      return { clips, narrationClips: null, provider: "Agnes Video 2.5 Flash (confirmed free quota)" };
+    } catch (error) {
+      agnesFailure = error;
+      console.warn("Agnes free ten-second route failed; trying the free Kaggle Wan worker:", error.message || error);
+    }
   }
-  return { clips, narrationClips: null, provider: "Agnes Video 2.5 Flash (confirmed free quota)" };
+
+  if (process.env.YT_AGENT_WORKER_TOKEN) {
+    const continuityScenes = scenes.map((scene, index) => ({
+      ...scene,
+      visual_direction: [
+        "Continuity bible: " + cleanText(continuityGuide, 1100),
+        "Clip " + (index + 1) + " of " + scenes.length + ".",
+        index ? "Continue from the prior clip's final action and pose: " + cleanText(scenes[index - 1].visual_direction, 400) : "Opening clip.",
+        scene.visual_direction
+      ].join(" ")
+    }));
+    try {
+      const generated = await generateWanSceneClips(continuityScenes, topic, workDir, onProgress, onGpuJobQueued);
+      if (Array.isArray(generated)) return { clips: generated, narrationClips: null, provider: "Wan 2.1 free Kaggle GPU worker" };
+      return { clips: generated.clips, narrationClips: generated.narrations || null, provider: "Wan 2.1 + Kokoro free Kaggle GPU worker" };
+    } catch (error) {
+      throw new Error("Both zero-cost ten-second video routes are unavailable. " +
+        (agnesFailure ? "Agnes: " + String(agnesFailure.message || agnesFailure).slice(0, 220) + ". " : "") +
+        "Kaggle Wan: " + String(error.message || error).slice(0, 320));
+    }
+  }
+  if (agnesFailure) throw new Error("Agnes free video generation failed: " + (agnesFailure.message || agnesFailure) + ". The free Kaggle GPU worker is not configured.");
+  throw new Error("No confirmed zero-cost ten-second video provider is configured. Enable confirmed Agnes free quota or configure the Kaggle worker token. No paid video provider was contacted.");
 }
 
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
@@ -548,7 +576,7 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
   try {
     // The tutorial workflow requires one native ten-second generated clip per storyboard beat.
     // This route fails closed unless Agnes free quota has been explicitly confirmed in Railway.
-    const visualResult = await generateTutorialClips(storyboard.scenes, topic, workDir, reportProgress, storyboard.continuity_guide);
+    const visualResult = await generateTutorialClips(storyboard.scenes, topic, workDir, reportProgress, storyboard.continuity_guide, options.onGpuJobQueued);
     reportProgress(92, "All visuals and narration are ready. Mixing the film.");
     const generatedClips = visualResult.clips;
     const voiceProviders = new Set();

@@ -131,7 +131,7 @@ async function generateWanSceneClips(scenes, topic, workDir, onProgress, onQueue
     }
     if (state === "completed") {
       const clips = [];
-      for (let index = 0; index < 10; index++) {
+      for (let index = 0; index < scenes.length; index++) {
         const response = await workerRequest(baseUrl, token, "/jobs/" + jobId + "/scenes/" + index, {}, 120000);
         const bytes = Buffer.from(await response.arrayBuffer());
         if (bytes.length < 20000 || bytes.subarray(4, 8).toString() !== "ftyp") {
@@ -147,7 +147,7 @@ async function generateWanSceneClips(scenes, topic, workDir, onProgress, onQueue
       throw new Error("Wan GPU worker stopped the generation job: " + clean(status.message || state, 400));
     }
   }
-  throw new Error("Wan GPU generation timed out after 45 minutes. Keep the free Kaggle GPU session running and retry.");
+  throw new Error("Wan GPU generation timed out after six hours. Keep the free Kaggle GPU session running and retry.");
 }
 
 module.exports = { generateWanSceneClips, buildWanScenePrompt };

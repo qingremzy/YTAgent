@@ -122,6 +122,7 @@ const generatorForm = document.getElementById("generatorForm");
 const generateButton = document.getElementById("generateVideo");
 const generatorStatus = document.getElementById("generatorStatus");
 const generatedDownload = document.getElementById("generatedDownload");
+const generatedThumbnailPreview = document.getElementById("generatedThumbnailPreview");
 const generatedPublish = document.getElementById("generatedPublish");
 const generatedPublishStatus = document.getElementById("generatedPublishStatus");
 let generatedFilename = "";
@@ -219,7 +220,7 @@ if (generatedPublish) generatedPublish.addEventListener("click", async () => {
     });
     const data = await readJsonResponse(response);
     if (!response.ok) throw new Error(data.error || "YouTube publishing failed.");
-    generatedPublishStatus.textContent = "Published successfully: " + data.url;
+    generatedPublishStatus.textContent = "Published successfully: " + data.url + (data.thumbnailSet ? " · custom thumbnail uploaded." : " · thumbnail upload warning: " + (data.thumbnailError || "not set"));
     generatedPublishStatus.innerHTML = "";
     const link = document.createElement("a");
     link.href = data.url;

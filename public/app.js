@@ -471,22 +471,74 @@ async function waitForGeneration(jobId) {
   }
   throw new Error("This film is taking longer than expected. Your task ID is saved. Reload this page to resume checking.");
 }
+const durationSelect = document.getElementById("videoDuration");
+const customDurationWrap = document.getElementById("customDurationWrap");
+const customDurationInput = document.getElementById("customDuration");
+const loadIdeasButton = document.getElementById("loadIdeas");
+const ideaList = document.getElementById("ideaList");
+if (durationSelect) durationSelect.addEventListener("change", () => {
+  customDurationWrap.classList.toggle("hidden", durationSelect.value !== "custom");
+});
+if (loadIdeasButton) loadIdeasButton.addEventListener("click", async () => {
+  loadIdeasButton.disabled = true;
+  loadIdeasButton.textContent = "Loading ideas…";
+  try {
+    const response = await fetch("/api/ideas", { cache: "no-store" });
+    const data = await readJsonResponse(response);
+    if (!response.ok || !Array.isArray(data.ideas) || data.ideas.length !== 10) throw new Error(data.error || "The ten story ideas could not be loaded.");
+    ideaList.replaceChildren();
+    data.ideas.forEach((idea, index) => {
+      const card = document.createElement("article");
+      card.className = "idea-card";
+      const number = document.createElement("small");
+      number.textContent = "IDEA " + String(index + 1).padStart(2, "0");
+      const title = document.createElement("strong");
+      title.textContent = idea.title;
+      const hook = document.createElement("p");
+      hook.textContent = idea.hook;
+      const choose = document.createElement("button");
+      choose.type = "button";
+      choose.className = "button secondary";
+      choose.textContent = "Use this idea";
+      choose.addEventListener("click", () => {
+        document.getElementById("videoTopic").value = idea.title;
+        generatorStatus.textContent = "Selected: " + idea.title + ". You can edit the premise before production.";
+        ideaList.querySelectorAll(".idea-card").forEach(item => item.classList.remove("selected"));
+        card.classList.add("selected");
+      });
+      card.append(number, title, hook, choose);
+      ideaList.appendChild(card);
+    });
+    ideaList.classList.remove("hidden");
+  } catch (error) {
+    generatorStatus.textContent = error.message;
+  } finally {
+    loadIdeasButton.disabled = false;
+    loadIdeasButton.textContent = "Show 10 ideas";
+  }
+});
+
 generatorForm.addEventListener("submit", async event => {
   event.preventDefault();
   const topic = document.getElementById("videoTopic").value.trim();
+  const durationSeconds = durationSelect.value === "custom" ? Number(customDurationInput.value) : Number(durationSelect.value);
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 30 || durationSeconds > 600 || durationSeconds % 10 !== 0) {
+    generatorStatus.textContent = "Custom duration must be 30–600 seconds in 10-second increments.";
+    return;
+  }
   if (!topic) return;
   generateButton.disabled = true;
   setGenerationLoading(true);
   updateGenerationProgress(1, "AI director is planning the film.");
   generateButton.textContent = "Generating video…";
-  generatorStatus.textContent = "Stage 3: building the continuity guide and ten connected scene prompts. Then YTAgent generates visuals, records scene-synced narration, assembles the MP4 and prepares its upload metadata."
+  generatorStatus.textContent = "Stage 3: building the continuity guide and " + (durationSeconds / 10) + " connected ten-second clip prompts. Then YTAgent generates visuals, records scene-synced narration, assembles the MP4 and prepares its upload metadata."
   generatedDownload.classList.add("hidden");
   if (generatedEdit) generatedEdit.classList.add("hidden");
   try {
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic })
+      body: JSON.stringify({ topic, durationSeconds })
     });
     const queued = await readJsonResponse(response);
     if (!response.ok) throw new Error(queued.error || "Video generation failed.");

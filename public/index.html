@@ -46,6 +46,8 @@
         <div class="idea-picker"><div><strong>Choose your story idea</strong><p class="muted">Write your own premise or choose from ten story starters.</p></div><button class="button secondary" id="loadIdeas" type="button">Show 10 ideas</button></div>
         <div id="ideaList" class="idea-list hidden" aria-live="polite"></div>
         <label>Your video premise<input id="videoTopic" maxlength="180" placeholder="e.g. What If Your Shadow Quit?" required></label>
+        <button class="button secondary full" id="researchTopic" type="button">Research popular YouTube videos in this niche</button>
+        <div id="researchResults" class="research-results hidden" aria-live="polite"></div>
         <button class="button primary full" id="generateVideo" type="submit"><span class="button-glyph">✦</span> Run 5-stage production</button>
       </form>
       <a class="button secondary full" href="https://colab.research.google.com/github/qingremzy/YTAgent/blob/main/gpu-worker/YTAgent_Colab_Free_GPU_Worker.ipynb" target="_blank" rel="noopener">Open free GPU animation worker (Colab) ↗</a>

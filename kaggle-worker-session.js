@@ -129,8 +129,31 @@ function createKaggleWorkerSessionManager({
     const request = buildNotebookSaveRequest(identity.slug, runnableSource, metadata);
     request.kernelExecutionType = "SaveAndRunAll";
 
-    // Kaggle's interactive-session API only opens a Jupyter session; it does not
-    // execute the notebook cells. SaveAndRunAll actually launches the GPU worker.
+    // Establish a Kaggle notebook session first, then submit the full
+    // SaveAndRunAll request. Some Kaggle backends cancel detached runs unless
+    // an interactive notebook session exists for the same GPU machine.
+    try {
+      const sessionRequest = {
+        slug: identity.slug,
+        language: metadata.language || "python",
+        languageNullable: metadata.language || "python",
+        hasLanguage: true,
+        kernelType: metadata.kernelType || "notebook",
+        kernelTypeNullable: metadata.kernelType || "notebook",
+        hasKernelType: true,
+        machineShape,
+        machineShapeNullable: machineShape,
+        hasMachineShape: true,
+        enableInternet: metadata.enableInternet !== false,
+        enableInternetNullable: metadata.enableInternet !== false,
+        hasEnableInternet: true
+      };
+      const session = kaggleToolData(await callKaggleTool("create_notebook_session", sessionRequest));
+      console.log("YTAgent Kaggle interactive GPU session prepared:", String(session?.status || session?.sessionId || "ready").slice(0, 180));
+    } catch (sessionError) {
+      console.warn("YTAgent Kaggle interactive session setup was unavailable; continuing with SaveAndRunAll:", String(sessionError.message || sessionError).slice(0, 220));
+    }
+
     lastStartAt = now;
     let operation;
     try {

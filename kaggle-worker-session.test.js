@@ -36,10 +36,10 @@ test("starts the saved GPU notebook when the worker is offline and no session is
   assert.equal(result.started, true);
   assert.equal(result.machineShape, "NvidiaTeslaT4");
   assert.equal(result.notebookRef, identity.slug);
-  assert.deepEqual(calls.map(call => call.name), ["get_notebook_info", "save_notebook"]);
-  assert.equal(calls[1].args.enableInternet, true);
-  assert.equal(calls[1].args.kernelExecutionType, "SaveAndRunAll");
-  assert.match(calls[1].args.text, /runpy\.run_path/);
+  assert.deepEqual(calls.map(call => call.name), ["get_notebook_info", "create_notebook_session", "save_notebook"]);
+  assert.equal(calls[2].args.enableInternet, true);
+  assert.equal(calls[2].args.kernelExecutionType, "SaveAndRunAll");
+  assert.match(calls[2].args.text, /runpy\.run_path/);
   assert.equal(result.versionNumber, 7);
 });
 
@@ -82,8 +82,8 @@ test("uses the canonical GitHub notebook instead of a stale Kaggle-saved copy", 
   ] });
   const { manager, calls } = makeManager({ canonicalSource: canonical });
   await manager.ensure();
-  assert.match(calls[1].args.text, /Canonical YTAgent notebook/);
-  assert.doesNotMatch(calls[1].args.text, /# YTAgent/);
+  assert.match(calls[2].args.text, /Canonical YTAgent notebook/);
+  assert.doesNotMatch(calls[2].args.text, /# YTAgent/);
 });
 
 test("prefers Kaggle MCP SaveAndRunAll with the full session timeout", async () => {

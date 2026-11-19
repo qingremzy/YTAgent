@@ -160,3 +160,6 @@ input:focus,textarea:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 
 #generatedScenePrompts p{line-height:1.5;overflow-wrap:anywhere}
 
 .generated-thumbnail{display:block;width:100%;max-width:760px;aspect-ratio:16/9;object-fit:cover;margin:14px auto;border-radius:14px;border:1px solid rgba(103,232,249,.35);box-shadow:0 14px 44px rgba(0,0,0,.35)}
+
+.title-idea{display:block;width:100%;margin:8px 0;text-align:left;white-space:normal}
+.title-idea.selected{border-color:rgba(103,232,249,.8);background:rgba(103,232,249,.12)}

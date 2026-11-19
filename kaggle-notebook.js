@@ -137,15 +137,9 @@ function patchNotebookForBatchRun(source, options = {}) {
   }
 
   if (tokenCell) {
-    // Run the secure bootstrap cell before dependency setup, then keep a lightweight
-    // heartbeat alive while Kaggle prepares the GPU runtime and downloads packages.
-    const setupCell = notebook.cells.find(item => {
-      if (!item || item.cell_type !== "code" || item === tokenCell) return false;
-      const text = Array.isArray(item.source) ? item.source.join("") : item.source;
-      return typeof text === "string" && text.includes("Checking Kaggle's preinstalled Wan GPU runtime");
-    });
-    if (setupCell) {
-    const setupText = Array.isArray(setupCell.source) ? setupCell.source.join("") : setupCell.source;
+    // Start a lightweight outbound heartbeat immediately after secure bootstrap.
+    // Do not depend on a particular setup-cell title: the GPU preflight and
+    // dependency installation can take several minutes before the worker polls.
     const heartbeatScript = [
       'import os, time, urllib.request',
       'server = os.environ["YT_AGENT_SERVER_URL"].rstrip("/")',
@@ -164,11 +158,12 @@ function patchNotebookForBatchRun(source, options = {}) {
       "heartbeat_script = " + JSON.stringify(heartbeatScript),
       'heartbeat_process = subprocess.Popen([sys.executable, "-u", "-c", heartbeat_script], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)'
     ].join(String.fromCharCode(10)) + String.fromCharCode(10);
-    setupCell.source = heartbeat + setupText;
+    const tokenSource = Array.isArray(tokenCell.source) ? tokenCell.source.join("") : tokenCell.source;
+    tokenCell.source = heartbeat + tokenSource;
+    // Keep the secure bootstrap first, followed by setup and the one-job runner.
     const markdown = notebook.cells.filter(item => item.cell_type !== "code");
     const code = notebook.cells.filter(item => item.cell_type === "code");
     notebook.cells = [...markdown, ...code.filter(item => item === tokenCell), ...code.filter(item => item !== tokenCell)];
-    }
   }
 
   const cell = notebook.cells.find(item => {

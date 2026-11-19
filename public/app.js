@@ -35,8 +35,6 @@ async function refreshStatus() {
     statusText.textContent = data.connected ? "Connected: " + data.channel : (data.error || "Not connected yet.");
     connectButton.classList.toggle("hidden", !!data.connected);
     disconnectButton.classList.toggle("hidden", !data.connected);
-    if (data.connected) refreshQingCloudStatus();
-    else if (qingCloudStatus) qingCloudStatus.textContent = "Connect YouTube to authorize access to YTAgent's compute controls.";
   } catch { statusText.textContent = "Could not check connection."; }
 }
 

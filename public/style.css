@@ -145,3 +145,9 @@ input:focus,textarea:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 
 .idea-card .button{align-self:flex-start}
 #generatedPublishStatus a{color:#67e8f9}
 @media(max-width:560px){.idea-picker{align-items:flex-start;flex-direction:column}.idea-picker .button{width:100%}}
+
+.research-results{margin:12px 0;padding:16px;border:1px solid rgba(103,232,249,.24);border-radius:14px;background:rgba(8,15,31,.68);max-height:420px;overflow:auto}
+.research-results p{margin:8px 0;line-height:1.5}
+.research-results a{color:#67e8f9;text-decoration:none}
+.research-results a:hover{text-decoration:underline}
+.research-results small{display:block;color:var(--muted,#aab4c8);margin-top:3px}

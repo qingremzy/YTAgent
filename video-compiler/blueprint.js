@@ -5,8 +5,8 @@
  * The renderer must produce one complete film and a mandatory narrator track.
  */
 
-const TOTAL_DURATION_SECONDS = 100;
-const SCENE_COUNT = 10;
+const TOTAL_DURATION_SECONDS = 60;
+const SCENE_COUNT = 6;
 const SCENE_DURATION_SECONDS = 10;
 function resolveDuration(value) {
   const seconds = Number(value === undefined ? TOTAL_DURATION_SECONDS : value);

@@ -165,6 +165,10 @@ function showGeneratedVideo(data, topic) {
   setGenerationLoading(false);
   generatedDownload.href = data.downloadUrl;
   generatedDownload.classList.remove("hidden");
+  if (generatedThumbnailPreview && data.thumbnail_url) {
+    generatedThumbnailPreview.src = data.thumbnail_url;
+    generatedThumbnailPreview.classList.remove("hidden");
+  }
   const pack = document.getElementById("generatedProductionPack");
   if (pack) {
     document.getElementById("generatedContinuity").value = data.continuity_guide || "";

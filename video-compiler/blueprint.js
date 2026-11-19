@@ -81,7 +81,7 @@ function compileBlueprint(storyboard, options = {}) {
       visual_direction: direction,
       world: Object.freeze({
         environment: ENVIRONMENT_TYPES.has(scene.environment) ? scene.environment : "abstract",
-        subject: text(scene.subject || direction, "scene " + (index + 1) + " subject", 240),
+        subject: text(String(scene.subject || direction).slice(0, 240), "scene " + (index + 1) + " subject", 240),
         action: ACTION_TYPES.has(scene.action) ? scene.action : "demonstrate",
         camera: CAMERA_MOVES.has(scene.camera) ? scene.camera : "push_in",
         lighting: LIGHTING_PRESETS.has(scene.lighting) ? scene.lighting : "cinematic_soft",

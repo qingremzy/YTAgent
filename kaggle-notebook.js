@@ -140,20 +140,8 @@ function patchNotebookForBatchRun(source, options = {}) {
     // Start a lightweight outbound heartbeat immediately after secure bootstrap.
     // Do not depend on a particular setup-cell title: the GPU preflight and
     // dependency installation can take several minutes before the worker polls.
-    const heartbeatScript = [
-      'import os, time, urllib.request',
-      'server = os.environ["YT_AGENT_SERVER_URL"].rstrip("/")',
-      'token = os.environ["YT_AGENT_WORKER_TOKEN"]',
-      'while True:',
-      '    request = urllib.request.Request(server + "/api/worker/heartbeat", headers={"Authorization": "Bearer " + token})',
-      '    try:',
-      '        urllib.request.urlopen(request, timeout=20).read()',
-      '    except Exception:',
-      '        pass',
-      '    time.sleep(5)'
-    ].join(String.fromCharCode(10));
     const heartbeat = [
-      "import os, subprocess, sys, threading, time, urllib.request",
+      "import os, threading, urllib.request",
       'os.environ.setdefault("YT_AGENT_SERVER_URL", "https://ytagent-production-1038.up.railway.app")',
       'heartbeat_server = os.environ["YT_AGENT_SERVER_URL"].rstrip("/")',
       'heartbeat_token = os.environ["YT_AGENT_WORKER_TOKEN"]',
@@ -170,9 +158,7 @@ function patchNotebookForBatchRun(source, options = {}) {
       '            print("YTAgent heartbeat retry:", str(exc)[:120], flush=True)',
       "        heartbeat_stop.wait(5)",
       "heartbeat_thread = threading.Thread(target=ytagent_heartbeat_loop, daemon=True)",
-      "heartbeat_thread.start()",
-      "heartbeat_script = " + JSON.stringify(heartbeatScript),
-      'heartbeat_process = subprocess.Popen([sys.executable, "-u", "-c", heartbeat_script], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)'
+      "heartbeat_thread.start()"
     ].join(String.fromCharCode(10)) + String.fromCharCode(10);
     const tokenSource = Array.isArray(tokenCell.source) ? tokenCell.source.join("") : tokenCell.source;
     tokenCell.source = tokenSource + heartbeat;
@@ -198,7 +184,6 @@ function patchNotebookForBatchRun(source, options = {}) {
     'finally:\n',
     '    if "heartbeat_stop" in globals(): heartbeat_stop.set()\n',
     '    if "heartbeat_thread" in globals(): heartbeat_thread.join(timeout=2)\n',
-    '    if "heartbeat_process" in globals(): heartbeat_process.terminate()\n',
     'print("YTAgent GPU job finished.", flush=True)\n'
   ];  return JSON.stringify(notebook);
 }

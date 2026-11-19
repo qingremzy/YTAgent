@@ -479,7 +479,7 @@ generatorForm.addEventListener("submit", async event => {
   setGenerationLoading(true);
   updateGenerationProgress(1, "AI director is planning the film.");
   generateButton.textContent = "Generating video…";
-  generatorStatus.textContent = "AI director is planning ten scenes. YTAgent is creating the visuals, generating narration, and assembling one complete MP4. This may take several minutes. You can leave and return later."
+  generatorStatus.textContent = "Stage 3: building the continuity guide and ten connected scene prompts. Then YTAgent generates visuals, records scene-synced narration, assembles the MP4 and prepares its upload metadata."
   generatedDownload.classList.add("hidden");
   if (generatedEdit) generatedEdit.classList.add("hidden");
   try {
@@ -502,7 +502,7 @@ generatorForm.addEventListener("submit", async event => {
   finally {
     setGenerationLoading(false);
     generateButton.disabled = false;
-    generateButton.textContent = "✦ Generate 60-second video";
+    generateButton.textContent = "✦ Run 5-stage production";
   }
 });
 refreshStatus();
@@ -522,7 +522,7 @@ try {
     }).finally(() => {
       setGenerationLoading(false);
       generateButton.disabled = false;
-      generateButton.textContent = "✦ Generate 60-second video";
+      generateButton.textContent = "✦ Run 5-stage production";
     });
   }
 } catch (_) {

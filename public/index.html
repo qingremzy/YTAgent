@@ -38,10 +38,11 @@
     <section class="card generator-card">
       <div class="eyebrow">01 // CREATION ENGINE</div>
       <h2>AI video generator</h2>
-      <p class="muted">Create an original 60-second animated story Short with recurring characters, clear scenes, narration and captions. YTAgent will only deliver a finished video when its real video engine succeeds.</p>
+      <p class="muted">Follow the What-If Story workflow: selected premise → story and continuity guide → scene-by-scene visual prompts → narrator script → YouTube upload pack. The current renderer produces 60-second vertical films. YTAgent delivers an MP4 only after the real video engine succeeds.</p>
+      <ol class="workflow-steps"><li><strong>01 · Format</strong><span>60 seconds · vertical 9:16</span></li><li><strong>02 · Idea</strong><span>Use your premise or choose a what-if concept</span></li><li><strong>03 · Production plan</strong><span>Continuity guide and ten connected scene prompts</span></li><li><strong>04 · Narration</strong><span>Scene-synced voice script</span></li><li><strong>05 · Upload pack</strong><span>Thumbnail prompt, title, description, tags and keywords</span></li></ol>
       <form id="generatorForm">
         <label>What should the video be about?<input id="videoTopic" maxlength="180" placeholder="e.g. What If Your Shadow Quit? or The Backpack That Steals Gravity" required></label>
-        <button class="button primary full" id="generateVideo" type="submit"><span class="button-glyph">✦</span> Generate 60-second video</button>
+        <button class="button primary full" id="generateVideo" type="submit"><span class="button-glyph">✦</span> Run 5-stage production</button>
       </form>
       <a class="button secondary full" href="https://colab.research.google.com/github/qingremzy/YTAgent/blob/main/gpu-worker/YTAgent_Colab_Free_GPU_Worker.ipynb" target="_blank" rel="noopener">Open free GPU animation worker (Colab) ↗</a>
       <p class="muted">For full AI-generated animated scenes, keep the free Colab worker running while YTAgent renders your story. Free GPU access depends on availability.</p>

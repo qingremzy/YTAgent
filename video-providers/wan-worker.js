@@ -23,10 +23,10 @@ function buildWanScenePrompt(scene, topic, index) {
     "three-quarter follow shot with a gentle handheld documentary feel"
   ];
   return [
-    "An original high-quality stylized 3D animated explainer film shot, portrait 9:16. This must look like a real animated scene from a 3D movie, not a diagram or abstract motion graphic.",
+    "An original animated film shot in portrait 9:16. Visual style: flat 2D illustrated animation characters composited into a fully dimensional, shaded stylized 3D environment. Characters remain flat illustrated cels with simple white circular faces, bold dark outlines, thin line limbs and flat clothing colors. Only environments and props are shaded 3D. Never render 3D character models or realistic humans.",
     "Overall subject: " + clean(topic, 180) + ".",
     "Shot " + (index + 1) + " of a continuous ten-shot explainer: " + clean(scene.visual_direction, 500) + ".",
-    "Show the named physical subject clearly performing the described action in a recognizable location. Favor expressive 3D human characters, believable anatomy, tactile props, detailed sets, facial expression and readable cause-and-effect. Preserve the same character appearance and important object design between shots whenever described.",
+    "Show the named physical subject clearly performing the described action in a recognizable location. Favor expressive flat 2D characters, readable physical acting, tactile 3D props, detailed dimensional sets and clear cause-and-effect. Preserve the same character appearance and important object design between shots whenever described.",
     "Use solid geometry, physically plausible contact and weight, natural body mechanics, rich but realistic materials, cinematic key and rim lighting, detailed backgrounds and film-quality depth of field.",
     "Animate a clear action throughout the entire shot. The subject must move or interact with an object. Camera: " + cameraMoves[index % cameraMoves.length] + ".",
     "Avoid abstract swirls, atom diagrams, orbiting dots, glowing rings, floating particles, fractal patterns, generic science wallpaper, empty backgrounds, frozen poses and unrelated imagery. Do not show symbols as a substitute for the real subject.",
@@ -56,8 +56,8 @@ async function workerRequest(baseUrl, token, route, options = {}, timeoutMs = 60
 async function generateWanSceneClips(scenes, topic, workDir, onProgress, onQueued) {
   const configuredUrl = process.env.VIDEO_WORKER_URL;
   const token = process.env.YT_AGENT_WORKER_TOKEN;
-  if (!Array.isArray(scenes) || scenes.length !== 10) {
-    throw new Error("Wan GPU worker requires exactly ten storyboard scenes.");
+  if (!Array.isArray(scenes) || scenes.length < 3 || scenes.length > 60) {
+    throw new Error("Wan GPU worker requires 3–60 storyboard scenes.");
   }
 
   // Prefer the outbound polling bridge: Kaggle calls Railway, so no expiring public tunnel is needed.
@@ -71,8 +71,8 @@ async function generateWanSceneClips(scenes, topic, workDir, onProgress, onQueue
   if (!configuredUrl || !token) {
     throw new Error("Wan GPU worker is not configured. Set VIDEO_WORKER_URL and YT_AGENT_WORKER_TOKEN while the free GPU notebook is running.");
   }
-  if (!Array.isArray(scenes) || scenes.length !== 10) {
-    throw new Error("Wan GPU worker requires exactly ten storyboard scenes.");
+  if (!Array.isArray(scenes) || scenes.length < 3 || scenes.length > 60) {
+    throw new Error("Wan GPU worker requires 3–60 storyboard scenes.");
   }
   let baseUrl;
   try {

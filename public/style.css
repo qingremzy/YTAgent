@@ -151,3 +151,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 
 .research-results a{color:#67e8f9;text-decoration:none}
 .research-results a:hover{text-decoration:underline}
 .research-results small{display:block;color:var(--muted,#aab4c8);margin-top:3px}
+
+.production-pack{margin-top:16px;padding:16px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:rgba(8,15,31,.55)}
+.production-pack summary{cursor:pointer;font-weight:700;color:#67e8f9}
+.production-pack textarea{width:100%;margin-top:8px;resize:vertical}
+#generatedScenePrompts details{margin:10px 0;padding:12px;border-radius:10px;background:rgba(148,163,184,.08)}
+#generatedScenePrompts summary{color:#fff}
+#generatedScenePrompts p{line-height:1.5;overflow-wrap:anywhere}

@@ -684,7 +684,6 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
       continuity_guide: cleanText(storyboard.continuity_guide || "", 4000),
       narrator_script: cleanText(storyboard.narrator_script || "", 4000),
       thumbnail_prompt: cleanText(storyboard.thumbnail_prompt || "", 1800),
-      thumbnail_path: thumbnailPath,
       thumbnail_url: "/api/generated/" + path.basename(outputPath) + "/thumbnail",
       scene_prompts: storyboard.scenes.map((scene, index) => ({ index: index + 1, prompt: cleanText(scene.visual_direction, 900), narration: cleanText(scene.narration, 320) })),
       visuals: sceneCount + " AI-generated moving ten-second video clips assembled by the YTAgent video compiler",

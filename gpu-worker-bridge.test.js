@@ -52,6 +52,29 @@ test("outbound GPU worker returns ten MP4 scenes and ten Kokoro narration tracks
   }
 });
 
+test("outbound GPU worker supports a three-clip 30-second film", async () => {
+  const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-bridge-short-"));
+  try {
+    const prompts = Array.from({ length: 3 }, (_, i) => "A ten-second animated clip showing a distinct physical action " + i);
+    const narrations = Array.from({ length: 3 }, (_, i) => "A complete spoken narration line for short scene " + i);
+    const completed = enqueueGpuJob({ prompts, narrations, seed: 30, workDir });
+    const claimed = claimNextGpuJob();
+    assert.equal(claimed.prompts.length, 3);
+    for (let index = 0; index < 3; index++) {
+      const mp4 = Buffer.alloc(24000); mp4.write("ftyp", 4, "ascii");
+      await receiveGpuScene(claimed.job_id, index, mp4);
+      const wav = Buffer.alloc(4096); wav.write("RIFF", 0, "ascii"); wav.write("WAVE", 8, "ascii");
+      const result = await receiveGpuAudio(claimed.job_id, index, wav);
+      assert.equal(result.completed, index === 2);
+    }
+    const result = await completed;
+    assert.equal(result.clips.length, 3);
+    assert.equal(result.narrations.length, 3);
+  } finally {
+    await fs.promises.rm(workDir, { recursive: true, force: true });
+  }
+});
+
 test("outbound GPU worker rejects non-MP4 scene uploads", async () => {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-bridge-test-"));
   const completed = enqueueGpuJob({

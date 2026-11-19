@@ -137,11 +137,18 @@ function createKaggleWorkerSessionManager({
     lastStartAt = now;
     let operation;
     try {
-      operation = typeof pushNotebookWithCli === "function"
-        ? await pushNotebookWithCli({ identity, source: runnableSource, metadata })
-        : null;
-      if (operation === null) {
+      // Prefer Kaggle MCP's complete SaveAndRunAll request so the explicit
+      // 9-hour session timeout and GPU machine shape are sent as API fields.
+      // The CLI remains a fallback for temporary MCP tool failures.
+      try {
         operation = kaggleToolData(await callKaggleTool("save_notebook", request));
+        operation = { ...operation, launchMethod: "Kaggle MCP" };
+      } catch (mcpError) {
+        console.warn("YTAgent Kaggle MCP save failed; falling back to Kaggle CLI:", String(mcpError.message || mcpError).slice(0, 220));
+        operation = typeof pushNotebookWithCli === "function"
+          ? await pushNotebookWithCli({ identity, source: runnableSource, metadata })
+          : null;
+        if (operation === null) throw mcpError;
       }
     } catch (error) {
       lastStartAt = 0;

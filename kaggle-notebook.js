@@ -159,7 +159,7 @@ function patchNotebookForBatchRun(source, options = {}) {
       'heartbeat_process = subprocess.Popen([sys.executable, "-u", "-c", heartbeat_script], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)'
     ].join(String.fromCharCode(10)) + String.fromCharCode(10);
     const tokenSource = Array.isArray(tokenCell.source) ? tokenCell.source.join("") : tokenCell.source;
-    tokenCell.source = heartbeat + tokenSource;
+    tokenCell.source = tokenSource + heartbeat;
     // Keep the secure bootstrap first, followed by setup and the one-job runner.
     const markdown = notebook.cells.filter(item => item.cell_type !== "code");
     const code = notebook.cells.filter(item => item.cell_type === "code");

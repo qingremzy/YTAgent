@@ -58,12 +58,12 @@ function buildSixBeatPrompts(scenes, topic) {
       (part ? "Then transition into: " : "Opening action: ") + safe(scenes[sceneIndex].visual_direction, 450)
     ).join(" ");
     return [
-      "Create one professional cinematic vertical 9:16 live-action documentary video, exactly 10 seconds, 30fps.",
+      "Create one polished stylized 3D animated short-film beat in vertical 9:16, exactly 10 seconds, 24fps.",
       "Story topic: " + safe(topic, 180) + ".",
       "Story beat " + (index + 1) + " of 6. " + directions,
-      "Make the action physically believable and visually specific. Use a real recognizable environment, coherent people and objects, natural movement, cinematic camera motion, realistic lighting and a strong composition.",
-      "This shot must visually connect to the surrounding story beats. Preserve recurring subject identity, wardrobe, props and environment where relevant.",
-      "No titles, text, captions, logos, watermarks, diagrams, abstract backgrounds, slideshows or frozen frames."
+      "Make the cartoon character action expressive and visually specific. Use a coherent animated environment, consistent character design, readable facial expressions, natural character motion, cinematic camera movement, rich animated lighting and a strong composition.",
+      "This shot must visually continue the same short story and connect to the surrounding beats. Preserve the protagonist exact face, body proportions, clothing, colors, props and environment across every beat.",
+      "No titles, text, captions, logos, watermarks, diagrams, abstract backgrounds, slideshows or frozen frames. Show one clear story action, not a generic montage."
     ].join(" ");
   });
 }

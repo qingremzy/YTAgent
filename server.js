@@ -1095,7 +1095,7 @@ app.post("/api/upload", requireAuth, videoUpload.single("video"), async (req, re
 
 app.post("/api/generated/:filename/publish", requireAuth, async (req, res) => {
   const filename = String(req.params.filename || "");
-  if (!/^generated-[a-f0-9]{24}\\.mp4$/i.test(filename)) return res.status(400).json({ error: "Invalid generated video file." });
+  if (!/^generated-[a-f0-9]{24}\.mp4$/i.test(filename)) return res.status(400).json({ error: "Invalid generated video file." });
   const filePath = path.join(uploadDir, filename);
   try {
     await fs.promises.access(filePath);
@@ -1108,7 +1108,7 @@ app.post("/api/generated/:filename/publish", requireAuth, async (req, res) => {
     const rawTags = String(req.body?.tags || "").split(",").map(t => t.trim()).filter(Boolean);
     const keywords = String(req.body?.keywords || "").split(",").map(t => t.trim()).filter(Boolean);
     const hashtags = String(req.body?.hashtags || "").trim();
-    const description = [String(req.body?.description || "").trim(), keywords.length ? "Search topics: " + keywords.join(", ") : "", hashtags].filter(Boolean).join("\\n\\n").slice(0, 5000);
+    const description = [String(req.body?.description || "").trim(), keywords.length ? "Search topics: " + keywords.join(", ") : "", hashtags].filter(Boolean).join("\n\n").slice(0, 5000);
     const tags = [];
     let tagLength = 0;
     for (const tag of [...rawTags, ...keywords]) {

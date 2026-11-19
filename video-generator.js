@@ -109,7 +109,7 @@ function validateStoryboard(storyboard) {
 }
 
 async function requestStoryboard(topic) {
-  var prompt = "Create an original, emotionally engaging 60-second vertical animated short-story film based on this idea: \\"" + cleanText(topic, 180) + "\\".\\n" +
+  var prompt = "Create an original, emotionally engaging 60-second vertical animated short-story film based on this idea: \"" + cleanText(topic, 180) + "\".\n" +
     "Return ONE valid JSON object only. Required keys: title, description, tags, hashtags, keywords, scenes. Exactly 10 scenes. Every scene must contain title, narration, caption and visual_direction. " +
     "STORY FIRST: invent a complete mini-story with one memorable protagonist, a clear desire, an obstacle, escalating consequences, a surprising turn and a satisfying or thought-provoking ending. Do not write a factual explainer unless the topic explicitly asks for one. The story must be understandable to a general audience and emotionally engaging from the first second. " +
     "NARRATION: write one connected spoken story, not ten disconnected lines. Each scene narration must contain 8 to 16 natural spoken words. Use vivid but simple conversational English, concrete actions, short transitions and dialogue only when it improves the story. Every line must move the plot forward. Avoid filler, repeated hooks, generic motivational language and unnecessary explanations. " +

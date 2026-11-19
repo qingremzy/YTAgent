@@ -168,6 +168,11 @@ async function persistGenerationArtifacts(outputPath, details) {
   try {
     await objectStorage.putFile("generated/" + filename, outputPath, "video/mp4");
     videoStored = true;
+    let thumbnailStored = false;
+    if (details.thumbnail_path && fs.existsSync(details.thumbnail_path)) {
+      await objectStorage.putFile("generated/" + path.basename(details.thumbnail_path), details.thumbnail_path, "image/jpeg");
+      thumbnailStored = true;
+    }
     if (details.studioProjectId) {
       const projectDir = path.join(studioProjectRoot, details.studioProjectId);
       if (fs.existsSync(projectDir)) {
@@ -177,7 +182,7 @@ async function persistGenerationArtifacts(outputPath, details) {
         projectStored = true;
       }
     }
-    persisted.storage = { provider: "cloudflare-r2", videoStored, projectStored };
+    persisted.storage = { provider: "cloudflare-r2", videoStored, thumbnailStored, projectStored };
   } catch (error) {
     console.warn("Could not persist generated artifacts to Cloudflare R2:", error.message);
     persisted.storageWarning = "The film is ready locally, but durable R2 storage did not complete.";
@@ -188,7 +193,7 @@ async function persistGenerationArtifacts(outputPath, details) {
 function restoreGeneratedFileExpiries() {
   try {
     for (const filename of fs.readdirSync(uploadDir)) {
-      if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename)) continue;
+      if (!/^generated-[a-f0-9]{24}(?:\.mp4|-thumbnail\.jpg)$/.test(filename)) continue;
       const filePath = path.join(uploadDir, filename);
       const stat = fs.statSync(filePath);
       if (!stat.isFile()) continue;
@@ -1336,6 +1341,7 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
       job.state = "completed";
       job.completedAt = Date.now();
       scheduleGeneratedFileExpiry(outputPath);
+      if (details.thumbnail_path) scheduleGeneratedFileExpiry(details.thumbnail_path);
       if (details.studioProjectId) scheduleStudioProjectExpiry(details.studioProjectId);
       persistGenerationJobs();
       scheduleGenerationJobCleanup(id);
@@ -1390,17 +1396,33 @@ app.get("/api/generate/:jobId", async (req, res) => {
   return res.json({ state: job.state, progress: Number(job.progress) || 0, message: job.message || "YTAgent is processing your film." });
 });
 
+app.get("/api/generated/:filename/thumbnail", async (req, res) => {
+  const filename = String(req.params.filename || "");
+  if (!/^generated-[a-f0-9]{24}\\.mp4$/i.test(filename)) return res.status(404).send("Thumbnail not found.");
+  const thumbnailName = filename.replace(/\\.mp4$/i, "-thumbnail.jpg");
+  const filePath = path.join(uploadDir, thumbnailName);
+  if (fs.existsSync(filePath)) return res.type("image/jpeg").sendFile(filePath);
+  if (!objectStorage.configured) return res.status(404).send("Thumbnail has expired or is unavailable.");
+  try {
+    const stored = await objectStorage.getObject("generated/" + thumbnailName);
+    if (!stored?.Body) return res.status(404).send("Thumbnail could not be found.");
+    res.set("Content-Type", "image/jpeg");
+    if (stored.ContentLength) res.set("Content-Length", String(stored.ContentLength));
+    stored.Body.on("error", error => { if (!res.headersSent) res.status(502).end("Thumbnail stream failed."); else res.destroy(error); });
+    stored.Body.pipe(res);
+  } catch (error) {
+    console.error("Generated thumbnail retrieval failed:", error.message);
+    res.status(502).send("Thumbnail retrieval failed.");
+  }
+});
+
 app.get("/api/generated/:filename", async (req, res) => {
   const filename = String(req.params.filename || "");
   if (!/^generated-[a-f0-9]{24}\.mp4$/.test(filename)) return res.status(404).send("Video not found.");
   const filePath = path.join(uploadDir, filename);
   if (fs.existsSync(filePath)) {
     return res.download(filePath, "YTAgent-video.mp4", error => {
-      if (!error) {
-        fs.promises.unlink(filePath).catch(unlinkError => console.warn("Downloaded video cleanup failed:", unlinkError.message));
-      } else if (!res.headersSent) {
-        res.status(500).send("The video download failed. Please try again before the temporary file expires.");
-      }
+      if (error && !res.headersSent) res.status(500).send("The video download failed. Please try again before the temporary file expires.");
     });
   }
   if (!objectStorage.configured) return res.status(404).send("This generated video has expired or is no longer available.");
@@ -1834,6 +1856,7 @@ if (redisEnabled) {
       const durableDetails = await persistGenerationArtifacts(job.data.outputPath, details);
       await job.updateProgress(100);
       scheduleGeneratedFileExpiry(job.data.outputPath);
+      if (details.thumbnail_path) scheduleGeneratedFileExpiry(details.thumbnail_path);
       if (durableDetails.studioProjectId) scheduleStudioProjectExpiry(durableDetails.studioProjectId);
       return { ...durableDetails, downloadUrl: "/api/generated/" + job.data.filename };
     } catch (error) {

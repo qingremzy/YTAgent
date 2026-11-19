@@ -4,7 +4,7 @@ const path = require("path");
 
 const jobs = new Map();
 const pending = [];
-const JOB_TIMEOUT_MS = 90 * 60 * 1000;
+const JOB_TIMEOUT_MS = 6 * 60 * 60 * 1000;
 // Free Kaggle GPU capacity can queue headless notebook runs for a while.
 // Keep the single submitted run alive instead of failing and inviting duplicates.
 const CLAIM_TIMEOUT_MS = 45 * 60 * 1000;

@@ -1661,11 +1661,6 @@ app.get("/api/diagnostics", async (req, res) => {
       ? "Public Lightricks LTX text-to-video Space is enabled as a no-key shared-queue fallback. Live generation is not guaranteed and may be rate-limited."
       : "Public LTX fallback is disabled by HF_LTX_ENABLED.");
   add("GPU worker", "info", JSON.stringify(getGpuWorkerStatus()).slice(0, 500));
-  const qingCloudConfigured = Boolean(process.env.QINGCLOUD_URL && process.env.QINGCLOUD_ADMIN_TOKEN && process.env.QINGCLOUD_OWNER_CHANNEL_ID);
-  add("QingCloud Compute", qingCloudConfigured ? "configured" : "warning",
-    qingCloudConfigured
-      ? "Coordinator URL, server-side admin token and owner-channel allowlist are configured. Live connectivity is checked in the authenticated compute panel."
-      : "Set QINGCLOUD_URL, QINGCLOUD_ADMIN_TOKEN and QINGCLOUD_OWNER_CHANNEL_ID to enable the protected compute panel.");
   if (req.session && req.session.tokens) {
     try {
       const auth = oauthClient();

@@ -101,6 +101,7 @@ test("prefers Kaggle MCP SaveAndRunAll with the full session timeout", async () 
     callKaggleTool: async (name, args) => {
       toolCalls.push({ name, args });
       if (name === "get_notebook_info") return { metadata: { machineShape: "NvidiaTeslaT4", enableGpu: true, enableInternet: true } };
+      if (name === "create_notebook_session") return { sessionId: "session-123" };
       if (name === "save_notebook") return { versionNumber: 8 };
       throw new Error("Unexpected Kaggle tool " + name);
     }
@@ -109,8 +110,13 @@ test("prefers Kaggle MCP SaveAndRunAll with the full session timeout", async () 
   assert.equal(result.started, true);
   assert.equal(result.versionNumber, 8);
   assert.equal(cliCalls.length, 0);
+  const session = toolCalls.find(call => call.name === "create_notebook_session");
   const save = toolCalls.find(call => call.name === "save_notebook");
+  assert.ok(session);
   assert.ok(save);
+  assert.ok(toolCalls.findIndex(call => call.name === "create_notebook_session") < toolCalls.findIndex(call => call.name === "save_notebook"));
+  assert.equal(session.args.machineShape, "NvidiaTeslaT4");
+  assert.equal(session.args.enableInternet, true);
   assert.equal(save.args.sessionTimeoutSeconds, 32400);
   assert.equal(save.args.kernelExecutionType, "SaveAndRunAll");
   assert.equal(save.args.machineShape, "NvidiaTeslaT4");

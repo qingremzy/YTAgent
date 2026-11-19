@@ -64,7 +64,7 @@ test("starts a secure heartbeat immediately after bootstrap even when setup-cell
   assert.match(String(code[0].source), /YTAgent startup heartbeat confirmed/);
   assert.match(String(code[0].source), /heartbeat_thread.start\(\)/);
   assert.match(String(code[2].source), /heartbeat_stop.set\(\)/);
-  assert.ok(String(code[0].source).indexOf('os.environ["YT_AGENT_WORKER_TOKEN"] = worker_token') < String(code[0].source).indexOf("heartbeat_process = subprocess.Popen"));
+  assert.ok(String(code[0].source).indexOf('os.environ["YT_AGENT_WORKER_TOKEN"] = worker_token') < String(code[0].source).indexOf("heartbeat_thread.start()"));
   assert.ok(String(code[0].source).indexOf("import os, torch, requests") < String(code[0].source).indexOf("heartbeat_process = subprocess.Popen"));
   assert.match(String(code[2].source), /heartbeat_process.terminate/);
   assert.match(String(code[2].source), /runpy\.run_path/);

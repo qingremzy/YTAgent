@@ -356,6 +356,9 @@ const generatorForm = document.getElementById("generatorForm");
 const generateButton = document.getElementById("generateVideo");
 const generatorStatus = document.getElementById("generatorStatus");
 const generatedDownload = document.getElementById("generatedDownload");
+const generatedPublish = document.getElementById("generatedPublish");
+const generatedPublishStatus = document.getElementById("generatedPublishStatus");
+let generatedFilename = "";
 const generatedEdit = document.getElementById("generatedEdit");
 const lastStudioProjectKey = "ytagent-last-studio-project";
 function restoreLastStudioProject() {
@@ -395,6 +398,8 @@ function showGeneratedVideo(data, topic) {
   setGenerationLoading(false);
   generatedDownload.href = data.downloadUrl;
   generatedDownload.classList.remove("hidden");
+  generatedFilename = String(data.downloadUrl || "").split("/").pop();
+  if (generatedPublish) generatedPublish.classList.remove("hidden");
   if (data.studioProjectId && generatedEdit) {
     generatedEdit.href = "/studio?project=" + encodeURIComponent(data.studioProjectId);
     generatedEdit.textContent = "Open editable production studio ↗";
@@ -412,6 +417,42 @@ function showGeneratedVideo(data, topic) {
   generatorStatus.textContent = "Your " + data.duration_seconds + "-second narrated MP4 is ready. Voice: " + (data.voice_provider || "AI voice") + ". Visuals: " + (data.visual_provider || "YTAgent video engine") + ". Open the editable studio to refine the timeline, export a final MP4, or publish to YouTube.";
   window.dispatchEvent(new CustomEvent("ytagent:generation", { detail: { state: "completed", progress: 100, message: "Your finished film is ready." } }));;
 }
+if (generatedPublish) generatedPublish.addEventListener("click", async () => {
+  if (!generatedFilename) return;
+  generatedPublish.disabled = true;
+  generatedPublish.textContent = "Uploading to YouTube…";
+  generatedPublishStatus.textContent = "Uploading the completed MP4 using your connected YouTube account.";
+  try {
+    const response = await fetch("/api/generated/" + encodeURIComponent(generatedFilename) + "/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: form.elements.title.value,
+        description: form.elements.description.value,
+        tags: form.elements.tags.value,
+        keywords: form.elements.keywords.value,
+        hashtags: form.elements.hashtags.value,
+        privacy: form.elements.privacy.value
+      })
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "YouTube publishing failed.");
+    generatedPublishStatus.textContent = "Published successfully: " + data.url;
+    generatedPublishStatus.innerHTML = "";
+    const link = document.createElement("a");
+    link.href = data.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Open published YouTube video ↗";
+    generatedPublishStatus.appendChild(link);
+  } catch (error) {
+    generatedPublishStatus.textContent = error.message;
+  } finally {
+    generatedPublish.disabled = false;
+    generatedPublish.textContent = "Publish this finished film to YouTube";
+  }
+});
+
 async function fetchGenerationStatus(jobId, deadline) {
   const url = "/api/generate/" + encodeURIComponent(jobId);
   let lastError;

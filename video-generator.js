@@ -374,10 +374,9 @@ async function generateTutorialClips(scenes, topic, workDir, onProgress = () => 
     const continuityScenes = scenes.map((scene, index) => ({
       ...scene,
       visual_direction: [
-        "Continuity bible: " + cleanText(continuityGuide, 1100),
-        "Clip " + (index + 1) + " of " + scenes.length + ".",
-        index ? "Continue from the prior clip's final action and pose: " + cleanText(scenes[index - 1].visual_direction, 400) : "Opening clip.",
-        scene.visual_direction
+        cleanText(scene.visual_direction, 260),
+        "Character continuity: " + cleanText(continuityGuide, 140),
+        index ? "Prior action and pose: " + cleanText(scenes[index - 1].visual_direction, 90) : "Opening clip."
       ].join(" ")
     }));
     try {

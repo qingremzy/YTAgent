@@ -170,6 +170,23 @@ function showGeneratedVideo(data, topic) {
     document.getElementById("generatedContinuity").value = data.continuity_guide || "";
     document.getElementById("generatedNarrator").value = data.narrator_script || "";
     document.getElementById("generatedThumbnail").value = data.thumbnail_prompt || "";
+    const titleRoot = document.getElementById("generatedTitleIdeas");
+    titleRoot.replaceChildren();
+    const titleHeading = document.createElement("strong");
+    titleHeading.textContent = "Choose a YouTube title";
+    titleRoot.appendChild(titleHeading);
+    (data.title_ideas || []).forEach((title, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "button secondary title-idea";
+      button.textContent = (index + 1) + ". " + title;
+      button.addEventListener("click", () => {
+        form.elements.title.value = title;
+        titleRoot.querySelectorAll(".title-idea").forEach(item => item.classList.remove("selected"));
+        button.classList.add("selected");
+      });
+      titleRoot.appendChild(button);
+    });
     const sceneRoot = document.getElementById("generatedScenePrompts");
     sceneRoot.replaceChildren();
     (data.scene_prompts || []).forEach(scene => {

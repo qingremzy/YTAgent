@@ -155,7 +155,7 @@ async function receiveGpuAudio(id, index, bytes) {
   await fs.promises.writeFile(filename, bytes);
   job.audios[index] = filename;
   job.audioReceived.add(index);
-  if (job.received.size === 10 && job.audioReceived.size === 10) {
+  if (job.received.size === job.sceneCount && job.audioReceived.size === job.sceneCount) {
     job.state = "completed";
     clearTimeout(job.timer);
     if (job.heartbeatTimer) clearInterval(job.heartbeatTimer);

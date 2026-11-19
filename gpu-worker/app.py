@@ -111,59 +111,31 @@ def send_progress_to_server(remote_job_id, progress, message):
         return json.loads(response.read().decode("utf-8") or "{}")
 
 def start_remote_progress_heartbeat(remote_job_id, progress, message):
-    """Run heartbeats in a child process so long native model loads cannot block Python threads."""
+    """Keep Railway informed while Wan downloads or initializes using a daemon thread."""
     if not SERVER_URL or not TOKEN:
         return None
-    script = r"""
-import json, os, sys, time, urllib.request
-server = os.environ["YT_AGENT_SERVER_URL"].rstrip("/")
-token = os.environ["YT_AGENT_WORKER_TOKEN"]
-job_id = sys.argv[1]
-progress = int(sys.argv[2])
-message = sys.argv[3]
-while True:
-    try:
-        body = json.dumps({"progress": progress, "message": message[:180]}).encode("utf-8")
-        request = urllib.request.Request(
-            f"{server}/api/worker/jobs/{job_id}/progress",
-            data=body,
-            method="POST",
-            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}
-        )
-        with urllib.request.urlopen(request, timeout=20) as response:
-            response.read()
-    except Exception as exc:
-        print("YTAgent heartbeat subprocess failed:", str(exc)[:160], flush=True)
-    else:
-        print("YTAgent GPU worker heartbeat: model load still running.", flush=True)
-    time.sleep(12)
-"""
-    try:
-        return subprocess.Popen(
-            [sys.executable, "-u", "-c", script, str(remote_job_id), str(int(progress)), str(message)[:180]],
-            env=os.environ.copy(),
-            stdin=subprocess.DEVNULL,
-            stdout=None,
-            stderr=None,
-            start_new_session=True,
-            close_fds=True
-        )
-    except Exception as exc:
-        print("Could not start independent progress heartbeat:", str(exc)[:180], flush=True)
-        return None
+    stop_event = threading.Event()
+
+    def heartbeat_loop():
+        while not stop_event.is_set():
+            try:
+                send_progress_to_server(remote_job_id, progress, message)
+                print("YTAgent GPU worker heartbeat: model load still running.", flush=True)
+            except Exception as exc:
+                print("YTAgent heartbeat retry:", str(exc)[:160], flush=True)
+            stop_event.wait(12)
+
+    thread = threading.Thread(target=heartbeat_loop, daemon=True, name="ytagent-progress-heartbeat")
+    thread.start()
+    return stop_event, thread
 
 
-def stop_remote_progress_heartbeat(process):
-    if process is None:
+def stop_remote_progress_heartbeat(handle):
+    if handle is None:
         return
-    try:
-        process.terminate()
-        process.wait(timeout=3)
-    except Exception:
-        try:
-            process.kill()
-        except Exception:
-            pass
+    stop_event, thread = handle
+    stop_event.set()
+    thread.join(timeout=3)
 
 
 def _post_bytes_with_retry(url, data, timeout, label, max_attempts=5):

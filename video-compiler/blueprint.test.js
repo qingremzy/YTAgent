@@ -26,7 +26,7 @@ assert.equal(blueprint.format, "ytagent.video-blueprint.v1");
 assert.equal(blueprint.duration_seconds, TOTAL_DURATION_SECONDS);
 assert.equal(blueprint.scenes.length, SCENE_COUNT);
 assert.equal(blueprint.scenes[0].start_seconds, 0);
-assert.equal(blueprint.scenes[9].end_seconds, 100);
+assert.equal(blueprint.scenes[5].end_seconds, 60);
 assert.equal(blueprint.scenes[0].duration_seconds, 10);
 assert.equal(blueprint.scenes[3].world.camera, "orbit_left");
 assert.equal(blueprint.timeline, "single_continuous_film");
@@ -39,7 +39,7 @@ assert.equal(blueprint.audio.music.required, false);
 assert.equal(blueprint.audio.sound_effects.enabled, false);
 assert.equal(blueprint.audio.mix.target_loudness_lufs, null);
 
-assert.throws(() => compileBlueprint({ scenes: [] }), /exactly 10 ten-second scenes/);
+assert.throws(() => compileBlueprint({ scenes: [] }), /exactly 6 ten-second scenes/);
 assert.throws(() => compileBlueprint({
   scenes: Array.from({ length: SCENE_COUNT }, () => ({
     visual_direction: "A scene"

@@ -14,12 +14,13 @@ const WORKER_HEARTBEAT_CHECK_MS = 15 * 1000;
 let lastWorkerPollAt = 0;
 
 function enqueueGpuJob({ prompts, narrations, seed, workDir, onProgress, onQueued, claimTimeoutMs = CLAIM_TIMEOUT_MS, queueHeartbeatMs = QUEUE_HEARTBEAT_MS }) {
-  if (!Array.isArray(prompts) || prompts.length !== 10 || !Array.isArray(narrations) || narrations.length !== 10) {
-    return Promise.reject(new Error("The free GPU worker requires exactly ten scene prompts."));
+  if (!Array.isArray(prompts) || prompts.length < 3 || prompts.length > 60 || !Array.isArray(narrations) || narrations.length !== prompts.length) {
+    return Promise.reject(new Error("The free GPU worker requires 3–60 matched ten-second scene prompts and narration lines."));
   }
   const id = crypto.randomBytes(16).toString("hex");
   return new Promise((resolve, reject) => {
-    const job = { id, prompts, narrations, seed, workDir, onProgress, progress: 0, state: "queued", clips: new Array(10), audios: new Array(10), received: new Set(), audioReceived: new Set(), lastHeartbeatAt: Date.now(), heartbeatTimer: null, queueHeartbeatTimer: null, resolve, reject };
+    const sceneCount = prompts.length;
+    const job = { id, prompts, narrations, sceneCount, seed, workDir, onProgress, progress: 0, state: "queued", clips: new Array(sceneCount), audios: new Array(sceneCount), received: new Set(), audioReceived: new Set(), lastHeartbeatAt: Date.now(), heartbeatTimer: null, queueHeartbeatTimer: null, resolve, reject };
     job.timer = setTimeout(() => {
       if (job.state === "queued") {
         if (job.queueHeartbeatTimer) clearInterval(job.queueHeartbeatTimer);
@@ -110,7 +111,7 @@ function claimNextGpuJob() {
 async function receiveGpuScene(id, index, bytes) {
   const job = jobs.get(id);
   if (!job || job.state !== "active") throw new Error("This GPU job is no longer active.");
-  if (!Number.isInteger(index) || index < 0 || index >= 10) throw new Error("Scene index must be between 0 and 9.");
+  if (!Number.isInteger(index) || index < 0 || index >= job.sceneCount) throw new Error("Scene index is outside this GPU job.");
   if (!Buffer.isBuffer(bytes) || bytes.length < 20000 || bytes.subarray(4, 8).toString() !== "ftyp") {
     throw new Error("The GPU worker uploaded an invalid or incomplete MP4 scene.");
   }
@@ -125,13 +126,13 @@ async function receiveGpuScene(id, index, bytes) {
   await fs.promises.writeFile(filename, bytes);
   job.clips[index] = filename;
   job.received.add(index);
-  if (job.received.size === 10 && job.audioReceived.size === 10) {
+  if (job.received.size === job.sceneCount && job.audioReceived.size === job.sceneCount) {
     job.state = "completed";
     clearTimeout(job.timer);
     if (job.heartbeatTimer) clearInterval(job.heartbeatTimer);
     jobs.delete(id);
     job.resolve({ clips: job.clips, narrations: job.audios });
-    return { received: 10, completed: true };
+    return { received: job.sceneCount, completed: true };
   }
   return { received: job.received.size, completed: false };
 }
@@ -139,7 +140,7 @@ async function receiveGpuScene(id, index, bytes) {
 async function receiveGpuAudio(id, index, bytes) {
   const job = jobs.get(id);
   if (!job || job.state !== "active") throw new Error("This GPU job is no longer active.");
-  if (!Number.isInteger(index) || index < 0 || index >= 10) throw new Error("Narration index must be between 0 and 9.");
+  if (!Number.isInteger(index) || index < 0 || index >= job.sceneCount) throw new Error("Narration index is outside this GPU job.");
   if (!Buffer.isBuffer(bytes) || bytes.length < 1000 || bytes.subarray(0, 4).toString() !== "RIFF" || bytes.subarray(8, 12).toString() !== "WAVE") {
     throw new Error("The GPU worker uploaded an invalid WAV narration file.");
   }

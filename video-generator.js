@@ -530,6 +530,34 @@ function sceneArtwork(scene, index, total) {
   </svg>`);
 }
 
+async function createFilmThumbnail(videoPath, title, durationSeconds) {
+  const thumbnailPath = videoPath.replace(/\\.mp4$/i, "-thumbnail.jpg");
+  const framePath = videoPath.replace(/\\.mp4$/i, "-thumbnail-source.jpg");
+  const frameTime = Math.max(1, Math.min(Number(durationSeconds) - 1, Math.round(Number(durationSeconds) * 0.28)));
+  await run(ffmpegPath, ["-y", "-hide_banner", "-loglevel", "error", "-ss", String(frameTime), "-i", videoPath, "-frames:v", "1", "-q:v", "2", framePath]);
+  const frameMeta = await sharp(framePath).metadata();
+  if (!frameMeta.width || !frameMeta.height) throw new Error("Could not read a frame for the YouTube thumbnail.");
+  const foregroundWidth = Math.max(1, Math.round(720 * frameMeta.width / frameMeta.height));
+  const foregroundLeft = Math.round((1280 - foregroundWidth) / 2);
+  const background = await sharp(framePath).resize(1280, 720, { fit: "cover", position: "centre" }).blur(26).modulate({ brightness: 0.48, saturation: 1.2 }).jpeg({ quality: 88 }).toBuffer();
+  const foreground = await sharp(framePath).resize({ height: 720, fit: "contain" }).png().toBuffer();
+  const titleLines = wrapWords(title || "A story worth imagining", 25, 2);
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">' +
+    '<defs><linearGradient id="shade" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#020817" stop-opacity=".82"/><stop offset=".48" stop-color="#020817" stop-opacity=".16"/><stop offset="1" stop-color="#020817" stop-opacity=".42"/></linearGradient></defs>' +
+    '<rect width="1280" height="720" fill="url(#shade)"/>' +
+    '<text x="64" y="94" fill="#67e8f9" font-family="Arial,sans-serif" font-size="28" font-weight="800" letter-spacing="8">WHAT IF?</text>' +
+    svgText(titleLines, 64, 510, 66, 78, 800) +
+    '<text x="66" y="660" fill="#ffffff" opacity=".82" font-family="Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="4">YT AGENT ORIGINAL</text></svg>';
+  await sharp(background).composite([
+    { input: foreground, left: foregroundLeft, top: 0 },
+    { input: Buffer.from(svg), left: 0, top: 0 }
+  ]).jpeg({ quality: 90, mozjpeg: true }).toFile(thumbnailPath);
+  await fs.promises.unlink(framePath).catch(() => {});
+  const stat = await fs.promises.stat(thumbnailPath);
+  if (stat.size < 10000 || stat.size > 2 * 1024 * 1024) throw new Error("The generated YouTube thumbnail failed its image-size check.");
+  return thumbnailPath;
+}
+
 function getMediaDuration(filePath) {
   return new Promise(resolve => {
     const child = spawn(ffmpegPath, ["-hide_banner", "-i", filePath, "-f", "null", "-"], { stdio: ["ignore", "ignore", "pipe"] });
@@ -609,7 +637,9 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
 
     reportProgress(97, "Editing " + sceneCount + " scenes, captions and narration into one film.");
     const rendered = await renderFilm({ blueprint, sceneAssets, outputPath });
-    reportProgress(99, "Running the final MP4 quality check.");
+    reportProgress(98, "Creating a 16:9 thumbnail from the finished film.");
+    const thumbnailPath = await createFilmThumbnail(outputPath, storyboard.title || topic, durationSeconds);
+    reportProgress(99, "Running the final MP4 and thumbnail quality checks.");
     const totalDuration = await getMediaDuration(outputPath);
     if (Math.abs(totalDuration - durationSeconds) > 1.5) {
       throw new Error("The rendered film did not pass the " + durationSeconds + "-second duration check.");
@@ -654,6 +684,8 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
       continuity_guide: cleanText(storyboard.continuity_guide || "", 4000),
       narrator_script: cleanText(storyboard.narrator_script || "", 4000),
       thumbnail_prompt: cleanText(storyboard.thumbnail_prompt || "", 1800),
+      thumbnail_path: thumbnailPath,
+      thumbnail_url: "/api/generated/" + path.basename(thumbnailPath),
       scene_prompts: storyboard.scenes.map((scene, index) => ({ index: index + 1, prompt: cleanText(scene.visual_direction, 900), narration: cleanText(scene.narration, 320) })),
       visuals: sceneCount + " AI-generated moving ten-second video clips assembled by the YTAgent video compiler",
       scene_count: sceneCount,

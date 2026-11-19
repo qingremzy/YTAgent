@@ -398,6 +398,22 @@ function showGeneratedVideo(data, topic) {
   setGenerationLoading(false);
   generatedDownload.href = data.downloadUrl;
   generatedDownload.classList.remove("hidden");
+  const pack = document.getElementById("generatedProductionPack");
+  if (pack) {
+    document.getElementById("generatedContinuity").value = data.continuity_guide || "";
+    document.getElementById("generatedNarrator").value = data.narrator_script || "";
+    document.getElementById("generatedThumbnail").value = data.thumbnail_prompt || "";
+    const sceneRoot = document.getElementById("generatedScenePrompts");
+    sceneRoot.replaceChildren();
+    (data.scene_prompts || []).forEach(scene => {
+      const item = document.createElement("details");
+      const heading = document.createElement("summary"); heading.textContent = "Clip " + scene.index + " · 10 seconds";
+      const prompt = document.createElement("p"); prompt.textContent = scene.prompt;
+      const narration = document.createElement("p"); narration.textContent = "Narration: " + scene.narration;
+      item.append(heading, prompt, narration); sceneRoot.appendChild(item);
+    });
+    pack.classList.remove("hidden");
+  }
   generatedFilename = String(data.downloadUrl || "").split("/").pop();
   if (generatedPublish) generatedPublish.classList.remove("hidden");
   if (data.studioProjectId && generatedEdit) {

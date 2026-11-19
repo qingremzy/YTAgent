@@ -170,6 +170,30 @@ test("polls Kaggle's real scheduler state and reports terminal startup failures"
   managerWithPolling.stopStatusMonitor();
 });
 
+test("keeps monitoring after the worker heartbeat so a cancelled model load fails promptly", async () => {
+  let online = false;
+  const statuses = [];
+  const manager = createKaggleWorkerSessionManager({
+    getGpuWorkerStatus: () => ({ online }),
+    getNotebookIdentity: () => identity,
+    getNotebookSource: async () => notebookSource(),
+    getKaggleKernelStatus: async () => 'samsonbamigboye/notebook477419e21e has status "KernelWorkerStatus.CANCEL_ACKNOWLEDGED"',
+    statusPollIntervalMs: 5000,
+    callKaggleTool: async name => {
+      if (name === "get_notebook_info") return { metadata: { machineShape: "NvidiaTeslaT4", enableGpu: true, enableInternet: true } };
+      if (name === "save_notebook") return { versionNumber: 12 };
+      throw new Error("Unexpected Kaggle tool " + name);
+    }
+  });
+  await manager.ensure({ onStatus: status => statuses.push(status) });
+  online = true;
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(statuses.length, 1);
+  assert.equal(statuses[0].state, "CANCEL_ACKNOWLEDGED");
+  assert.equal(statuses[0].terminal, true);
+  manager.stopStatusMonitor();
+});
+
 test("recognizes queued Kaggle status as non-terminal and keeps monitoring", async () => {
   const statuses = [];
   const manager = createKaggleWorkerSessionManager({

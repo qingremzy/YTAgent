@@ -262,7 +262,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
             model: groqModel,
             messages: [
               { role: "system", content: "You are a strict JSON API. Output exactly one complete JSON object matching the schema. No markdown, explanations or trailing commas. Include exactly " + sceneCount + " scenes." },
-              { role: "user", content: prompt + (attempt ? "\nRETRY: The previous output failed validation. Return compact, complete valid JSON with exactly 10 scenes and no extra text." : "") }
+              { role: "user", content: prompt + (attempt ? "\nRETRY: The previous output failed validation. Return compact, complete valid JSON with exactly " + sceneCount + " scenes and no extra text." : "") }
             ],
             temperature: attempt ? 0.2 : 0.4,
             max_completion_tokens: 8000,
@@ -599,7 +599,7 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
       }
       // The renderer applies only the small speed-up needed to fit the ten-second slot.
       sceneAssets.push({ videoPath: generatedClips[i], narrationPath: speech.path, audioTempo });
-      if (!visualResult.narrationClips) reportProgress(92 + Math.round((i + 1) * 0.25), "Creating narration track " + (i + 1) + " of 10.");
+      if (!visualResult.narrationClips) reportProgress(92 + Math.round((i + 1) * 0.25), "Creating narration track " + (i + 1) + " of " + sceneCount + ".");
     }
 
     reportProgress(97, "Editing " + sceneCount + " scenes, captions and narration into one film.");

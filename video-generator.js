@@ -112,7 +112,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
   var sceneCount = Number(durationSeconds) / 10;
   var prompt = "Act as the What-If Story production director shown in the reference workflow. Create an original, visually executable " + durationSeconds + "-second vertical animated short based on this selected idea: \"" + cleanText(topic, 180) + "\". The film is 9:16 and contains exactly " + sceneCount + " consecutive ten-second clips.\n" +
     "Follow these production stages internally and return ONE valid JSON object only. Required keys: title, description, tags, hashtags, keywords, continuity_guide, narrator_script, thumbnail_prompt, scenes. Exactly " + sceneCount + " scenes. Every scene must contain title, narration, caption and visual_direction.\n" +
-    "STAGE 1 — FORMAT: plan for a complete 60-second vertical 9:16 short, split into " + sceneCount + " consecutive 10-second scene beats.\n" +
+    "STAGE 1 — FORMAT: plan for a complete " + durationSeconds + "-second vertical 9:16 short, split into " + sceneCount + " consecutive 10-second scene beats.\n" +
     "STAGE 2 — IDEA: preserve the selected premise and its central events. Build an imaginative what-if story around a strange everyday discovery, unusual rule, mysterious object or unexpected consequence. Do not change the selected premise.\n" +
     "STAGE 3 — PLAN AND GENERATION PROMPTS: first create a compact continuity_guide describing each character's face, hair silhouette, exact clothing colors, proportions and identifiers; the location's layout, palette, lighting direction and key props; and the story's cause-and-effect rule. Keep all character designs, props, spatial positions and lighting consistent between scenes. Then write " + sceneCount + " detailed visual_direction prompts, one per 10-second scene. Every prompt must state the exact character appearance, physical action, environment, props, camera framing/movement and the scene's opening/ending pose. Every scene must continue from the previous scene. For continuity, instruct the visual generator to use the preceding scene's final clean frame as the next scene's starting reference. Do not randomly redesign characters or reset the environment.\n" +
     "VISUAL STYLE: flat 2D illustrated animation characters composited into a fully dimensional, shaded stylized 3D environment. Characters must remain flat illustrated cels: solid simple faces, bold outlines, flat clothing colors and thin line limbs. Do NOT turn them into 3D figurines, spherical skulls, sculpted cheeks, cylindrical limbs or realistic humans. Shade only the environment and props with perspective, material texture, directional light and cinematic depth. Make physical actions clear and readable.\n" +
@@ -146,7 +146,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
             headers: { "Authorization": "Bearer " + process.env.OPENROUTER_API_KEY, "Content-Type": "application/json",
               "HTTP-Referer": process.env.APP_URL || "https://ytagent-production-1038.up.railway.app", "X-Title": "YTAgent" },
             body: JSON.stringify({ model: model, messages: [
-              { role: "system", content: "Return exactly one valid JSON object. No markdown. Include exactly ten scenes and follow every schema and storytelling constraint." },
+              { role: "system", content: "Return exactly one valid JSON object. No markdown. Include exactly " + sceneCount + " scenes and follow every schema and storytelling constraint." },
               { role: "user", content: prompt }
             ], temperature: 0.2, max_tokens: 8000, response_format: { type: "json_object" } }),
             signal: AbortSignal.timeout(60000)
@@ -170,7 +170,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
           var response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST", headers: { "Authorization": "Bearer " + process.env.GROQ_API_KEY, "Content-Type": "application/json" },
             body: JSON.stringify({ model: model,
-              messages: [{ role: "system", content: "Return exactly one valid JSON object. No markdown. Include exactly ten scenes." }, { role: "user", content: prompt }],
+              messages: [{ role: "system", content: "Return exactly one valid JSON object. No markdown. Include exactly " + sceneCount + " scenes." }, { role: "user", content: prompt }],
               temperature: 0.2, max_completion_tokens: 8000, response_format: { type: "json_object" } }),
             signal: AbortSignal.timeout(60000)
           });
@@ -218,7 +218,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
     for (var candidate of freeCandidates) {
       console.log("YTAgent trying free story director:", candidate.name);
       try {
-        var candidateStoryboard = validateStoryboard(await candidate.run());
+        var candidateStoryboard = validateStoryboard(await candidate.run(), sceneCount);
         console.log("YTAgent free story director succeeded:", candidate.name);
         return candidateStoryboard;
       } catch (error) {
@@ -243,7 +243,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
       if (!response.ok) failures.push("Gemini HTTP " + response.status + (data.error && data.error.message ? ": " + String(data.error.message).slice(0, 180) : ""));
       else {
         var raw = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts ? data.candidates[0].content.parts.map(function(part) { return part.text || ""; }).join("") : "";
-        try { return validateStoryboard(parseStoryboardJson(raw)); }
+        try { return validateStoryboard(parseStoryboardJson(raw), sceneCount); }
         catch (error) { failures.push("Gemini response: " + error.message); }
       }
     } catch (error) { failures.push("Gemini: " + (error.message || "request failed")); }
@@ -261,7 +261,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
           body: JSON.stringify({
             model: groqModel,
             messages: [
-              { role: "system", content: "You are a strict JSON API. Output exactly one complete JSON object matching the schema. No markdown, explanations or trailing commas. Include exactly ten scenes." },
+              { role: "system", content: "You are a strict JSON API. Output exactly one complete JSON object matching the schema. No markdown, explanations or trailing commas. Include exactly " + sceneCount + " scenes." },
               { role: "user", content: prompt + (attempt ? "\nRETRY: The previous output failed validation. Return compact, complete valid JSON with exactly 10 scenes and no extra text." : "") }
             ],
             temperature: attempt ? 0.2 : 0.4,
@@ -277,7 +277,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
           continue;
         }
         var groqRaw = groqData.choices && groqData.choices[0] && groqData.choices[0].message ? groqData.choices[0].message.content : "";
-        try { return validateStoryboard(parseStoryboardJson(groqRaw)); }
+        try { return validateStoryboard(parseStoryboardJson(groqRaw), sceneCount); }
         catch (error) { failures.push("Groq (" + groqModel + "): " + error.message); }
       } catch (error) { failures.push("Groq (" + groqModel + "): " + (error.message || "request failed")); }
     }
@@ -299,7 +299,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
         body: JSON.stringify({
           model: openRouterModel,
           messages: [
-            { role: "system", content: "Return exactly one valid JSON object. No markdown or commentary. Include exactly ten scenes and follow every schema and storytelling constraint." },
+            { role: "system", content: "Return exactly one valid JSON object. No markdown or commentary. Include exactly " + sceneCount + " scenes and follow every schema and storytelling constraint." },
             { role: "user", content: prompt }
           ],
           temperature: 0.2,
@@ -323,7 +323,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
           var providerError = openRouterData.error && openRouterData.error.message ? openRouterData.error.message : "";
           failures.push("OpenRouter (" + selectedModel + "): empty response (finish_reason=" + finishReason + ")" + (providerError ? " " + String(providerError).slice(0, 180) : ""));
         } else {
-          try { return validateStoryboard(parseStoryboardJson(openRouterRaw)); }
+          try { return validateStoryboard(parseStoryboardJson(openRouterRaw), sceneCount); }
           catch (error) { failures.push("OpenRouter (" + (openRouterData.model || openRouterModel) + "): " + error.message); }
         }
       }
@@ -335,7 +335,7 @@ async function requestStoryboard(topic, durationSeconds = 60) {
   throw new Error("Storyboard generation failed. " + failures.join(" | "));
 }
 
-async function generateTutorialClips(scenes, topic, workDir, onProgress = () => {}) {
+async function generateTutorialClips(scenes, topic, workDir, onProgress = () => {}, continuityGuide = "") {
   const confirmed = ["true", "1", "yes", "confirmed", "on"].includes(String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase());
   if (!process.env.AGNES_API_KEY || !confirmed || (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") !== "agnes-video-2.5-flash") {
     throw new Error("The 10-second clip engine is not enabled with confirmed free quota. Set AGNES_API_KEY, AGNES_VIDEO_MODEL=agnes-video-2.5-flash and AGNES_FREE_QUOTA_CONFIRMED=true only after verifying that the provider account has free quota. No paid provider was contacted.");
@@ -347,7 +347,7 @@ async function generateTutorialClips(scenes, topic, workDir, onProgress = () => 
     const prompt = [
       "Generate one complete ten-second vertical 9:16 animated video clip. Flat 2D illustrated characters composited into a fully dimensional, shaded stylized 3D environment. Characters remain flat illustrated cels with simple faces, bold dark outlines, thin line limbs and flat clothing colors. Never use realistic humans, 3D character models, slideshows or text cards.",
       "Story premise: " + cleanText(topic, 180),
-      "Continuity bible: " + cleanText(scenes.continuity_guide || "", 900),
+      "Continuity bible: " + cleanText(continuityGuide, 1200),
       "This is clip " + (i + 1) + " of " + scenes.length + ".",
       "Previous clip ending/action context: " + cleanText(previousDirection || "Opening shot.", 500),
       "Current action and camera: " + cleanText(scene.visual_direction, 900),
@@ -537,7 +537,7 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
     throw new Error("The AI director must return exactly " + sceneCount + " scenes. Please regenerate.");
   }
   for (const [index, scene] of storyboard.scenes.entries()) {
-    if (!scene.narration || String(scene.narration).length > 220 || !scene.visual_direction || !scene.caption) {
+    if (!scene.narration || String(scene.narration).length > 320 || !scene.visual_direction || !scene.caption) {
       throw new Error("Scene " + (index + 1) + " is missing its narration, caption or visual direction. Please regenerate.");
     }
   }
@@ -548,7 +548,7 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
   try {
     // The tutorial workflow requires one native ten-second generated clip per storyboard beat.
     // This route fails closed unless Agnes free quota has been explicitly confirmed in Railway.
-    const visualResult = await generateTutorialClips(storyboard.scenes, topic, workDir, reportProgress);
+    const visualResult = await generateTutorialClips(storyboard.scenes, topic, workDir, reportProgress, storyboard.continuity_guide);
     reportProgress(92, "All visuals and narration are ready. Mixing the film.");
     const generatedClips = visualResult.clips;
     const voiceProviders = new Set();
@@ -560,7 +560,7 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
         ? { provider: "Kokoro 82M (free local worker)", path: visualResult.narrationClips[i] }
         : await generateNarration(storyboard.scenes[i].narration, audioPath);
       voiceProviders.add(speech.provider);
-      // Measure the actual generated speech before rendering so six-second scenes never silently chop words.
+      // Measure the actual generated speech before rendering so ten-second scenes never silently chop words.
       const speechDuration = await getMediaDuration(speech.path);
       if (!Number.isFinite(speechDuration) || speechDuration <= 0) {
         throw new Error("Could not measure narration audio for scene " + (i + 1) + ". The film was stopped to avoid cutting off speech.");

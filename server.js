@@ -1454,8 +1454,8 @@ function verifyWorkerBootstrapToken(token) {
 
 async function getCanonicalKaggleNotebookSource(identity) {
   const branch = String(process.env.GITHUB_BRANCH || "main").replace(/[^a-zA-Z0-9._-]/g, "");
-  const url = "https://raw.githubusercontent.com/qingremzy/YTAgent/" + branch + "/gpu-worker/YTAgent_Free_GPU_Worker.ipynb";
-  const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  const url = "https://raw.githubusercontent.com/qingremzy/YTAgent/" + branch + "/gpu-worker/YTAgent_Free_GPU_Worker.ipynb?cacheBust=" + Date.now();
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15000) });
   if (!response.ok) {
     throw new Error("Could not fetch the canonical YTAgent Kaggle notebook from GitHub (HTTP " + response.status + ").");
   }

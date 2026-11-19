@@ -60,7 +60,7 @@ test("starts a secure heartbeat immediately after bootstrap even when setup-cell
   const code = patched.cells.filter(cell => cell.cell_type === "code");
   assert.match(String(code[0].source), /api\/worker\/bootstrap/);
   assert.match(String(code[0].source), /api\/worker\/heartbeat/);
-  assert.match(String(code[0].source), /start_new_session=True/);
+  assert.doesNotMatch(String(code[0].source), /subprocess\\.Popen/);
   assert.match(String(code[0].source), /YTAgent startup heartbeat confirmed/);
   assert.match(String(code[0].source), /heartbeat_thread.start\(\)/);
   assert.match(String(code[2].source), /heartbeat_stop.set\(\)/);

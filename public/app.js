@@ -559,6 +559,42 @@ if (loadIdeasButton) loadIdeasButton.addEventListener("click", async () => {
   }
 });
 
+const researchButton = document.getElementById("researchTopic");
+const researchResults = document.getElementById("researchResults");
+if (researchButton) researchButton.addEventListener("click", async () => {
+  const topic = document.getElementById("videoTopic").value.trim();
+  if (topic.length < 3) { generatorStatus.textContent = "Enter a topic first, then run niche research."; return; }
+  researchButton.disabled = true;
+  researchButton.textContent = "Researching YouTube…";
+  researchResults.classList.remove("hidden");
+  researchResults.textContent = "Collecting public video views, channel subscribers and average video lengths…";
+  try {
+    const response = await fetch("/api/research?topic=" + encodeURIComponent(topic), { cache: "no-store" });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "YouTube research failed.");
+    researchResults.replaceChildren();
+    const summary = document.createElement("p");
+    summary.textContent = "Research sample: " + data.sampleSize + " top videos · average views: " + Number(data.averageViews || 0).toLocaleString() + " · average duration: " + Math.floor((data.averageDurationSeconds || 0) / 60) + "m " + ((data.averageDurationSeconds || 0) % 60) + "s";
+    researchResults.appendChild(summary);
+    (data.videos || []).slice(0, 10).forEach(video => {
+      const item = document.createElement("p");
+      const link = document.createElement("a");
+      link.href = video.url; link.target = "_blank"; link.rel = "noopener"; link.textContent = video.title;
+      const stats = document.createElement("small");
+      stats.textContent = " · " + Number(video.views || 0).toLocaleString() + " views · " + video.channelTitle;
+      item.append(link, stats); researchResults.appendChild(item);
+    });
+    const note = document.createElement("small");
+    note.textContent = data.note || "";
+    researchResults.appendChild(note);
+  } catch (error) {
+    researchResults.textContent = error.message;
+  } finally {
+    researchButton.disabled = false;
+    researchButton.textContent = "Research popular YouTube videos in this niche";
+  }
+});
+
 generatorForm.addEventListener("submit", async event => {
   event.preventDefault();
   const topic = document.getElementById("videoTopic").value.trim();

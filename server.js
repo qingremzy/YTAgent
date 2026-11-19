@@ -1131,7 +1131,19 @@ app.post("/api/generated/:filename/publish", requireAuth, async (req, res) => {
       requestBody: { snippet: { title, description, tags }, status: { privacyStatus: privacy } },
       media: { body: fs.createReadStream(filePath) }
     });
-    res.json({ success: true, videoId: response.data.id, url: "https://www.youtube.com/watch?v=" + response.data.id, privacy });
+    let thumbnailError = null;
+    const thumbnailPath = filePath.replace(/\.mp4$/i, "-thumbnail.jpg");
+    if (fs.existsSync(thumbnailPath)) {
+      try {
+        await yt.thumbnails.set({ videoId: response.data.id, media: { body: fs.createReadStream(thumbnailPath) } });
+      } catch (error) {
+        thumbnailError = String(error.message || error).slice(0, 220);
+        console.warn("Video published but custom thumbnail upload failed:", thumbnailError);
+      }
+    } else {
+      thumbnailError = "Generated thumbnail is unavailable.";
+    }
+    res.json({ success: true, videoId: response.data.id, url: "https://www.youtube.com/watch?v=" + response.data.id, privacy, thumbnailSet: !thumbnailError, thumbnailError });
   } catch (error) {
     if (error.code === "ENOENT") return res.status(404).json({ error: "The generated MP4 has expired. Generate it again before publishing." });
     console.error("Generated video publish failed:", error.message);

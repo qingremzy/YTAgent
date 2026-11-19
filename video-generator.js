@@ -6,7 +6,7 @@ const sharp = require("sharp");
 const ffmpegPath = require("ffmpeg-static");
 const { compileBlueprint } = require("./video-compiler/blueprint");
 const { renderFilm } = require("./video-compiler/renderer");
-const { generateSceneClips } = require("./video-providers/agnes");
+const { generateSceneClips, generateSingleAgnesClip } = require("./video-providers/agnes");
 const { generateLtxSceneClips } = require("./video-providers/huggingface-ltx");
 const { generateSeedanceSceneClips, isSeedanceEligible } = require("./video-providers/seedance");
 const { generateWanSceneClips } = require("./video-providers/wan-worker");
@@ -82,18 +82,18 @@ function countNarrationWords(value) {
   return String(value || "").trim().split(/\s+/).filter(Boolean).length;
 }
 
-function validateStoryboard(storyboard) {
+function validateStoryboard(storyboard, expectedScenes = 10) {
   if (!storyboard || typeof storyboard !== "object" || Array.isArray(storyboard)) throw new Error("Storyboard must be a JSON object.");
-  if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 10) throw new Error("Storyboard must contain exactly 10 scenes.");
+  if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== expectedScenes) throw new Error("Storyboard must contain exactly " + expectedScenes + " scenes.");
   var seenNarration = new Set();
   var seenVisualDirections = new Set();
   for (var i = 0; i < storyboard.scenes.length; i++) {
     var scene = storyboard.scenes[i];
     if (!scene || !scene.narration || !scene.visual_direction || !scene.caption) throw new Error("Scene " + (i + 1) + " is missing narration, visual_direction or caption.");
     var narration = String(scene.narration).trim();
-    if (narration.length > 220) throw new Error("Scene " + (i + 1) + " narration is too long for its six-second slot.");
+    if (narration.length > 320) throw new Error("Scene " + (i + 1) + " narration is too long for its ten-second slot.");
     var wordCount = countNarrationWords(narration);
-    if (wordCount < 8 || wordCount > 16) throw new Error("Scene " + (i + 1) + " narration has " + wordCount + " words. Use 8 to 16 words so the spoken line can fit its six-second scene.");
+    if (wordCount < 8 || wordCount > 25) throw new Error("Scene " + (i + 1) + " narration has " + wordCount + " words. Use 8 to 25 words so the spoken line can fit its ten-second scene.");
     var normalized = narration.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ");
     if (seenNarration.has(normalized)) throw new Error("Scene " + (i + 1) + " repeats narration from another scene. Every scene needs a distinct spoken line.");
     seenNarration.add(normalized);
@@ -108,17 +108,18 @@ function validateStoryboard(storyboard) {
   return storyboard;
 }
 
-async function requestStoryboard(topic) {
-  var prompt = "Act as the What-If Story production director shown in the reference workflow. Create an original, visually executable 60-second vertical animated short based on this selected idea: \"" + cleanText(topic, 180) + "\". The current YTAgent renderer supports exactly 60 seconds, 9:16, ten 6-second scenes. Do not claim a different duration.\n" +
-    "Follow these production stages internally and return ONE valid JSON object only. Required keys: title, description, tags, hashtags, keywords, continuity_guide, narrator_script, thumbnail_prompt, scenes. Exactly 10 scenes. Every scene must contain title, narration, caption and visual_direction.\n" +
-    "STAGE 1 — FORMAT: plan for a complete 60-second vertical 9:16 short, split into ten consecutive 6-second scene beats.\n" +
+async function requestStoryboard(topic, durationSeconds = 60) {
+  var sceneCount = Number(durationSeconds) / 10;
+  var prompt = "Act as the What-If Story production director shown in the reference workflow. Create an original, visually executable " + durationSeconds + "-second vertical animated short based on this selected idea: \"" + cleanText(topic, 180) + "\". The film is 9:16 and contains exactly " + sceneCount + " consecutive ten-second clips.\n" +
+    "Follow these production stages internally and return ONE valid JSON object only. Required keys: title, description, tags, hashtags, keywords, continuity_guide, narrator_script, thumbnail_prompt, scenes. Exactly " + sceneCount + " scenes. Every scene must contain title, narration, caption and visual_direction.\n" +
+    "STAGE 1 — FORMAT: plan for a complete 60-second vertical 9:16 short, split into " + sceneCount + " consecutive 10-second scene beats.\n" +
     "STAGE 2 — IDEA: preserve the selected premise and its central events. Build an imaginative what-if story around a strange everyday discovery, unusual rule, mysterious object or unexpected consequence. Do not change the selected premise.\n" +
-    "STAGE 3 — PLAN AND GENERATION PROMPTS: first create a compact continuity_guide describing each character's face, hair silhouette, exact clothing colors, proportions and identifiers; the location's layout, palette, lighting direction and key props; and the story's cause-and-effect rule. Keep all character designs, props, spatial positions and lighting consistent between scenes. Then write ten detailed visual_direction prompts, one per 6-second scene. Every prompt must state the exact character appearance, physical action, environment, props, camera framing/movement and the scene's opening/ending pose. Every scene must continue from the previous scene. For continuity, instruct the visual generator to use the preceding scene's final clean frame as the next scene's starting reference. Do not randomly redesign characters or reset the environment.\n" +
+    "STAGE 3 — PLAN AND GENERATION PROMPTS: first create a compact continuity_guide describing each character's face, hair silhouette, exact clothing colors, proportions and identifiers; the location's layout, palette, lighting direction and key props; and the story's cause-and-effect rule. Keep all character designs, props, spatial positions and lighting consistent between scenes. Then write " + sceneCount + " detailed visual_direction prompts, one per 10-second scene. Every prompt must state the exact character appearance, physical action, environment, props, camera framing/movement and the scene's opening/ending pose. Every scene must continue from the previous scene. For continuity, instruct the visual generator to use the preceding scene's final clean frame as the next scene's starting reference. Do not randomly redesign characters or reset the environment.\n" +
     "VISUAL STYLE: flat 2D illustrated animation characters composited into a fully dimensional, shaded stylized 3D environment. Characters must remain flat illustrated cels: solid simple faces, bold outlines, flat clothing colors and thin line limbs. Do NOT turn them into 3D figurines, spherical skulls, sculpted cheeks, cylindrical limbs or realistic humans. Shade only the environment and props with perspective, material texture, directional light and cinematic depth. Make physical actions clear and readable.\n" +
-    "STAGE 4 — NARRATOR SCRIPT: write one connected spoken story in narrator_script and split it naturally across the ten scene narration fields. Each scene narration should fit its six-second beat, move the plot forward and synchronize with visible action. Give voice direction (emotion, pace, emphasis and pauses) in narrator_script. No filler or repeated exposition.\n" +
+    "STAGE 4 — NARRATOR SCRIPT: write one connected spoken story in narrator_script and split it naturally across the " + sceneCount + " scene narration fields. Each scene narration should fit its ten-second beat, move the plot forward and synchronize with visible action. Give voice direction (emotion, pace, emphasis and pauses) in narrator_script. No filler or repeated exposition.\n" +
     "STORY STRUCTURE: immediate visual hook; introduce protagonist and desire; establish the strange rule; escalate through visible consequences; deliver a surprising turn or honest choice; finish with a satisfying visual payoff. Make the ending feel complete.\n" +
     "STAGE 5 — UPLOAD PACK: provide a curiosity-driven accurate title, a copy-ready YouTube description, relevant tags, keywords, hashtags and a detailed vertical 9:16 thumbnail_prompt showing the story's strongest visual moment. The thumbnail prompt must specify composition, character appearance, expression, props, background and focal hierarchy. Do not invent channel analytics or claim research that was not performed.\n" +
-    "SCENES: exactly ten sequential scenes. Every visual_direction must be 18 to 45 specific words and describe a physical action rather than an abstract concept. No text cards, slideshows, watermarks, generic stock imagery or random unrelated visuals. Do not imitate any creator's characters, scripts, scenes or branding. Return JSON only.";
+    "SCENES: exactly " + sceneCount + " sequential scenes. Every visual_direction must be 18 to 45 specific words and describe a physical action rather than an abstract concept. No text cards, slideshows, watermarks, generic stock imagery or random unrelated visuals. Do not imitate any creator's characters, scripts, scenes or branding. Return JSON only.";
   // Strict $0 mode: walk only providers/models with a genuine free tier.
   // No trial-credit services, paid endpoints, or paid fallbacks are permitted.
   if (process.env.YTAGENT_ZERO_COST_MODE !== "false") {
@@ -334,6 +335,37 @@ async function requestStoryboard(topic) {
   throw new Error("Storyboard generation failed. " + failures.join(" | "));
 }
 
+async function generateTutorialClips(scenes, topic, workDir, onProgress = () => {}) {
+  const confirmed = ["true", "1", "yes", "confirmed", "on"].includes(String(process.env.AGNES_FREE_QUOTA_CONFIRMED || "").trim().toLowerCase());
+  if (!process.env.AGNES_API_KEY || !confirmed || (process.env.AGNES_VIDEO_MODEL || "agnes-video-2.5-flash") !== "agnes-video-2.5-flash") {
+    throw new Error("The 10-second clip engine is not enabled with confirmed free quota. Set AGNES_API_KEY, AGNES_VIDEO_MODEL=agnes-video-2.5-flash and AGNES_FREE_QUOTA_CONFIRMED=true only after verifying that the provider account has free quota. No paid provider was contacted.");
+  }
+  const clips = [];
+  let previousDirection = "";
+  for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i];
+    const prompt = [
+      "Generate one complete ten-second vertical 9:16 animated video clip. Flat 2D illustrated characters composited into a fully dimensional, shaded stylized 3D environment. Characters remain flat illustrated cels with simple faces, bold dark outlines, thin line limbs and flat clothing colors. Never use realistic humans, 3D character models, slideshows or text cards.",
+      "Story premise: " + cleanText(topic, 180),
+      "Continuity bible: " + cleanText(scenes.continuity_guide || "", 900),
+      "This is clip " + (i + 1) + " of " + scenes.length + ".",
+      "Previous clip ending/action context: " + cleanText(previousDirection || "Opening shot.", 500),
+      "Current action and camera: " + cleanText(scene.visual_direction, 900),
+      "Preserve exact character silhouette, face, hair, clothing colors, props, spatial layout, palette and lighting. Continue the same action and world. Do not add titles, captions, logos or watermarks."
+    ].join("\n");
+    const destination = path.join(workDir, "tutorial-clip-" + String(i + 1).padStart(2, "0") + ".mp4");
+    await generateSingleAgnesClip(prompt, destination, 10, {
+      timeoutMs: Number(process.env.AGNES_CLIP_TIMEOUT_MS || 12 * 60 * 1000),
+      onProgress: (status, progress) => {
+        try { onProgress(6 + Math.round(((i + Math.max(0, Number(progress) || 0) / 100) / scenes.length) * 80), "Generating ten-second clip " + (i + 1) + " of " + scenes.length + " (" + (status || "working") + ")."); } catch (_) {}
+      }
+    });
+    clips.push(destination);
+    previousDirection = scene.visual_direction;
+  }
+  return { clips, narrationClips: null, provider: "Agnes Video 2.5 Flash (confirmed free quota)" };
+}
+
 async function requestGeneratedScenes(scenes, topic, workDir, onProgress, onGpuJobQueued) {
   const seedanceRequested = ["true", "1", "yes", "on"].includes(String(process.env.ARK_SEEDANCE_ENABLED || "").trim().toLowerCase());
   if (isSeedanceEligible(process.env)) {
@@ -479,6 +511,9 @@ function getMediaDuration(filePath) {
 }
 
 async function generateEducationalVideo(topic, outputPath, onProgress = () => {}, options = {}) {
+  const durationSeconds = Number(options.durationSeconds === undefined ? 60 : options.durationSeconds);
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 30 || durationSeconds > 600 || durationSeconds % 10 !== 0) throw new Error("Choose a duration from 30 to 600 seconds in 10-second increments.");
+  const sceneCount = durationSeconds / 10;
   let lastProgress = 0;
   const reportProgress = (progress, message) => {
     const value = Math.max(lastProgress, Math.max(0, Math.min(99, Number(progress) || 0)));
@@ -496,10 +531,10 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
   }
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable on this server.");
   reportProgress(2, "AI director is researching the topic and writing the story.");
-  const storyboard = await requestStoryboard(topic);
-  reportProgress(5, "Storyboard approved. Preparing ten matched scenes.");
-  if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== 10) {
-    throw new Error("The AI director must return exactly ten scenes. Please regenerate.");
+  const storyboard = await requestStoryboard(topic, durationSeconds);
+  reportProgress(5, "Storyboard approved. Preparing " + sceneCount + " matched ten-second clips.");
+  if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== sceneCount) {
+    throw new Error("The AI director must return exactly " + sceneCount + " scenes. Please regenerate.");
   }
   for (const [index, scene] of storyboard.scenes.entries()) {
     if (!scene.narration || String(scene.narration).length > 220 || !scene.visual_direction || !scene.caption) {
@@ -508,11 +543,12 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
   }
 
   // Convert the director's storyboard into the compiler's constrained film plan.
-  const blueprint = compileBlueprint(storyboard, { language: "en", voiceId: process.env.EDGE_TTS_VOICE || "en-US-ChristopherNeural" });
+  const blueprint = compileBlueprint(storyboard, { durationSeconds, language: "en", voiceId: process.env.EDGE_TTS_VOICE || "en-US-ChristopherNeural" });
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ytagent-film-"));
   try {
-    // Agnes supplies five 12-second cinematic clips, which are split into ten scene plates.
-    const visualResult = await requestGeneratedScenes(storyboard.scenes, topic, workDir, reportProgress, options.onGpuJobQueued);
+    // The tutorial workflow requires one native ten-second generated clip per storyboard beat.
+    // This route fails closed unless Agnes free quota has been explicitly confirmed in Railway.
+    const visualResult = await generateTutorialClips(storyboard.scenes, topic, workDir, reportProgress);
     reportProgress(92, "All visuals and narration are ready. Mixing the film.");
     const generatedClips = visualResult.clips;
     const voiceProviders = new Set();
@@ -529,21 +565,21 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
       if (!Number.isFinite(speechDuration) || speechDuration <= 0) {
         throw new Error("Could not measure narration audio for scene " + (i + 1) + ". The film was stopped to avoid cutting off speech.");
       }
-      const audioTempo = Math.max(1, speechDuration / 6);
+      const audioTempo = Math.max(1, speechDuration / 10);
       if (audioTempo > 1.35) {
         throw new Error("Scene " + (i + 1) + " narration is too long (" + speechDuration.toFixed(1) + " seconds). Shorten the line and try again. YTAgent will not cut off spoken words.");
       }
-      // The renderer applies only the small speed-up needed to fit the six-second slot.
+      // The renderer applies only the small speed-up needed to fit the ten-second slot.
       sceneAssets.push({ videoPath: generatedClips[i], narrationPath: speech.path, audioTempo });
       if (!visualResult.narrationClips) reportProgress(92 + Math.round((i + 1) * 0.25), "Creating narration track " + (i + 1) + " of 10.");
     }
 
-    reportProgress(97, "Editing ten scenes, captions and narration into one film.");
+    reportProgress(97, "Editing " + sceneCount + " scenes, captions and narration into one film.");
     const rendered = await renderFilm({ blueprint, sceneAssets, outputPath });
     reportProgress(99, "Running the final MP4 quality check.");
     const totalDuration = await getMediaDuration(outputPath);
-    if (Math.abs(totalDuration - 60) > 1.5) {
-      throw new Error("The rendered film did not pass the 60-second duration check.");
+    if (Math.abs(totalDuration - durationSeconds) > 1.5) {
+      throw new Error("The rendered film did not pass the " + durationSeconds + "-second duration check.");
     }
     let studioProject = null;
     if (options.studioProjectRoot) {
@@ -592,4 +628,4 @@ async function generateEducationalVideo(topic, outputPath, onProgress = () => {}
     await fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
-module.exports = { generateEducationalVideo, isGroqTtsEnabled, shouldAttemptGroqTts, isRateLimitError, edgeTtsRetryDelayMs, validateStoryboard, countNarrationWords };
+module.exports = { generateEducationalVideo, isGroqTtsEnabled, shouldAttemptGroqTts, isRateLimitError, edgeTtsRetryDelayMs, validateStoryboard, countNarrationWords, requestStoryboard };

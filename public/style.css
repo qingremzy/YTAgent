@@ -131,3 +131,17 @@ input:focus,textarea:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 
   color: #e2e8f0;
   font-family: monospace;
 }
+
+
+/* Tutorial workflow controls */
+.idea-picker{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:18px 0 10px;padding:16px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:rgba(15,23,42,.42)}
+.idea-picker p{margin:5px 0 0}
+.idea-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:12px 0 18px}
+.idea-card{display:flex;flex-direction:column;gap:9px;padding:15px;border:1px solid rgba(148,163,184,.2);border-radius:15px;background:rgba(15,23,42,.55)}
+.idea-card.selected{border-color:rgba(103,232,249,.8);box-shadow:0 0 0 1px rgba(103,232,249,.2)}
+.idea-card small{color:#67e8f9;letter-spacing:1.5px;font-weight:700}
+.idea-card strong{font-size:1rem}
+.idea-card p{flex:1;margin:0;color:var(--muted,#aab4c8);font-size:.9rem;line-height:1.5}
+.idea-card .button{align-self:flex-start}
+#generatedPublishStatus a{color:#67e8f9}
+@media(max-width:560px){.idea-picker{align-items:flex-start;flex-direction:column}.idea-picker .button{width:100%}}

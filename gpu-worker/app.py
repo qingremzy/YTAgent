@@ -53,19 +53,14 @@ def get_pipeline():
     os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "600")
     os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "60")
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
-    # Optional Kaggle Secret: HF_TOKEN. Public model downloads still work without it.
-    if not os.environ.get("HF_TOKEN"):
-        try:
-            from kaggle_secrets import UserSecretsClient
-            hf_token = UserSecretsClient().get_secret("HF_TOKEN")
-            if hf_token:
-                os.environ["HF_TOKEN"] = hf_token
-                print("Hugging Face authentication loaded from Kaggle Secrets.", flush=True)
-        except Exception:
-            pass
+    # Wan's model repository is public. Do not call Kaggle Secrets here:
+    # secret prompts can block a headless batch kernel during first startup.
+    print("Preparing the public Wan model runtime...", flush=True)
     import torch
+    print("Importing Diffusers Wan pipeline classes...", flush=True)
     from diffusers import AutoencoderKLWan, WanPipeline
     from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
+    print("Wan pipeline classes imported successfully.", flush=True)
     if not torch.cuda.is_available():
         raise RuntimeError("A CUDA GPU is required. Enable a GPU accelerator in Kaggle.")
     torch.set_grad_enabled(False)

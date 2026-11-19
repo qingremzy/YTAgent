@@ -60,4 +60,16 @@ const shortBlueprint = compileBlueprint({
 assert.equal(shortBlueprint.duration_seconds, 30);
 assert.equal(shortBlueprint.scene_count, 3);
 assert.equal(shortBlueprint.scenes[2].end_seconds, 30);
+const longSubjectStoryboard = {
+  title: "Bounded scene subject",
+  scenes: Array.from({ length: 3 }, () => ({
+    title: "Beat",
+    narration: "A short narration for this scene.",
+    caption: "A scene",
+    visual_direction: "A character walks through a softly lit room and opens a mysterious door.",
+    subject: "A".repeat(500)
+  }))
+};
+const boundedSubject = compileBlueprint(longSubjectStoryboard, { durationSeconds: 30 });
+assert.equal(boundedSubject.scenes[0].world.subject.length, 240);
 assert.throws(() => compileBlueprint(storyboard, { durationSeconds: 35 }), /30–600 seconds/);

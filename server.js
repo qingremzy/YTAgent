@@ -169,8 +169,9 @@ async function persistGenerationArtifacts(outputPath, details) {
     await objectStorage.putFile("generated/" + filename, outputPath, "video/mp4");
     videoStored = true;
     let thumbnailStored = false;
-    if (details.thumbnail_path && fs.existsSync(details.thumbnail_path)) {
-      await objectStorage.putFile("generated/" + path.basename(details.thumbnail_path), details.thumbnail_path, "image/jpeg");
+    const thumbnailPath = outputPath.replace(/\.mp4$/i, "-thumbnail.jpg");
+    if (fs.existsSync(thumbnailPath)) {
+      await objectStorage.putFile("generated/" + path.basename(thumbnailPath), thumbnailPath, "image/jpeg");
       thumbnailStored = true;
     }
     if (details.studioProjectId) {
@@ -1353,7 +1354,7 @@ app.post("/api/generate", generationRateLimit, async (req, res) => {
       job.state = "completed";
       job.completedAt = Date.now();
       scheduleGeneratedFileExpiry(outputPath);
-      if (details.thumbnail_path) scheduleGeneratedFileExpiry(details.thumbnail_path);
+      scheduleGeneratedFileExpiry(outputPath.replace(/\.mp4$/i, "-thumbnail.jpg"));
       if (details.studioProjectId) scheduleStudioProjectExpiry(details.studioProjectId);
       persistGenerationJobs();
       scheduleGenerationJobCleanup(id);

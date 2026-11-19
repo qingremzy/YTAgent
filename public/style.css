@@ -158,3 +158,5 @@ input:focus,textarea:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 
 #generatedScenePrompts details{margin:10px 0;padding:12px;border-radius:10px;background:rgba(148,163,184,.08)}
 #generatedScenePrompts summary{color:#fff}
 #generatedScenePrompts p{line-height:1.5;overflow-wrap:anywhere}
+
+.generated-thumbnail{display:block;width:100%;max-width:760px;aspect-ratio:16/9;object-fit:cover;margin:14px auto;border-radius:14px;border:1px solid rgba(103,232,249,.35);box-shadow:0 14px 44px rgba(0,0,0,.35)}

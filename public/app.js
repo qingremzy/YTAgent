@@ -367,6 +367,16 @@ if (researchButton) researchButton.addEventListener("click", async () => {
       stats.textContent = " · " + Number(video.views || 0).toLocaleString() + " views · " + video.channelTitle;
       item.append(link, stats); researchResults.appendChild(item);
     });
+    const channelHeading = document.createElement("strong");
+    channelHeading.textContent = "Channels in the sample";
+    researchResults.appendChild(channelHeading);
+    (data.channels || []).slice(0, 10).forEach(channel => {
+      const item = document.createElement("p");
+      item.textContent = channel.title + " · " + Number(channel.subscribers || 0).toLocaleString() +
+        " subscribers · " + Number(channel.totalViews || 0).toLocaleString() + " channel views · " +
+        Number(channel.videoCount || 0).toLocaleString() + " uploads";
+      researchResults.appendChild(item);
+    });
     const note = document.createElement("small");
     note.textContent = data.note || "";
     researchResults.appendChild(note);

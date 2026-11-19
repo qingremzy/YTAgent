@@ -38,11 +38,8 @@ function createKaggleWorkerSessionManager({
     if (typeof getKaggleKernelStatus !== "function" || statusTimer) return;
     const poll = async () => {
       if (statusPollInFlight) return;
-      const workerStatus = typeof getGpuWorkerStatus === "function" ? getGpuWorkerStatus() : null;
-      if (workerStatus?.online) {
-        stopStatusMonitor();
-        return;
-      }
+      // Keep watching the notebook after the worker connects. Wan model loading
+      // can still be cancelled by Kaggle before the first scene is produced.
       statusPollInFlight = true;
       try {
         const result = await getKaggleKernelStatus(identity);

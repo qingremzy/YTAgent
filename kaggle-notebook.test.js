@@ -58,9 +58,9 @@ test("starts a secure heartbeat immediately after bootstrap even when setup-cell
   ]});
   const patched = JSON.parse(patchNotebookForBatchRun(source, { bootstrapToken: "a".repeat(64) }));
   const code = patched.cells.filter(cell => cell.cell_type === "code");
-  assert.match(code[0].source.join(""), /api\/worker\/bootstrap/);
-  assert.match(code[0].source.join(""), /api\/worker\/heartbeat/);
-  assert.match(code[0].source.join(""), /start_new_session=True/);
-  assert.match(code[2].source.join(""), /heartbeat_process.terminate/);
-  assert.match(code[2].source.join(""), /runpy\.run_path/);
+  assert.match(String(code[0].source), /api\/worker\/bootstrap/);
+  assert.match(String(code[0].source), /api\/worker\/heartbeat/);
+  assert.match(String(code[0].source), /start_new_session=True/);
+  assert.match(String(code[2].source), /heartbeat_process.terminate/);
+  assert.match(String(code[2].source), /runpy\.run_path/);
 });

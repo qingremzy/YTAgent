@@ -150,6 +150,9 @@ function createKaggleWorkerSessionManager({
       };
       const session = kaggleToolData(await callKaggleTool("create_notebook_session", sessionRequest));
       console.log("YTAgent Kaggle interactive GPU session prepared:", String(session?.status || session?.sessionId || "ready").slice(0, 180));
+      request.kernelExecutionType = "InterActive";
+      request.kernelExecutionTypeNullable = "InterActive";
+      request.hasKernelExecutionType = true;
     } catch (sessionError) {
       console.warn("YTAgent Kaggle interactive session setup was unavailable; continuing with SaveAndRunAll:", String(sessionError.message || sessionError).slice(0, 220));
     }

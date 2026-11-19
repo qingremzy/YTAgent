@@ -10,8 +10,7 @@ const { spawn } = require("child_process");
 const sharp = require("sharp");
 const { verifyRenderedVideo } = require("./quality-check");
 const ffmpegPath = require("ffmpeg-static");
-const WIDTH = 540, HEIGHT = 960, FPS = 24, SCENE_SECONDS = 6, SCENE_COUNT = 10;
-const DURATION = SCENE_SECONDS * SCENE_COUNT;
+const WIDTH = 540, HEIGHT = 960, FPS = 24;
 
 function clean(value, max) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max || 200);
@@ -83,10 +82,11 @@ function normalizeAudioTempo(value) {
 function concatEscape(file) {
   return String(file).replace(/'/g, "'\\''");
 }
-async function renderScene(asset, scene, index, temp) {
+async function renderScene(asset, scene, index, total, temp) {
+  const sceneSeconds = Number(scene.duration_seconds) || 10;
   const overlayPath = path.join(temp, "overlay-" + index + ".png");
   const segmentPath = path.join(temp, "segment-" + String(index).padStart(2, "0") + ".mp4");
-  await makeOverlay(scene, index, SCENE_COUNT, overlayPath);
+  await makeOverlay(scene, index, total, overlayPath);
   const args = [
     "-y", "-hide_banner", "-loglevel", "warning",
     "-threads", "1", "-filter_threads", "1", "-filter_complex_threads", "1",
@@ -101,13 +101,13 @@ async function renderScene(asset, scene, index, temp) {
     args.push("-i", asset.soundEffectPath);
   }
   const filters = [
-    "[0:v]scale=" + WIDTH + ":" + HEIGHT + ":force_original_aspect_ratio=increase,crop=" + WIDTH + ":" + HEIGHT + ",fps=" + FPS + ",setsar=1,trim=duration=" + SCENE_SECONDS + ",setpts=PTS-STARTPTS[base]",
+    "[0:v]scale=" + WIDTH + ":" + HEIGHT + ":force_original_aspect_ratio=increase,crop=" + WIDTH + ":" + HEIGHT + ",fps=" + FPS + ",setsar=1,trim=duration=" + sceneSeconds + ",setpts=PTS-STARTPTS[base]",
     "[2:v]scale=" + WIDTH + ":" + HEIGHT + "[ov]",
     "[base][ov]overlay=0:0:shortest=1,format=yuv420p[vout]",
-    "[1:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atempo=" + normalizeAudioTempo(asset.audioTempo) + ",apad,atrim=duration=" + SCENE_SECONDS + ",asetpts=PTS-STARTPTS[voice]"
+    "[1:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atempo=" + normalizeAudioTempo(asset.audioTempo) + ",apad,atrim=duration=" + sceneSeconds + ",asetpts=PTS-STARTPTS[voice]"
   ];
   if (sfxIndex >= 0) {
-    filters.push("[" + sfxIndex + ":a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.20,apad,atrim=duration=" + SCENE_SECONDS + ",asetpts=PTS-STARTPTS[sfx]");
+    filters.push("[" + sfxIndex + ":a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.20,apad,atrim=duration=" + sceneSeconds + ",asetpts=PTS-STARTPTS[sfx]");
     filters.push("[voice][sfx]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.89[aout]");
   } else {
     filters.push("[voice]alimiter=limit=0.89[aout]");
@@ -115,7 +115,7 @@ async function renderScene(asset, scene, index, temp) {
   args.push(
     "-filter_complex", filters.join(";"),
     "-map", "[vout]", "-map", "[aout]",
-    "-t", String(SCENE_SECONDS), "-r", String(FPS),
+    "-t", String(sceneSeconds), "-r", String(FPS),
     "-threads", "1", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26",
     "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
     "-movflags", "+faststart", segmentPath
@@ -132,12 +132,12 @@ async function renderFilmUnlocked(input) {
   const musicPath = input && input.musicPath;
   if (!ffmpegPath) throw new Error("FFmpeg is unavailable.");
   if (!blueprint || blueprint.format !== "ytagent.video-blueprint.v1") throw new Error("Unsupported blueprint format.");
-  if (blueprint.duration_seconds !== DURATION || !Array.isArray(blueprint.scenes) || blueprint.scenes.length !== SCENE_COUNT) {
-    throw new Error("Expected ten shots on one 60-second timeline.");
-  }
+  const durationSeconds = Number(blueprint.duration_seconds);
+  const sceneCount = Number(blueprint.scene_count);
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 30 || durationSeconds > 600 || durationSeconds % 10 !== 0 || !Array.isArray(blueprint.scenes) || blueprint.scenes.length !== sceneCount || sceneCount !== durationSeconds / 10) throw new Error("Expected a valid 30–600 second timeline made from ten-second shots.");
   if (!outputPath) throw new Error("An MP4 output path is required.");
-  if (!Array.isArray(sceneAssets) || sceneAssets.length !== SCENE_COUNT) throw new Error("Ten matching scene assets are required.");
-  for (let i = 0; i < SCENE_COUNT; i++) {
+  if (!Array.isArray(sceneAssets) || sceneAssets.length !== sceneCount) throw new Error("One matching video and narration asset is required per scene.");
+  for (let i = 0; i < sceneCount; i++) {
     const asset = sceneAssets[i];
     if (!asset || !asset.videoPath || !asset.narrationPath) throw new Error("Shot " + (i + 1) + " has no narrator audio. Rendering is blocked.");
     await Promise.all([fs.promises.access(asset.videoPath), fs.promises.access(asset.narrationPath)]);
@@ -149,8 +149,8 @@ async function renderFilmUnlocked(input) {
   try {
     const segments = [];
     // Deliberately sequential: only one video decoder/filter graph/encoder is alive at once.
-    for (let i = 0; i < SCENE_COUNT; i++) {
-      segments.push(await renderScene(sceneAssets[i], blueprint.scenes[i], i, temp));
+    for (let i = 0; i < sceneCount; i++) {
+      segments.push(await renderScene(sceneAssets[i], blueprint.scenes[i], i, sceneCount, temp));
     }
     const concatList = path.join(temp, "segments.txt");
     await fs.promises.writeFile(concatList, segments.map(file => "file '" + concatEscape(file) + "'").join("\n") + "\n");
@@ -165,15 +165,15 @@ async function renderFilmUnlocked(input) {
         "-y", "-hide_banner", "-loglevel", "warning", "-threads", "1", "-filter_threads", "1",
         "-i", joinedPath, "-stream_loop", "-1", "-i", musicPath,
         "-filter_complex",
-        "[1:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.16,atrim=duration=60,asetpts=PTS-STARTPTS[music];[music][0:a]sidechaincompress=threshold=0.025:ratio=8:attack=20:release=500[ducked];[ducked]alimiter=limit=0.89[aout]",
+        "[1:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.16,atrim=duration=" + durationSeconds + ",asetpts=PTS-STARTPTS[music];[music][0:a]sidechaincompress=threshold=0.025:ratio=8:attack=20:release=500[ducked];[ducked]alimiter=limit=0.89[aout]",
         "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
-        "-t", "60", "-movflags", "+faststart", outputPath
+        "-t", String(durationSeconds), "-movflags", "+faststart", outputPath
       ], "Background music mix");
     }
     const stat = await fs.promises.stat(outputPath);
     if (stat.size < 100000) throw new Error("MP4 output failed the basic file-size quality check.");
     const quality = await verifyRenderedVideo(outputPath);
-    return { outputPath, duration_seconds: quality.duration_seconds, resolution: WIDTH + "x" + HEIGHT, fps: FPS, narrator_required: true, music_added: Boolean(musicPath), sound_effect_scenes: sceneAssets.filter(asset => asset.soundEffectPath).length, render_strategy: "sequential-scene-render-and-concat", quality_check: quality };
+    return { outputPath, duration_seconds: quality.duration_seconds, scene_count: sceneCount, resolution: WIDTH + "x" + HEIGHT, fps: FPS, narrator_required: true, music_added: Boolean(musicPath), sound_effect_scenes: sceneAssets.filter(asset => asset.soundEffectPath).length, render_strategy: "sequential-scene-render-and-concat", quality_check: quality };
   } finally {
     await fs.promises.rm(temp, { recursive: true, force: true }).catch(() => {});
   }

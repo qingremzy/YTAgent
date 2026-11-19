@@ -1093,6 +1093,48 @@ app.post("/api/upload", requireAuth, videoUpload.single("video"), async (req, re
 });
 
 
+app.post("/api/generated/:filename/publish", requireAuth, async (req, res) => {
+  const filename = String(req.params.filename || "");
+  if (!/^generated-[a-f0-9]{24}\\.mp4$/i.test(filename)) return res.status(400).json({ error: "Invalid generated video file." });
+  const filePath = path.join(uploadDir, filename);
+  try {
+    await fs.promises.access(filePath);
+    const title = String(req.body?.title || "").trim().slice(0, 100);
+    if (!title) return res.status(400).json({ error: "A video title is required." });
+    const auth = oauthClient();
+    auth.setCredentials(req.session.tokens);
+    auth.on("tokens", tokens => { req.session.tokens = { ...req.session.tokens, ...tokens }; });
+    const yt = google.youtube({ version: "v3", auth });
+    const rawTags = String(req.body?.tags || "").split(",").map(t => t.trim()).filter(Boolean);
+    const keywords = String(req.body?.keywords || "").split(",").map(t => t.trim()).filter(Boolean);
+    const hashtags = String(req.body?.hashtags || "").trim();
+    const description = [String(req.body?.description || "").trim(), keywords.length ? "Search topics: " + keywords.join(", ") : "", hashtags].filter(Boolean).join("\\n\\n").slice(0, 5000);
+    const tags = [];
+    let tagLength = 0;
+    for (const tag of [...rawTags, ...keywords]) {
+      const normalized = tag.slice(0, 100);
+      const addedLength = normalized.length + (tags.length ? 1 : 0);
+      if (tags.length >= 30 || tagLength + addedLength > 500) continue;
+      if (!tags.some(existing => existing.toLowerCase() === normalized.toLowerCase())) {
+        tags.push(normalized);
+        tagLength += addedLength;
+      }
+    }
+    const privacy = ["private", "unlisted", "public"].includes(req.body?.privacy) ? req.body.privacy : "private";
+    const response = await yt.videos.insert({
+      part: ["snippet", "status"],
+      requestBody: { snippet: { title, description, tags }, status: { privacyStatus: privacy } },
+      media: { body: fs.createReadStream(filePath) }
+    });
+    res.json({ success: true, videoId: response.data.id, url: "https://www.youtube.com/watch?v=" + response.data.id, privacy });
+  } catch (error) {
+    if (error.code === "ENOENT") return res.status(404).json({ error: "The generated MP4 has expired. Generate it again before publishing." });
+    console.error("Generated video publish failed:", error.message);
+    res.status(500).json({ error: error.message.includes("quota") ? "YouTube API quota reached. Try again after quota resets." : "YouTube upload failed. Reconnect your channel and verify Google API setup." });
+  }
+});
+
+
 function requireGpuWorker(req, res, next) {
   const expected = String(process.env.YT_AGENT_WORKER_TOKEN || "");
   const supplied = String(req.headers.authorization || "");

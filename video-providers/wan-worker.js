@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const path = require("path");
 
 const POLL_INTERVAL_MS = 10000;
-const JOB_TIMEOUT_MS = 45 * 60 * 1000;
+const JOB_TIMEOUT_MS = 6 * 60 * 60 * 1000;
 
 function clean(value, max = 500) {
   return String(value || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -25,7 +25,7 @@ function buildWanScenePrompt(scene, topic, index) {
   return [
     "An original animated film shot in portrait 9:16. Visual style: flat 2D illustrated animation characters composited into a fully dimensional, shaded stylized 3D environment. Characters remain flat illustrated cels with simple white circular faces, bold dark outlines, thin line limbs and flat clothing colors. Only environments and props are shaded 3D. Never render 3D character models or realistic humans.",
     "Overall subject: " + clean(topic, 180) + ".",
-    "Shot " + (index + 1) + " of a continuous ten-shot explainer: " + clean(scene.visual_direction, 500) + ".",
+    "Shot " + (index + 1) + " of a continuous story: " + clean(scene.visual_direction, 500) + ".",
     "Show the named physical subject clearly performing the described action in a recognizable location. Favor expressive flat 2D characters, readable physical acting, tactile 3D props, detailed dimensional sets and clear cause-and-effect. Preserve the same character appearance and important object design between shots whenever described.",
     "Use solid geometry, physically plausible contact and weight, natural body mechanics, rich but realistic materials, cinematic key and rim lighting, detailed backgrounds and film-quality depth of field.",
     "Animate a clear action throughout the entire shot. The subject must move or interact with an object. Camera: " + cameraMoves[index % cameraMoves.length] + ".",

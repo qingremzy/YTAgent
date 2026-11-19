@@ -1398,8 +1398,8 @@ app.get("/api/generate/:jobId", async (req, res) => {
 
 app.get("/api/generated/:filename/thumbnail", async (req, res) => {
   const filename = String(req.params.filename || "");
-  if (!/^generated-[a-f0-9]{24}\\.mp4$/i.test(filename)) return res.status(404).send("Thumbnail not found.");
-  const thumbnailName = filename.replace(/\\.mp4$/i, "-thumbnail.jpg");
+  if (!/^generated-[a-f0-9]{24}\.mp4$/i.test(filename)) return res.status(404).send("Thumbnail not found.");
+  const thumbnailName = filename.replace(/\.mp4$/i, "-thumbnail.jpg");
   const filePath = path.join(uploadDir, thumbnailName);
   if (fs.existsSync(filePath)) return res.type("image/jpeg").sendFile(filePath);
   if (!objectStorage.configured) return res.status(404).send("Thumbnail has expired or is unavailable.");

@@ -399,9 +399,8 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
                     prompt=prompt,
                     height=832,
                     width=480,
-                    # Wan frame counts must be 4*k+1. 49 frames at 8 FPS
-                    # preserves the six-second scene while nearly halving frame work.
-                    num_frames=int(os.environ.get("WAN_NUM_FRAMES", "49")),
+                    # Wan frame counts must be 4*k+1. 81 frames at 8 FPS produce about ten seconds.
+                    num_frames=int(os.environ.get("WAN_NUM_FRAMES", "81")),
                     num_inference_steps=int(os.environ.get("WAN_STEPS", "6")),
                     guidance_scale=5.0,
                     generator=generator
@@ -423,8 +422,8 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
             del result, frames, generator
             torch.cuda.empty_cache()
         if remote_job_id:
-            if not isinstance(narrations, list) or len(narrations) != 10:
-                raise RuntimeError("YTAgent did not provide ten narration lines for Kokoro.")
+            if not isinstance(narrations, list) or len(narrations) != len(prompts):
+                raise RuntimeError("YTAgent did not provide one narration line per generated clip for Kokoro.")
             # Release the large video model before loading the small local TTS model.
             del pipe
             PIPE = None

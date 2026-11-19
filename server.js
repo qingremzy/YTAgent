@@ -1454,7 +1454,11 @@ function verifyWorkerBootstrapToken(token) {
 
 async function getCanonicalKaggleNotebookSource(identity) {
   const branch = String(process.env.GITHUB_BRANCH || "main").replace(/[^a-zA-Z0-9._-]/g, "");
-  const url = "https://raw.githubusercontent.com/qingremzy/YTAgent/" + branch + "/gpu-worker/YTAgent_Free_GPU_Worker.ipynb?cacheBust=" + Date.now();
+  // Pin notebook downloads to the exact deployed Git commit. Raw GitHub's
+  // branch CDN can lag behind a just-pushed notebook and silently run stale code.
+  const sourceRef = String(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GITHUB_SHA || branch).trim();
+  const url = "https://raw.githubusercontent.com/qingremzy/YTAgent/" + sourceRef + "/gpu-worker/YTAgent_Free_GPU_Worker.ipynb?cacheBust=" + Date.now();
+  console.log("YTAgent canonical Kaggle notebook source ref:", sourceRef);
   const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15000) });
   if (!response.ok) {
     throw new Error("Could not fetch the canonical YTAgent Kaggle notebook from GitHub (HTTP " + response.status + ").");

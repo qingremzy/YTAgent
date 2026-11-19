@@ -35,7 +35,7 @@ class Scene(BaseModel):
     prompt: str = Field(min_length=30, max_length=1800)
 
 class GenerateRequest(BaseModel):
-    scenes: List[Scene] = Field(min_length=5, max_length=10)
+    scenes: List[Scene] = Field(min_length=3, max_length=60)
     seed: int = 20261110
 
 def authorize(value):
@@ -325,7 +325,7 @@ def poll_railway_once(wait_seconds=600):
             remote_id = str(job.get("job_id", ""))
             prompts = job.get("prompts", [])
             narrations = job.get("narrations", [])
-            if not re.fullmatch(r"[a-f0-9]{32}", remote_id) or len(prompts) != 10 or len(narrations) != 10:
+            if not re.fullmatch(r"[a-f0-9]{32}", remote_id) or len(prompts) < 3 or len(prompts) > 60 or len(narrations) != len(prompts):
                 print("YTAgent returned an invalid GPU job. Skipping it.")
                 time.sleep(5)
                 continue
@@ -385,8 +385,8 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
         for index, prompt in enumerate(prompts):
             JOBS[job_id]["status"] = "generating"
             JOBS[job_id]["progress"] = int(index * 100 / len(prompts))
-            scene_progress = 5 + int(index * 6.0)
-            scene_message = f"Rendering cinematic scene {index + 1} of 10. Wan is generating the frames now."
+            scene_progress = 5 + int(index * 60.0 / len(prompts))
+            scene_message = f"Rendering ten-second cinematic clip {index + 1} of {len(prompts)}. Wan is generating the frames now."
             JOBS[job_id]["message"] = scene_message
             if remote_job_id:
                 send_progress_to_server(remote_job_id, scene_progress, scene_message)
@@ -418,7 +418,7 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
             clips.append(clip_path)
             if remote_job_id:
                 send_scene_to_server(remote_job_id, index, clip_path)
-                send_progress_to_server(remote_job_id, 5 + int((index + 1) * 6.0), f"Generated and uploaded video scene {index + 1} of 10.")
+                send_progress_to_server(remote_job_id, 5 + int((index + 1) * 60.0 / len(prompts)), f"Generated and uploaded ten-second clip {index + 1} of {len(prompts)}.")
                 print(f"Uploaded scene {index + 1} of {len(prompts)} to YTAgent.")
             del result, frames, generator
             torch.cuda.empty_cache()
@@ -429,14 +429,14 @@ def run_job(job_id, prompts, seed, remote_job_id=None, narrations=None):
             del pipe
             PIPE = None
             torch.cuda.empty_cache()
-            send_progress_to_server(remote_job_id, 67, "Video scenes complete. Loading Kokoro narrator.")
+            send_progress_to_server(remote_job_id, 66, "Video scenes complete. Loading Kokoro narrator.")
             for index, line in enumerate(narrations):
-                JOBS[job_id]["message"] = f"Generating natural Kokoro narration {index + 1} of 10."
+                JOBS[job_id]["message"] = f"Generating natural Kokoro narration {index + 1} of {len(narrations)}."
                 audio_path = work / f"narration-{index:02d}.wav"
                 generate_kokoro_audio(line, audio_path)
                 send_audio_to_server(remote_job_id, index, audio_path)
-                send_progress_to_server(remote_job_id, 68 + int((index + 1) * 2.8), f"Generated narration track {index + 1} of 10.")
-                print(f"Uploaded Kokoro narration {index + 1} of 10 to YTAgent.")
+                send_progress_to_server(remote_job_id, 66 + int((index + 1) * 33.0 / len(narrations)), f"Generated narration track {index + 1} of {len(narrations)}.")
+                print(f"Uploaded Kokoro narration {index + 1} of {len(narrations)} to YTAgent.")
         zip_path = None
         if not remote_job_id:
             zip_path = work / "scenes.zip"

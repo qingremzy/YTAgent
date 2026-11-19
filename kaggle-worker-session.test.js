@@ -7,7 +7,7 @@ const identity = { userName: "samsonbamigboye", kernelSlug: "notebook477419e21e"
 function notebookSource() {
   return JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: {}, cells: [
     { cell_type: "markdown", execution_count: null, metadata: {}, outputs: [], source: ["# YTAgent"] },
-    { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["worker_token = os.environ.get('YT_AGENT_WORKER_TOKEN')"] },
+    { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["worker_token = os.environ.get('YT_AGENT_WORKER_TOKEN')\n"] },
     { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["print('--run-once')"] }
   ] });
 }
@@ -114,7 +114,7 @@ test("prefers Kaggle MCP SaveAndRunAll with the full session timeout", async () 
   assert.equal(save.args.sessionTimeoutSeconds, 32400);
   assert.equal(save.args.kernelExecutionType, "SaveAndRunAll");
   assert.equal(save.args.machineShape, "NvidiaTeslaT4");
-  assert.match(save.args.text, /runpy\\.run_path/);
+  assert.match(save.args.text, /runpy\.run_path/);
 });
 
 test("uses a one-time bootstrap token and sanitizes malformed markdown cells", async () => {
@@ -140,8 +140,8 @@ test("uses a one-time bootstrap token and sanitizes malformed markdown cells", a
   assert.equal(notebook.cells[0].outputs, undefined);
   const tokenCell = notebook.cells.find(cell => cell.cell_type === "code" && (Array.isArray(cell.source) ? cell.source.join("") : cell.source).includes("/api/worker/bootstrap"));
   assert.ok(tokenCell);
-  assert.match(tokenCell.source.join(""), new RegExp(bootstrapToken));
-  assert.doesNotMatch(tokenCell.source.join(""), /get_secret/);
+  assert.match(String(tokenCell.source), new RegExp(bootstrapToken));
+  assert.doesNotMatch(String(tokenCell.source), /get_secret/);
 });
 
 

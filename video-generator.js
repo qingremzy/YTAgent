@@ -82,7 +82,7 @@ function countNarrationWords(value) {
   return String(value || "").trim().split(/\s+/).filter(Boolean).length;
 }
 
-function validateStoryboard(storyboard, expectedScenes = 10) {
+function validateStoryboard(storyboard, expectedScenes = 6) {
   if (!storyboard || typeof storyboard !== "object" || Array.isArray(storyboard)) throw new Error("Storyboard must be a JSON object.");
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== expectedScenes) throw new Error("Storyboard must contain exactly " + expectedScenes + " scenes.");
   var seenNarration = new Set();

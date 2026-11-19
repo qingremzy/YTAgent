@@ -7,7 +7,12 @@
 
 const TOTAL_DURATION_SECONDS = 60;
 const SCENE_COUNT = 10;
-const SCENE_DURATION_SECONDS = TOTAL_DURATION_SECONDS / SCENE_COUNT;
+const SCENE_DURATION_SECONDS = 6;
+function resolveDuration(value) {
+  const seconds = Number(value === undefined ? TOTAL_DURATION_SECONDS : value);
+  if (!Number.isInteger(seconds) || seconds < 30 || seconds > 600 || seconds % 10 !== 0) throw new Error("Video duration must be 30–600 seconds in 10-second increments.");
+  return seconds;
+}
 
 const CAMERA_MOVES = new Set([
   "push_in", "pull_out", "orbit_left", "orbit_right",
@@ -42,9 +47,10 @@ function compileBlueprint(storyboard, options = {}) {
   if (!storyboard || typeof storyboard !== "object" || Array.isArray(storyboard)) {
     throw new Error("Video blueprint: storyboard must be an object.");
   }
-  if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== SCENE_COUNT) {
-    throw new Error("Video blueprint: exactly " + SCENE_COUNT + " scenes are required.");
-  }
+  const durationSeconds = resolveDuration(options.durationSeconds);
+  const sceneCount = durationSeconds / 10;
+  const sceneDuration = 10;
+  if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length !== sceneCount) throw new Error("Video blueprint: exactly " + sceneCount + " ten-second scenes are required for this duration.");
 
   const topic = text(options.topic || storyboard.title || "Untitled story", "topic", 180);
   const scenes = storyboard.scenes.map((scene, index) => {
@@ -59,16 +65,16 @@ function compileBlueprint(storyboard, options = {}) {
     return Object.freeze({
       id: "shot-" + String(index + 1).padStart(2, "0"),
       index,
-      start_seconds: index * SCENE_DURATION_SECONDS,
-      duration_seconds: SCENE_DURATION_SECONDS,
-      end_seconds: (index + 1) * SCENE_DURATION_SECONDS,
+      start_seconds: index * sceneDuration,
+      duration_seconds: sceneDuration,
+      end_seconds: (index + 1) * sceneDuration,
       title: text(scene.title || "The next discovery", "scene " + (index + 1) + " title", 90),
       narration,
       narration_segment: Object.freeze({
         required: true,
         text: narration,
-        timeline_start_seconds: index * SCENE_DURATION_SECONDS,
-        timeline_end_seconds: (index + 1) * SCENE_DURATION_SECONDS,
+        timeline_start_seconds: index * sceneDuration,
+        timeline_end_seconds: (index + 1) * sceneDuration,
         caption_sync: "scene_level"
       }),
       caption,
@@ -84,7 +90,7 @@ function compileBlueprint(storyboard, options = {}) {
           : "cinematic depth"
       }),
       transition_in: index === 0 ? "opening_reveal" : "match_motion",
-      transition_out: index === SCENE_COUNT - 1 ? "final_hold" : "continuous_motion"
+      transition_out: index === sceneCount - 1 ? "final_hold" : "continuous_motion"
     });
   });
 
@@ -96,8 +102,8 @@ function compileBlueprint(storyboard, options = {}) {
     width: 720,
     height: 1280,
     frame_rate: 30,
-    duration_seconds: TOTAL_DURATION_SECONDS,
-    scene_count: SCENE_COUNT,
+    duration_seconds: durationSeconds,
+    scene_count: sceneCount,
     timeline: "single_continuous_film",
     audio: Object.freeze({
       narrator: Object.freeze({
@@ -138,6 +144,7 @@ module.exports = {
   TOTAL_DURATION_SECONDS,
   SCENE_COUNT,
   SCENE_DURATION_SECONDS,
+  resolveDuration,
   CAMERA_MOVES,
   LIGHTING_PRESETS,
   ENVIRONMENT_TYPES,

@@ -3,9 +3,9 @@ const { renderFilm } = require("./renderer");
 
 const blueprint = {
   format: "ytagent.video-blueprint.v1",
-  duration_seconds: 100,
-  scene_count: 10,
-  scenes: Array.from({ length: 10 }, (_, index) => ({
+  duration_seconds: 60,
+  scene_count: 6,
+  scenes: Array.from({ length: 6 }, (_, index) => ({
     duration_seconds: 10,
     title: "Shot " + index,
     caption: "A sample caption",
@@ -15,7 +15,7 @@ const blueprint = {
 
 async function main() {
   await assert.rejects(
-    renderFilm({ blueprint, sceneAssets: Array.from({ length: 10 }, () => ({ videoPath: "/missing.mp4" })), outputPath: "/tmp/never.mp4" }),
+    renderFilm({ blueprint, sceneAssets: Array.from({ length: 6 }, () => ({ videoPath: "/missing.mp4" })), outputPath: "/tmp/never.mp4" }),
     /no narrator audio/
   );
   await assert.rejects(

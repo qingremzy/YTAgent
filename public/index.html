@@ -38,10 +38,14 @@
     <section class="card generator-card">
       <div class="eyebrow">01 // CREATION ENGINE</div>
       <h2>AI video generator</h2>
-      <p class="muted">Follow the What-If Story workflow: selected premise → story and continuity guide → scene-by-scene visual prompts → narrator script → YouTube upload pack. The current renderer produces 60-second vertical films. YTAgent delivers an MP4 only after the real video engine succeeds.</p>
-      <ol class="workflow-steps"><li><strong>01 · Format</strong><span>60 seconds · vertical 9:16</span></li><li><strong>02 · Idea</strong><span>Use your premise or choose a what-if concept</span></li><li><strong>03 · Production plan</strong><span>Continuity guide and ten connected scene prompts</span></li><li><strong>04 · Narration</strong><span>Scene-synced voice script</span></li><li><strong>05 · Upload pack</strong><span>Thumbnail prompt, title, description, tags and keywords</span></li></ol>
+      <p class="muted">Choose a 10-second-clip-based film duration, start with your own premise or select from ten story ideas, then let YTAgent build the story, continuity bible, narration, visuals and upload pack.</p>
+      <ol class="workflow-steps"><li><strong>01 · Format</strong><span>30 seconds to 10 minutes · 9:16</span></li><li><strong>02 · Idea</strong><span>Your own premise or one of ten story starters</span></li><li><strong>03 · Production plan</strong><span>One connected ten-second clip per scene</span></li><li><strong>04 · Narration</strong><span>Scene-synced voice script</span></li><li><strong>05 · Upload pack</strong><span>Thumbnail prompt, title, description, tags and keywords</span></li></ol>
       <form id="generatorForm">
-        <label>What should the video be about?<input id="videoTopic" maxlength="180" placeholder="e.g. What If Your Shadow Quit? or The Backpack That Steals Gravity" required></label>
+        <label>Film duration<select id="videoDuration"><option value="30">30 seconds · 3 clips</option><option value="120">2 minutes · 12 clips</option><option value="180">3 minutes · 18 clips</option><option value="300">5 minutes · 30 clips</option><option value="600">10 minutes · 60 clips</option><option value="custom">Custom duration</option></select></label>
+        <label id="customDurationWrap" class="hidden">Custom duration in seconds<input id="customDuration" type="number" min="30" max="600" step="10" value="60"></label>
+        <div class="idea-picker"><div><strong>Choose your story idea</strong><p class="muted">Write your own premise or choose from ten story starters.</p></div><button class="button secondary" id="loadIdeas" type="button">Show 10 ideas</button></div>
+        <div id="ideaList" class="idea-list hidden" aria-live="polite"></div>
+        <label>Your video premise<input id="videoTopic" maxlength="180" placeholder="e.g. What If Your Shadow Quit?" required></label>
         <button class="button primary full" id="generateVideo" type="submit"><span class="button-glyph">✦</span> Run 5-stage production</button>
       </form>
       <a class="button secondary full" href="https://colab.research.google.com/github/qingremzy/YTAgent/blob/main/gpu-worker/YTAgent_Colab_Free_GPU_Worker.ipynb" target="_blank" rel="noopener">Open free GPU animation worker (Colab) ↗</a>

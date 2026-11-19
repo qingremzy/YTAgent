@@ -1,16 +1,16 @@
 # YTAgent
 
-A mobile-friendly YouTube publishing assistant with narrated AI video generation.
+A mobile-friendly autonomous animated-story and YouTube publishing studio.
 
 ## Capabilities
 
 - Connect a YouTube channel through Google OAuth 2.0 and publish videos.
 - Analyse supplied videos and generate YouTube titles, descriptions, tags and hashtags.
-- Generate a complete 60-second vertical documentary-style film from a topic.
-- Generate ten genuine AI-animated scenes with Wan 2.1 on a free Kaggle GPU.
-- Generate ten natural documentary narration tracks locally with Kokoro 82M, avoiding paid TTS APIs and Groq rate limits.
+- Turn a story idea into a complete 60-second vertical animated short.
+- Generate ten connected AI-animated scenes with Wan 2.1 on a free Kaggle or Colab GPU worker.
+- Generate narration locally with Kokoro 82M or the app's no-key voice fallback.
 - Compile one MP4 with scene-matched captions, narration and quality checks.
-- Provide a real-time Three.js 3D studio interface with interactive camera controls.
+- Keep recurring cartoon characters, props and visual style consistent across the story.
 - Generate metadata for the finished film.
 
 AI-generated facts and metadata can contain mistakes. Review before publishing. No AI tool can guarantee views or virality.
@@ -23,21 +23,6 @@ AI-generated facts and metadata can contain mistakes. Review before publishing. 
 - Gemini or Groq API key for AI storyboard generation.
 - Optional free Kaggle GPU notebook for Wan 2.1 video generation and Kokoro narration. See [GPU worker setup](gpu-worker/README.md).
 - Optional Agnes API key only if a verified no-charge quota is available.
-
-## QingCloud Compute integration
-
-See [the QingCloud launch checklist](docs/QINGCLOUD_LAUNCH.md) for the end-to-end coordinator, owner-channel, invitation, worker approval and compute-test setup.
-YTAgent can connect to a QingCloud Compute coordinator as its first external compute customer. Configure `QINGCLOUD_URL`, `QINGCLOUD_ADMIN_TOKEN`, and `QINGCLOUD_OWNER_CHANNEL_ID` only in the YTAgent server environment. The owner channel ID must exactly match the authorized YouTube channel ID shown by `GET /api/status`. All compute controls verify the connected YouTube channel against this allowlist before forwarding requests. The dashboard can create one-time provider invitations, inspect provider inventory and approve/reject enrolled machines without exposing the coordinator token to the browser. Invitation plaintext is displayed once and is not saved in browser storage. Remote coordinators must use HTTPS. The admin token never goes to the browser.
-
-After connecting a YouTube account, the authenticated YTAgent API exposes:
-
-- `GET /api/compute/status` — checks the QingCloud health endpoint and retrieves the protected provider/job overview.
-- `POST /api/compute/invitations` — create a one-time, 24-hour provider enrollment invitation.
-- `GET /api/compute/providers` and `PUT /api/compute/providers/:workerId/approval` — list enrolled workers and approve, reject or return them to pending review from the owner-only dashboard.
-- `POST /api/compute/test` — submits a bounded distributed CPU sum task (defaults to 1–1,000 in chunks of 100). It returns a task ID immediately.
-- `GET /api/compute/tasks/:taskId` — retrieves queued/running/completed/failed task status and the coordinator-verified result.
-
-The test task runs on enrolled, approved QingCloud workers that are online and have opted in to the built-in safe job runtime (`--enable-jobs`). If no eligible worker is connected, the task remains queued. This is the first authenticated YTAgent-to-QingCloud control-plane integration and proves distributed CPU task submission/status retrieval. It does **not yet offload Wan video generation, narration, FFmpeg rendering, or GPU inference**. The existing Kaggle Wan worker remains the video-generation path until a dedicated, sandboxed YTAgent GPU worker adapter is implemented and tested.
 
 ## Environment variables
 

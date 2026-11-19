@@ -5,9 +5,9 @@
  * The renderer must produce one complete film and a mandatory narrator track.
  */
 
-const TOTAL_DURATION_SECONDS = 60;
+const TOTAL_DURATION_SECONDS = 100;
 const SCENE_COUNT = 10;
-const SCENE_DURATION_SECONDS = 6;
+const SCENE_DURATION_SECONDS = 10;
 function resolveDuration(value) {
   const seconds = Number(value === undefined ? TOTAL_DURATION_SECONDS : value);
   if (!Number.isInteger(seconds) || seconds < 30 || seconds > 600 || seconds % 10 !== 0) throw new Error("Video duration must be 30–600 seconds in 10-second increments.");

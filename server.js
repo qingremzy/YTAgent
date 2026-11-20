@@ -961,6 +961,7 @@ app.post("/api/upload", requireAuth, videoUpload.single("video"), async (req, re
   } catch (err) {
     await cleanup();
     console.error("Upload failed:", err.message);
+    if (/Shorts-only publishing|could not verify this video/i.test(err.message)) return res.status(400).json({ error: err.message });
     res.status(500).json({ error: err.message.includes("quota") ? "YouTube API quota reached. Try again after quota resets." : "Upload failed. Check your Google API setup and try again." });
   }
 });
@@ -1016,6 +1017,7 @@ app.post("/api/generated/:filename/publish", requireAuth, async (req, res) => {
   } catch (error) {
     if (error.code === "ENOENT") return res.status(404).json({ error: "The generated MP4 has expired. Generate it again before publishing." });
     console.error("Generated video publish failed:", error.message);
+    if (/Shorts-only publishing|could not verify this video/i.test(error.message)) return res.status(400).json({ error: error.message });
     res.status(500).json({ error: error.message.includes("quota") ? "YouTube API quota reached. Try again after quota resets." : "YouTube upload failed. Reconnect your channel and verify Google API setup." });
   }
 });

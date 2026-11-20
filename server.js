@@ -10,6 +10,7 @@ const os = require("os");
 const { spawn } = require("child_process");
 const ffmpegPath = require("ffmpeg-static");
 const { google } = require("googleapis");
+const { inspectShortsVideo } = require("./youtube-shorts");
 const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const { createRateLimiter } = require("./middleware/rate-limit");
@@ -926,6 +927,7 @@ app.post("/api/upload", requireAuth, videoUpload.single("video"), async (req, re
   try {
     const title = String(req.body.title || "").trim();
     if (!title) { await cleanup(); return res.status(400).json({ error: "A video title is required." }); }
+    await inspectShortsVideo(req.file.path);
     const auth = oauthClient();
     auth.setCredentials(req.session.tokens);
     auth.on("tokens", tokens => { req.session.tokens = { ...req.session.tokens, ...tokens }; });
@@ -933,7 +935,7 @@ app.post("/api/upload", requireAuth, videoUpload.single("video"), async (req, re
     const rawTags = String(req.body.tags || "").split(",").map(t => t.trim()).filter(Boolean);
     const keywords = String(req.body.keywords || "").split(",").map(t => t.trim()).filter(Boolean);
     const hashtags = String(req.body.hashtags || "").trim();
-    const description = [String(req.body.description || "").trim(), keywords.length ? "Search topics: " + keywords.join(", ") : "", hashtags].filter(Boolean).join("\n\n").slice(0, 5000);
+    const description = [String(req.body.description || "").trim(), keywords.length ? "Search topics: " + keywords.join(", ") : "", hashtags, "#Shorts"].filter(Boolean).join("\n\n").slice(0, 5000);
     const tags = [];
     let tagLength = 0;
     for (const tag of [...rawTags, ...keywords]) {
@@ -972,6 +974,7 @@ app.post("/api/generated/:filename/publish", requireAuth, async (req, res) => {
     await fs.promises.access(filePath);
     const title = String(req.body?.title || "").trim().slice(0, 100);
     if (!title) return res.status(400).json({ error: "A video title is required." });
+    await inspectShortsVideo(filePath);
     const auth = oauthClient();
     auth.setCredentials(req.session.tokens);
     auth.on("tokens", tokens => { req.session.tokens = { ...req.session.tokens, ...tokens }; });
@@ -979,7 +982,7 @@ app.post("/api/generated/:filename/publish", requireAuth, async (req, res) => {
     const rawTags = String(req.body?.tags || "").split(",").map(t => t.trim()).filter(Boolean);
     const keywords = String(req.body?.keywords || "").split(",").map(t => t.trim()).filter(Boolean);
     const hashtags = String(req.body?.hashtags || "").trim();
-    const description = [String(req.body?.description || "").trim(), keywords.length ? "Search topics: " + keywords.join(", ") : "", hashtags].filter(Boolean).join("\n\n").slice(0, 5000);
+    const description = [String(req.body?.description || "").trim(), keywords.length ? "Search topics: " + keywords.join(", ") : "", hashtags, "#Shorts"].filter(Boolean).join("\n\n").slice(0, 5000);
     const tags = [];
     let tagLength = 0;
     for (const tag of [...rawTags, ...keywords]) {

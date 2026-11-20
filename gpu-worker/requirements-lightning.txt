@@ -1,0 +1,21 @@
+# Lightning Studio dependencies
+# Intentionally excludes torch/torchvision so the CUDA-enabled PyTorch
+# preinstalled by the selected Lightning GPU image is not replaced.
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+diffusers>=0.32.0
+transformers>=4.45.0
+accelerate>=1.0.0
+ftfy
+imageio[ffmpeg]
+soundfile>=0.12.1
+spacy>=3.8.2,<4
+num2words
+phonemizer-fork
+espeakng-loader
+loguru
+huggingface_hub
+addict
+regex
+pip>=25.0.1
+opencv-python-headless>=4.10,<5
